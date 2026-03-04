@@ -785,6 +785,7 @@
         const VIEW_H = 10;
         const SCALE = 4;
         const SEED = 77103;
+        const defaultMove = 5;
         const MOVE_MS_PER_TILE = 140;
         const PHASE_BANNER_MS = 800;
         const CAMERA_PAN_PX_PER_SEC = 120;
@@ -3233,24 +3234,43 @@
           return adj[Math.floor(rng() * adj.length)];
         }
 
-        function autoStepTowardEnemy(unit, enemy) {
-          if (!enemy) return false;
-          const dx = enemy.x - unit.x;
-          const dy = enemy.y - unit.y;
-          const primary = Math.abs(dx) >= Math.abs(dy)
-            ? [{ x: Math.sign(dx), y: 0 }, { x: 0, y: Math.sign(dy) }]
-            : [{ x: 0, y: Math.sign(dy) }, { x: Math.sign(dx), y: 0 }];
-          for (const d of primary) {
-            if (!d.x && !d.y) continue;
-            const nx = unit.x + d.x;
-            const ny = unit.y + d.y;
-            if (!inBounds(nx, ny) || isOccupied(nx, ny, unit.id)) continue;
-            unit.x = nx;
-            unit.y = ny;
-            addLog(`AUTO 이동: ${unit.name} -> (${nx},${ny})`);
-            return true;
+        function findPath(start, end, ignoreId = null, allowOccupiedEnd = false) {
+          if (!start || !end || !inBounds(start.x, start.y) || !inBounds(end.x, end.y)) return null;
+          const startK = key(start.x, start.y);
+          const endK = key(end.x, end.y);
+          if (startK === endK) return [{ x: start.x, y: start.y }];
+          const queue = [startK];
+          const cameFrom = new Map();
+          const visited = new Set([startK]);
+          while (queue.length) {
+            const curK = queue.shift();
+            const cur = parseKeyToObj(curK);
+            for (const n of neighbors(cur.x, cur.y)) {
+              if (!inBounds(n.x, n.y)) continue;
+              const nk = key(n.x, n.y);
+              if (visited.has(nk)) continue;
+              const occupied = isOccupied(n.x, n.y, ignoreId);
+              if (occupied && !(allowOccupiedEnd && nk === endK)) continue;
+              visited.add(nk);
+              cameFrom.set(nk, curK);
+              if (nk === endK) return reconstructPath(cameFrom, start, end);
+              queue.push(nk);
+            }
           }
-          return false;
+          return null;
+        }
+
+        async function issueMove(unitId, x, y) {
+          const unit = unitById(unitId);
+          if (!unit || !inBounds(x, y)) return false;
+          if (unit.x === x && unit.y === y) return true;
+          const path = findPath({ x: unit.x, y: unit.y }, { x, y }, unit.id, false);
+          if (!path || path.length <= 1) return false;
+          await animateUnitAlongPath(unit, path);
+          unit.movedThisTurn = true;
+          addLog(`AUTO 이동: ${unit.name} -> (${x},${y})`);
+          emitUnitEnterTile(unit);
+          return true;
         }
 
         function autoBasicAttack(attacker, target) {
@@ -3279,7 +3299,17 @@
             return;
           }
           const nearestEnemy = nearestEnemyFor(unit);
-          if (nearestEnemy) autoStepTowardEnemy(unit, nearestEnemy);
+          if (nearestEnemy) {
+            const path = findPath({ x: unit.x, y: unit.y }, { x: nearestEnemy.x, y: nearestEnemy.y }, unit.id, true);
+            if (path && path.length > 1) {
+              let step = Math.min(getMoveRange(unit), path.length - 1);
+              while (step > 0 && isOccupied(path[step].x, path[step].y, unit.id)) step -= 1;
+              if (step > 0) {
+                const dest = path[step];
+                await issueMove(unit.id, dest.x, dest.y);
+              }
+            }
+          }
           const postMoveTarget = pickAutoAdjacentEnemy(unit);
           if (postMoveTarget) autoBasicAttack(unit, postMoveTarget);
           unit.acted = true;
@@ -3339,7 +3369,7 @@
             unitInfo.innerHTML =
               `<div><b>${target.name}</b> [${target.faction}]</div>` +
               `<div class="small">직업: ${escapeHtml(classLabel)}${escapeHtml(role)} | 무기: ${escapeHtml(target.weaponType || "-")}</div>` +
-              `<div class="small">HP ${target.hp}/${target.maxHp} | MOV ${target.mov} | ${actedText}</div>` +
+              `<div class="small">HP ${target.hp}/${target.maxHp} | MOV ${getMoveRange(target)} | ${actedText}</div>` +
               `<div class="small">Perk: ${escapeHtml(perkText)}</div>` +
               extraLine;
             hpFill.style.width = `${(target.hp / target.maxHp) * 100}%`;
@@ -3377,7 +3407,7 @@
 
               const step = terrainAt(n.x, n.y).moveCost;
               const nextCost = cur.cost + step;
-              if (nextCost > unit.mov) continue;
+              if (nextCost > getMoveRange(unit)) continue;
 
               const nk = key(n.x, n.y);
               if (nextCost < (dist.get(nk) ?? Infinity)) {
@@ -3419,6 +3449,10 @@
 
         function selectedUnit() {
           return selectedUnitId ? unitById(selectedUnitId) : null;
+        }
+
+        function getMoveRange(unit) {
+          return unit?.move ?? unit?.stats?.move ?? defaultMove;
         }
 
         function clearSelection(removeRange = true) {
