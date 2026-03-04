@@ -1425,6 +1425,7 @@
         let campAutoOpenPending = false;
         let autoDelegateEnabled = false;
         let autoDelegateRunning = false;
+        let currentStageRuntime = {};
         const mousePan = { active: false, button: -1, lastX: 0, lastY: 0 };
         const pointerGesture = {
           active: false,
@@ -3759,14 +3760,15 @@
             stg2KimwareActive = false;
             return;
           }
+          const kimPoint = currentStageRuntime?.stg2KimwarePos || { x: 6, y: 10 };
           let kimware = getKimwareUnit();
           if (!kimware) {
             spawnStageUnit({
               ...RECRUITMENT_UNIT_DEFS.kimware,
               id: "김웨어",
               name: "김웨어",
-              x: 6,
-              y: 10,
+              x: kimPoint.x,
+              y: kimPoint.y,
               faction: "neutral",
               paletteKey: "neutral",
               controllable: false,
@@ -4482,6 +4484,141 @@
           });
         }
 
+        function defaultRosterSpawnPointsForCrop() {
+          const points = [];
+          const rosterIds = Array.isArray(campaign?.rosterIds) && campaign.rosterIds.length ? campaign.rosterIds : ["leader", "jeong2", "able"];
+          for (let idx = 0; idx < rosterIds.length; idx++) {
+            const p = defaultPlayerStartTileByIndex(idx);
+            points.push({ x: p.x, y: p.y });
+          }
+          return points;
+        }
+
+        function collectStagePoints(stage) {
+          const out = [];
+          for (const s of stage?.spawns || []) {
+            if (typeof s?.x === "number" && typeof s?.y === "number") out.push({ x: s.x, y: s.y });
+          }
+          for (const tiles of Object.values(stage?.tileTags || {})) {
+            if (!Array.isArray(tiles)) continue;
+            for (const t of tiles) if (typeof t?.x === "number" && typeof t?.y === "number") out.push({ x: t.x, y: t.y });
+          }
+          for (const obj of stage?.objectives || []) {
+            if (typeof obj?.params?.x === "number" && typeof obj?.params?.y === "number") out.push({ x: obj.params.x, y: obj.params.y });
+          }
+          for (const tr of stage?.triggers || []) {
+            if (typeof tr?.when?.x === "number" && typeof tr?.when?.y === "number") out.push({ x: tr.when.x, y: tr.when.y });
+            for (const action of tr?.actions || []) {
+              const sx = action?.spawnDef?.x ?? action?.unitDef?.x ?? action?.x;
+              const sy = action?.spawnDef?.y ?? action?.unitDef?.y ?? action?.y;
+              if (typeof sx === "number" && typeof sy === "number") out.push({ x: sx, y: sy });
+            }
+          }
+          return out;
+        }
+
+        function applyOffsetToStage(stage, offX, offY) {
+          const shift = (obj) => {
+            if (!obj || typeof obj.x !== "number" || typeof obj.y !== "number") return;
+            obj.x -= offX;
+            obj.y -= offY;
+          };
+          for (const s of stage?.spawns || []) shift(s);
+          for (const tiles of Object.values(stage?.tileTags || {})) {
+            if (!Array.isArray(tiles)) continue;
+            for (const t of tiles) shift(t);
+          }
+          for (const obj of stage?.objectives || []) shift(obj?.params);
+          for (const tr of stage?.triggers || []) {
+            shift(tr?.when);
+            for (const action of tr?.actions || []) {
+              shift(action?.spawnDef);
+              shift(action?.unitDef);
+              shift(action);
+            }
+          }
+        }
+
+        function padMapRows(rows) {
+          const padded = Array.from({ length: MAP_H }, () => Array.from({ length: MAP_W }, () => "g"));
+          const h = Math.min(MAP_H, rows.length);
+          const w = Math.min(MAP_W, rows[0]?.length || 0);
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) padded[y][x] = rows[y][x];
+          }
+          return padded.map((r) => r.join(""));
+        }
+
+        function cropStage(stageId, stage, points, marginX = 3, marginY = 3, minW = 12, minH = 10, mapRowsInput = null) {
+          const mapRows = Array.isArray(mapRowsInput) && mapRowsInput.length ? mapRowsInput : (stage?.mapData ? cloneSimple(stage.mapData) : (stage?.mapGen ? stage.mapGen() : buildMapRows(SEED)));
+          const oldH = mapRows.length;
+          const oldW = mapRows[0]?.length || 0;
+          const valid = (points || []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y));
+          if (!valid.length || oldW <= 0 || oldH <= 0) return { mapRows, offX: 0, offY: 0, newW: oldW, newH: oldH };
+
+          let minX = Math.min(...valid.map((p) => p.x));
+          let maxX = Math.max(...valid.map((p) => p.x));
+          let minY = Math.min(...valid.map((p) => p.y));
+          let maxY = Math.max(...valid.map((p) => p.y));
+          minX = Math.max(0, minX - marginX);
+          minY = Math.max(0, minY - marginY);
+          maxX = Math.min(oldW - 1, maxX + marginX);
+          maxY = Math.min(oldH - 1, maxY + marginY);
+
+          let w = maxX - minX + 1;
+          let h = maxY - minY + 1;
+          if (w < minW) {
+            const deficit = minW - w;
+            const left = Math.min(minX, Math.floor(deficit / 2));
+            const right = Math.min(oldW - 1 - maxX, deficit - left);
+            minX -= left;
+            maxX += right;
+            w = maxX - minX + 1;
+          }
+          if (h < minH) {
+            const deficit = minH - h;
+            const up = Math.min(minY, Math.floor(deficit / 2));
+            const down = Math.min(oldH - 1 - maxY, deficit - up);
+            minY -= up;
+            maxY += down;
+            h = maxY - minY + 1;
+          }
+
+          const croppedRows = [];
+          for (let y = minY; y <= maxY; y++) {
+            const row = mapRows[y] || "";
+            croppedRows.push(row.slice(minX, maxX + 1).padEnd(w, "g"));
+          }
+          const padded = padMapRows(croppedRows);
+          applyOffsetToStage(stage, minX, minY);
+          if (stage && stage._stage2KimwarePos) {
+            stage._stage2KimwarePos.x -= minX;
+            stage._stage2KimwarePos.y -= minY;
+          }
+          console.log("[CROP]", stageId, oldW, oldH, "->", w, h, "off", minX, minY);
+          return { mapRows: padded, offX: minX, offY: minY, newW: w, newH: h };
+        }
+
+        function ensureStage2ScaffoldForCrop(stage) {
+          if (!stage.tileTags) stage.tileTags = {};
+          if (!Array.isArray(stage.tileTags.STG2_RESCUE)) stage.tileTags.STG2_RESCUE = [{ x: 6, y: 10 }];
+          if (!Array.isArray(stage.tileTags.STG2_EXIT) || stage.tileTags.STG2_EXIT.length < 2) {
+            stage.tileTags.STG2_EXIT = [{ x: 13, y: 10 }, { x: 14, y: 10 }, { x: 13, y: 11 }];
+          }
+          stage._stage2KimwarePos = { x: 6, y: 10 };
+          const compactEnemies = {
+            e1: { x: 12, y: 7 },
+            e2: { x: 14, y: 10 },
+            e3: { x: 13, y: 13 },
+            n1: { x: 9, y: 9 }
+          };
+          for (const s of stage.spawns || []) {
+            if (!s || !compactEnemies[s.id]) continue;
+            s.x = compactEnemies[s.id].x;
+            s.y = compactEnemies[s.id].y;
+          }
+        }
+
         function getCurrentStageId() {
           return currentCampaignStageId;
         }
@@ -4544,10 +4681,37 @@
           clearAllStageHooks();
           resetTurnHooks();
           resetReinforceQueue();
-          const stage = STAGES[stageId] || STAGES[CURRENT_STAGE];
+          const stageBase = STAGES[stageId] || STAGES[CURRENT_STAGE];
+          const stage = cloneSimple(stageBase);
           currentStageId = stageId in STAGES ? stageId : CURRENT_STAGE;
           stageSelect.value = currentStageId;
-          MAP_ROWS = stage.mapData ? cloneSimple(stage.mapData) : (stage.mapGen ? stage.mapGen() : buildMapRows(SEED));
+          let stageMapRows = stage.mapData ? cloneSimple(stage.mapData) : (stage.mapGen ? stage.mapGen() : buildMapRows(SEED));
+          currentStageRuntime = {};
+          if (currentCampaignStageId === "STG1") {
+            const points = [
+              ...defaultRosterSpawnPointsForCrop(),
+              ...collectStagePoints(stage)
+            ];
+            const cropped = cropStage("STG1", stage, points, 3, 3, 12, 10, stageMapRows);
+            stageMapRows = cropped.mapRows;
+            currentStageRuntime.crop = cropped;
+          } else if (currentCampaignStageId === "STG2") {
+            ensureStage2ScaffoldForCrop(stage);
+            const points = [
+              ...defaultRosterSpawnPointsForCrop(),
+              ...(stage.tileTags?.STG2_RESCUE || []),
+              ...(stage.tileTags?.STG2_EXIT || []),
+              ...(stage._stage2KimwarePos ? [stage._stage2KimwarePos] : []),
+              ...collectStagePoints(stage)
+            ];
+            const cropped = cropStage("STG2", stage, points, 4, 4, 14, 12, stageMapRows);
+            stageMapRows = cropped.mapRows;
+            currentStageRuntime.crop = cropped;
+            currentStageRuntime.stg2KimwarePos = stage._stage2KimwarePos ? { ...stage._stage2KimwarePos } : null;
+            currentStageRuntime.stg2RescueTiles = cloneSimple(stage.tileTags?.STG2_RESCUE || []);
+            currentStageRuntime.stg2ExitTiles = cloneSimple(stage.tileTags?.STG2_EXIT || []);
+          }
+          MAP_ROWS = stageMapRows;
           rng = mulberry32(SEED);
           units = [];
           clearExistingPlayerUnits();
@@ -4569,6 +4733,13 @@
             for (const [flagId, value] of Object.entries(campaign.checkpointFlags)) {
               if (value === true) flags[flagId] = true;
             }
+          }
+          if (currentCampaignStageId === "STG2") {
+            const rescueTiles = currentStageRuntime.stg2RescueTiles || [];
+            const exitTiles = currentStageRuntime.stg2ExitTiles || [];
+            if (!currentStageRuntime.stg2KimwarePos) console.error("[CROP][STG2] missing kimware point after crop");
+            if (rescueTiles.length < 1) console.error("[CROP][STG2] missing rescue trigger tile after crop");
+            if (exitTiles.length < 2) console.error("[CROP][STG2] missing exit tiles (<2) after crop");
           }
           ensureStg2KimwareState();
           ensureJiningTalkEventForStage();
