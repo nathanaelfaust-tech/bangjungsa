@@ -473,6 +473,19 @@
         margin-right: 8px;
       }
 
+      #btnAuto {
+        position: fixed;
+        right: 12px;
+        bottom: 72px;
+        z-index: 99999;
+        padding: 10px 14px;
+        border: 1px solid #356089;
+        background: linear-gradient(180deg, #2d7cc2, #24679f);
+        color: #eef7ff;
+        border-radius: 10px;
+        font-weight: 800;
+      }
+
       body[data-skin="flat_v1"] {
         background: #f8fafc;
         color: #0f172a;
@@ -529,6 +542,12 @@
         }
         .side {
           min-height: auto;
+        }
+        #btnAuto {
+          right: 10px;
+          bottom: 86px;
+          padding: 12px 16px;
+          font-size: 14px;
         }
       }
 
@@ -641,8 +660,6 @@
           <select id="stageSelect" class="btnSmall"></select>
           <button id="campBtn" class="btnSmall" style="display:none;" type="button">캠프</button>
           <button id="victoryCampBtn" class="btnSmall" style="display:none;" type="button">캠프</button>
-          <button id="autoToggleBtn" class="btnSmall" type="button">AUTO: OFF</button>
-          <button id="autoRunBtn" class="btnSmall" style="display:none;" type="button">AUTO 실행</button>
           <button id="devToggleBtn" class="btnSmall" type="button">DEV</button>
           <button id="devMenuBtn" class="btnSmall" style="display:none;" type="button">DEV 메뉴</button>
           <button id="skinToggleBtn" class="btnSmall" type="button">스킨: 레거시</button>
@@ -738,6 +755,7 @@
         <div id="campDialogue" class="camp-dialogue">먼지가 여기 있어여. 말 걸어보세여…네여.</div>
         <div class="btnRow">
           <button id="campTalkBtn" class="btnSmall" type="button">먼지에게 말걸기</button>
+          <button id="campNextBtn" class="btnSmall" style="display:none;" type="button">다음 스테이지</button>
           <button id="campCloseBtn" class="btn" type="button">나가기</button>
         </div>
       </div>
@@ -756,6 +774,7 @@
         </div>
       </div>
     </div>
+    <button id="btnAuto" type="button">AUTO: OFF</button>
 
     <script>
       (() => {
@@ -1238,8 +1257,7 @@
         const stageSelect = document.getElementById("stageSelect");
         const campBtn = document.getElementById("campBtn");
         const victoryCampBtn = document.getElementById("victoryCampBtn");
-        const autoToggleBtn = document.getElementById("autoToggleBtn");
-        const autoRunBtn = document.getElementById("autoRunBtn");
+        const btnAuto = document.getElementById("btnAuto");
         const devToggleBtn = document.getElementById("devToggleBtn");
         const devMenuBtn = document.getElementById("devMenuBtn");
         const skinToggleBtn = document.getElementById("skinToggleBtn");
@@ -1255,6 +1273,7 @@
         const campOverlay = document.getElementById("campOverlay");
         const campDialogue = document.getElementById("campDialogue");
         const campTalkBtn = document.getElementById("campTalkBtn");
+        const campNextBtn = document.getElementById("campNextBtn");
         const campCloseBtn = document.getElementById("campCloseBtn");
         const meonjiOverlay = document.getElementById("meonjiOverlay");
         const meonjiDialogue = document.getElementById("meonjiDialogue");
@@ -1576,8 +1595,8 @@
 
         function meonjiCampLines(topic) {
           if (topic === "intro") return ["먼지: …네여! 먼지라구여 ㅋㅋㅋㅋㅋ (placeholder)"];
-          if (topic === "recap") return ["언제 가요?? …네여", "다음은 스테이지 2…어용"];
-          if (topic === "hint") return ["부상자랑 보호자… 구여", "체력 좀 떨어지면…네여"];
+          if (topic === "recap") return ["먼지: …네여 (placeholder)"];
+          if (topic === "hint") return ["먼지: …어용 (placeholder)"];
           return ["먼지: 글쿤여…어용"];
         }
 
@@ -1598,17 +1617,25 @@
             closeCampModal();
             return;
           }
-          const pendingId = campaign.pendingNextStageId || null;
-          if (pendingId) {
-            campaign.pendingNextStageId = null;
-            campaign.currentStageId = pendingId;
-            saveCampaign();
-            closeCampModal();
-            closeMeonjiModal();
-            loadCampaignStage(pendingId, { save: false });
-            return;
-          }
           returnToMenu();
+        }
+
+        function onCampNextStage() {
+          if (!campaign) return;
+          const pendingId = campaign.pendingNextStageId || null;
+          if (!pendingId) return;
+          campaign.pendingNextStageId = null;
+          campaign.currentStageId = pendingId;
+          saveCampaign();
+          closeCampModal();
+          closeMeonjiModal();
+          loadCampaignStage(pendingId, { save: false });
+        }
+
+        function refreshCampButtons() {
+          const pendingId = campaign?.pendingNextStageId || null;
+          if (campNextBtn) campNextBtn.style.display = pendingId ? "inline-block" : "none";
+          if (campCloseBtn) campCloseBtn.textContent = "메인메뉴";
         }
 
         function maybeShowMeonjiGreetingOnce() {
@@ -1625,8 +1652,15 @@
           if (!isCampAvailable() || !campOverlay) return;
           campOverlay.classList.add("show");
           inputLocked = true;
-          if (intro) setCampDialogueLines(meonjiCampLines("intro"));
-          else setCampDialogueLines(["먼지가 기다리고 있어여.", "말 걸어서 확인해보세여."]);
+          refreshCampButtons();
+          const pendingId = campaign?.pendingNextStageId || null;
+          if (pendingId) {
+            setCampDialogueLines(["먼지: 다음 스테이지 준비됐어여."]);
+          } else if (intro) {
+            setCampDialogueLines(meonjiCampLines("intro"));
+          } else {
+            setCampDialogueLines(["먼지: …네여 (placeholder)"]);
+          }
           maybeShowMeonjiGreetingOnce();
         }
 
@@ -1681,15 +1715,12 @@
         if (campBtn) campBtn.addEventListener("click", () => openCampModal({ intro: false }));
         if (victoryCampBtn) victoryCampBtn.addEventListener("click", () => {
           if (!battleOver || !campaign) return;
-          const nextId = getNextStageId(currentCampaignStageId);
-          campaign.pendingNextStageId = nextId || null;
-          saveCampaign();
           openCampScene();
         });
         if (menuCampBtn) menuCampBtn.addEventListener("click", () => openCampModal({ intro: false }));
         if (campCloseBtn) campCloseBtn.addEventListener("click", () => onCampExit());
-        if (autoToggleBtn) autoToggleBtn.addEventListener("click", () => toggleAutoDelegate());
-        if (autoRunBtn) autoRunBtn.addEventListener("click", () => { runAutoDelegateOnce(); });
+        if (campNextBtn) campNextBtn.addEventListener("click", () => onCampNextStage());
+        if (btnAuto) btnAuto.addEventListener("click", () => toggleAutoDelegate());
         if (campTalkBtn) campTalkBtn.addEventListener("click", () => openMeonjiModal());
         if (meonjiTopicRecapBtn) meonjiTopicRecapBtn.addEventListener("click", () => openMeonjiTopic("recap"));
         if (meonjiTopicHintBtn) meonjiTopicHintBtn.addEventListener("click", () => openMeonjiTopic("hint"));
@@ -3111,7 +3142,10 @@
           runTriggeredEvents("turnStart", { phase: PHASE.PLAYER, turn: turnCounter });
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
-          if (autoDelegateEnabled) showToast("AUTO ON: 필요 시 [AUTO 실행]으로 남은 아군 위임", 1100);
+          if (autoDelegateEnabled) {
+            showToast("AUTO ON: 남은 아군 위임 실행", 900);
+            setTimeout(() => { runAutoDelegateOnce(); }, 40);
+          }
           updateAutoControls();
         }
 
@@ -3158,23 +3192,23 @@
         }
 
         function updateAutoControls() {
-          if (autoToggleBtn) autoToggleBtn.textContent = `AUTO: ${autoDelegateEnabled ? "ON" : "OFF"}`;
-          const canRun =
-            autoDelegateEnabled &&
-            !autoDelegateRunning &&
-            !battleOver &&
-            phase === PHASE.PLAYER &&
-            units.some((u) => isUnitControllable(u) && !u.acted);
-          if (autoRunBtn) {
-            autoRunBtn.style.display = autoDelegateEnabled ? "inline-block" : "none";
-            autoRunBtn.disabled = !canRun;
+          if (btnAuto) {
+            btnAuto.textContent = `AUTO: ${autoDelegateEnabled ? "ON" : "OFF"}`;
+            btnAuto.disabled = autoDelegateRunning || battleOver;
           }
         }
 
         function toggleAutoDelegate() {
           autoDelegateEnabled = !autoDelegateEnabled;
           if (!autoDelegateEnabled) autoDelegateRunning = false;
+          if (campaign) {
+            ensureCampaignRecruitmentScaffold(campaign);
+            if (!campaign.settings) campaign.settings = {};
+            campaign.settings.auto = autoDelegateEnabled;
+            saveCampaign();
+          }
           updateAutoControls();
+          if (autoDelegateEnabled && phase === PHASE.PLAYER && !battleOver) runAutoDelegateOnce();
         }
 
         function nearestEnemyFor(unit) {
@@ -3629,11 +3663,17 @@
             ...(targetCampaign.checkpointFlags || {})
           };
           if (typeof targetCampaign.campUnlocked !== "boolean") targetCampaign.campUnlocked = false;
+          if (!targetCampaign.settings || typeof targetCampaign.settings !== "object") targetCampaign.settings = {};
+          if (typeof targetCampaign.settings.auto !== "boolean") targetCampaign.settings.auto = false;
           if (!targetCampaign.flags || typeof targetCampaign.flags !== "object") targetCampaign.flags = {};
           if (typeof targetCampaign.flags.metMeonji !== "boolean") targetCampaign.flags.metMeonji = false;
           if (!("pendingNextStageId" in targetCampaign)) targetCampaign.pendingNextStageId = null;
           if (targetCampaign.pendingNextStageId && !STAGE_ORDER.includes(targetCampaign.pendingNextStageId)) {
             targetCampaign.pendingNextStageId = null;
+          }
+          if (!("lastClearedStageId" in targetCampaign)) targetCampaign.lastClearedStageId = null;
+          if (targetCampaign.lastClearedStageId && !STAGE_ORDER.includes(targetCampaign.lastClearedStageId)) {
+            targetCampaign.lastClearedStageId = null;
           }
           if (!Array.isArray(targetCampaign.rosterIds)) targetCampaign.rosterIds = ["leader", "jeong2", "able"];
         }
@@ -4073,7 +4113,9 @@
             },
             recruitedFlags: recruitedFlagDefaults(),
             campUnlocked: false,
+            settings: { auto: false },
             pendingNextStageId: null,
+            lastClearedStageId: null,
             flags: { metMeonji: false },
             hiddenScore: 0,
             checkpointFlags: checkpointFlagDefaults(),
@@ -4108,16 +4150,19 @@
               campaign.currentStageId = normalizeCampaignStageId(campaign.currentStageId);
               ensureLeaderProfileAndBuild(campaign);
               ensureCampaignRecruitmentScaffold(campaign);
+              autoDelegateEnabled = !!campaign.settings?.auto;
               return true;
             }
             campaign = migrateCampaign(parsed?.saveVersion, parsed);
             ensureLeaderProfileAndBuild(campaign);
             ensureCampaignRecruitmentScaffold(campaign);
+            autoDelegateEnabled = !!campaign.settings?.auto;
             saveCampaign();
             showToast("세이브 버전 변경: 새로 시작");
             return false;
           } catch {
             campaign = defaultCampaign();
+            autoDelegateEnabled = false;
             return false;
           }
         }
@@ -4214,24 +4259,16 @@
             campaign.stageProgress = Math.max(campaign.stageProgress, Math.min(STAGE_ORDER.length - 1, idx + 1));
           }
           const nextId = getNextStageId(stageId);
-          if (stageId === "STG1") campaign.campUnlocked = true;
+          campaign.campUnlocked = true;
           campaign.pendingNextStageId = nextId || null;
-          if (nextId) campaign.currentStageId = nextId;
+          campaign.lastClearedStageId = stageId;
           saveCampaign();
           initializeStageSelect();
+          openCampScene();
         }
 
         function onNextStage() {
-          if (!campaign) return;
-          const nextId = campaign.pendingNextStageId || campaign.currentStageId;
-          if (!nextId) {
-            showMenu();
-            return;
-          }
-          campaign.pendingNextStageId = null;
-          campaign.currentStageId = nextId;
-          saveCampaign();
-          loadCampaignStage(nextId, { save: false });
+          openCampScene();
         }
 
         function showMenu() {
@@ -4249,6 +4286,10 @@
           loadCampaign();
           initializeStageSelect();
           hideMenu();
+          if (campaign?.pendingNextStageId) {
+            openCampScene();
+            return;
+          }
           loadCampaignStage(campaign.currentStageId, { save: false });
         }
 
@@ -4256,6 +4297,7 @@
           const leaderName = (menuLeaderName?.value || "리더").trim() || "리더";
           const mbti = MBTI_OPTIONS.includes(menuMbti?.value) ? menuMbti.value : "INTJ";
           campaign = defaultCampaign();
+          autoDelegateEnabled = !!campaign.settings?.auto;
           campaign.playerProfile = { leaderName, mbti };
           campaign.leaderBuild = buildLeaderBuild(leaderName, mbti);
           saveCampaign();
@@ -4268,6 +4310,10 @@
           if (!campaign) return;
           const campaignStageId = menuStageSelect.value || campaign.currentStageId;
           hideMenu();
+          if (campaign?.pendingNextStageId) {
+            openCampScene();
+            return;
+          }
           loadCampaignStage(campaignStageId, { save: true });
         }
 
@@ -5201,8 +5247,9 @@
           showToast(text === "VICTORY" ? "승리!" : "패배!");
           if (text === "VICTORY") {
             onStageClear(currentCampaignStageId);
-            nextStageBtn.style.display = campaign?.pendingNextStageId ? "inline-block" : "none";
-            if (victoryCampBtn) victoryCampBtn.style.display = "inline-block";
+            nextStageBtn.textContent = "캠프로 계속";
+            nextStageBtn.style.display = "inline-block";
+            if (victoryCampBtn) victoryCampBtn.style.display = "none";
           } else {
             nextStageBtn.style.display = "none";
             if (victoryCampBtn) victoryCampBtn.style.display = "none";
