@@ -36,6 +36,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
+        flex-wrap: wrap;
         gap: 10px;
         background: linear-gradient(180deg, #1f2a38 0%, #18212d 100%);
         border: 1px solid var(--border);
@@ -52,6 +53,13 @@
         color: var(--muted);
         margin-left: 12px;
         font-size: 13px;
+      }
+
+      .guide .hint.dev-status {
+        display: inline-block;
+        margin-left: 0;
+        margin-top: 4px;
+        font-weight: 700;
       }
 
       .stage {
@@ -206,6 +214,13 @@
         gap: 6px;
       }
 
+      .topbar .btnRow {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        row-gap: 6px;
+      }
+
       .btnSmall {
         border: 1px solid #3b5e81;
         background: linear-gradient(180deg, #2a4159, #203245);
@@ -217,6 +232,11 @@
         cursor: pointer;
         font-weight: 700;
         min-height: 28px;
+      }
+
+      #devToggleBtn {
+        min-height: 36px;
+        min-width: 56px;
       }
 
       .cmd-menu {
@@ -468,6 +488,12 @@
           gap: 8px;
         }
 
+        .topbar .btnRow {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+
         #stageSelect,
         #menuStageSelect,
         .btn,
@@ -522,6 +548,7 @@
           <span id="phasePill" class="phase-pill">PLAYER</span>
           <strong id="guideText">아군 유닛 클릭 → 이동</strong>
           <span class="hint">Enter: 턴 종료, G: 좌표, Shift+드래그: 화면 이동</span>
+          <span id="devStatus" class="hint dev-status">DEV_BUILD=OFF  DEV=OFF</span>
           <span id="touchHint" class="hint"></span>
           <span id="devHint" class="hint"></span>
           <span id="touchDebug" class="hint"></span>
@@ -529,6 +556,7 @@
         </div>
         <div class="btnRow">
           <select id="stageSelect" class="btnSmall"></select>
+          <button id="devToggleBtn" class="btnSmall" type="button">DEV</button>
           <button id="skinToggleBtn" class="btnSmall" type="button">스킨: 레거시</button>
           <button id="nextStageBtn" class="btnSmall" style="display:none;" type="button">다음으로</button>
           <button id="restartBtn" class="btn" style="display:none;">재시작</button>
@@ -1085,6 +1113,7 @@
 
         const phasePill = document.getElementById("phasePill");
         const guideText = document.getElementById("guideText");
+        const devStatusEl = document.getElementById("devStatus");
         const endPhaseBtn = document.getElementById("endPhaseBtn");
         const restartBtn = document.getElementById("restartBtn");
         const tileInfo = document.getElementById("tileInfo");
@@ -1102,6 +1131,7 @@
         const centerCamBtn = document.getElementById("centerCamBtn");
         const followBtn = document.getElementById("followBtn");
         const stageSelect = document.getElementById("stageSelect");
+        const devToggleBtn = document.getElementById("devToggleBtn");
         const skinToggleBtn = document.getElementById("skinToggleBtn");
         const nextStageBtn = document.getElementById("nextStageBtn");
         const menuOverlay = document.getElementById("menuOverlay");
@@ -1256,13 +1286,35 @@
         const miniTerrainCtx = minimapTerrainCache.getContext("2d");
 
         if (!DEV_BUILD) {
+          devMode = false;
+          if (devToggleBtn) devToggleBtn.remove();
           devHintEl.style.display = "none";
           touchDebugEl.style.display = "none";
           debugReadout.style.display = "none";
         }
 
+        function updateDevStatusLabel() {
+          if (!devStatusEl) return;
+          devStatusEl.textContent = `DEV_BUILD=${DEV_BUILD ? "ON" : "OFF"}  DEV=${DEV_BUILD && devMode ? "ON" : "OFF"}`;
+        }
+
+        function setDevMode(nextValue) {
+          if (!DEV_BUILD) return;
+          const next = !!nextValue;
+          if (devMode === next) {
+            updateDevStatusLabel();
+            return;
+          }
+          devMode = next;
+          addLog(devMode ? "DEV_MODE ON" : "DEV_MODE OFF");
+          showToast(devMode ? "DEV ON" : "DEV OFF", 900);
+          updateTopGuide();
+          updateDevStatusLabel();
+        }
+
         loadVisualSkin();
         initializeCampaignSystem();
+        updateDevStatusLabel();
 
         canvas.addEventListener("mousemove", onMouseMove);
         canvas.addEventListener("mouseleave", () => {
@@ -1285,6 +1337,7 @@
         minimap.addEventListener("mousedown", onMinimapMouseDown);
         centerCamBtn.addEventListener("click", onCenterCamera);
         followBtn.addEventListener("click", onToggleFollow);
+        if (DEV_BUILD && devToggleBtn) devToggleBtn.addEventListener("click", () => setDevMode(!devMode));
         skinToggleBtn.addEventListener("click", () => {
           const next = visualSkin === "legacy" ? "flat_v1" : "legacy";
           setVisualSkin(next, true);
@@ -1313,9 +1366,7 @@
         window.addEventListener("keydown", (e) => {
           if (DEV_BUILD && e.code === "Tab") {
             e.preventDefault();
-            devMode = !devMode;
-            addLog(devMode ? "DEV_MODE ON" : "DEV_MODE OFF");
-            updateTopGuide();
+            setDevMode(!devMode);
             return;
           }
           if (DEV_BUILD && devMode && e.code === "KeyK") {
@@ -2732,6 +2783,7 @@
           } else {
             debugReadout.textContent = "";
           }
+          updateDevStatusLabel();
         }
 
         function updateInfoPanel() {
