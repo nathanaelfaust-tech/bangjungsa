@@ -3043,6 +3043,18 @@
           const range = computeMoveRange(enemy);
           const players = units.filter(u => u.faction === "player");
           if (players.length === 0) return;
+          const stg2AlarmActive = currentCampaignStageId === "STG2" && !!getCampaignStageState("STG2")?.alarm;
+          const chaseExit = stg2AlarmActive && enemy.aiHint === "alarmChaseExit";
+          const exitTiles = chaseExit ? getTagTiles("STG2_EXIT") : [];
+          const nearestExitDist = (x, y) => {
+            if (!exitTiles.length) return Infinity;
+            let best = Infinity;
+            for (const t of exitTiles) {
+              const d = Math.abs(t.x - x) + Math.abs(t.y - y);
+              if (d < best) best = d;
+            }
+            return best;
+          };
 
           let target = pickAttackTarget(enemy, "player");
           if (target) {
@@ -3058,8 +3070,12 @@
             const [x, y] = parseKey(k);
             const d = nearestPlayerDist(x, y);
             const cost = range.dist.get(k) || 0;
-
-            const better = d < bestDist || (d === bestDist && cost > bestCost);
+            let better = d < bestDist || (d === bestDist && cost > bestCost);
+            if (chaseExit) {
+              const ex = nearestExitDist(x, y);
+              const bex = nearestExitDist(best.x, best.y);
+              better = ex < bex || (ex === bex && (d < bestDist || (d === bestDist && cost > bestCost)));
+            }
             if (better) {
               bestDist = d;
               best = { x, y };
@@ -3203,6 +3219,7 @@
           dispatchStageTrigger("onTurnStart", { side: PHASE.PLAYER, turn: turnCounter });
           runStageTurnHooks(PHASE.PLAYER, turnCounter);
           runTriggeredEvents("turnStart", { phase: PHASE.PLAYER, turn: turnCounter });
+          runStage2AlarmReinforcementTick();
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
           if (autoDelegateEnabled) {
@@ -3777,9 +3794,12 @@
           }
           if (!targetCampaign.stageState || typeof targetCampaign.stageState !== "object") targetCampaign.stageState = {};
           if (!targetCampaign.stageState.STG2 || typeof targetCampaign.stageState.STG2 !== "object") {
-            targetCampaign.stageState.STG2 = { rescuedKimwear: false };
-          } else if (typeof targetCampaign.stageState.STG2.rescuedKimwear !== "boolean") {
-            targetCampaign.stageState.STG2.rescuedKimwear = false;
+            targetCampaign.stageState.STG2 = { rescuedKimwear: false, alarm: false, alarmTurn: 0, reinforceSpawned: 0 };
+          } else {
+            if (typeof targetCampaign.stageState.STG2.rescuedKimwear !== "boolean") targetCampaign.stageState.STG2.rescuedKimwear = false;
+            if (typeof targetCampaign.stageState.STG2.alarm !== "boolean") targetCampaign.stageState.STG2.alarm = false;
+            if (!Number.isFinite(Number(targetCampaign.stageState.STG2.alarmTurn))) targetCampaign.stageState.STG2.alarmTurn = 0;
+            if (!Number.isFinite(Number(targetCampaign.stageState.STG2.reinforceSpawned))) targetCampaign.stageState.STG2.reinforceSpawned = 0;
           }
           if (!Array.isArray(targetCampaign.rosterIds)) targetCampaign.rosterIds = ["leader", "jeong2", "able"];
         }
@@ -3952,7 +3972,14 @@
             promoteKimwareToPlayer();
             const stg2State = getCampaignStageState("STG2");
             stg2State.rescuedKimwear = true;
+            stg2State.alarm = true;
+            stg2State.alarmTurn = turnCounter;
+            stg2State.reinforceSpawned = Number(stg2State.reinforceSpawned || 0);
             if (joinByRoster("kimware", "kimwareJoined", "김웨어")) changed = true;
+            setupStageObjectivesForCampaign();
+            updateObjectivePanel();
+            showToast("발각됐다! 증원이 온다!");
+            addLog("STG2 알람 발동");
             saveCampaign();
           }
           if (flagId === RECRUITMENT_FLAG_IDS.NUBURI_JOIN && getFlag(flagId)) {
@@ -4727,6 +4754,8 @@
           if (!Array.isArray(stage.tileTags.STG2_EXIT) || stage.tileTags.STG2_EXIT.length < 2) {
             stage.tileTags.STG2_EXIT = [{ x: 13, y: 10 }, { x: 14, y: 10 }, { x: 13, y: 11 }];
           }
+          if (!Array.isArray(stage.tileTags.STG2_GUARD_GATE)) stage.tileTags.STG2_GUARD_GATE = [{ x: 14, y: 2 }, { x: 13, y: 2 }];
+          if (!Array.isArray(stage.tileTags.STG2_ALARM)) stage.tileTags.STG2_ALARM = [{ x: 13, y: 3 }];
           stage._stage2KimwarePos = { x: 6, y: 10 };
           const compactEnemies = {
             e1: { x: 12, y: 7 },
@@ -4739,6 +4768,92 @@
             s.x = compactEnemies[s.id].x;
             s.y = compactEnemies[s.id].y;
           }
+        }
+
+        function nearestCellToAnchor(cells, anchor) {
+          let best = null;
+          let bestD = Infinity;
+          for (const c of cells) {
+            const d = Math.abs(c.x - anchor.x) + Math.abs(c.y - anchor.y);
+            if (d < bestD) {
+              best = c;
+              bestD = d;
+            }
+          }
+          return best;
+        }
+
+        function setupStage2PrisonScenario(stage) {
+          if (currentCampaignStageId !== "STG2") return;
+          const leader = unitById("리더") || units.find((u) => u.faction === "player");
+          const anchor = leader ? { x: leader.x, y: leader.y } : { x: 2, y: Math.max(1, mapHeight() - 3) };
+          const w = mapWidth();
+          const h = mapHeight();
+          const targetDist = 9;
+          let bestPos = null;
+          let bestScore = Infinity;
+          for (let y = 1; y < h - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+              const t = terrainAt(x, y);
+              if (!t || t.moveCost >= 999) continue;
+              if (isOccupied(x, y)) continue;
+              const d = Math.abs(x - anchor.x) + Math.abs(y - anchor.y);
+              if (d < 6) continue;
+              const score = Math.abs(d - targetDist) * 10 + (x < anchor.x ? 3 : 0);
+              if (score < bestScore) {
+                bestScore = score;
+                bestPos = { x, y };
+              }
+            }
+          }
+          if (!bestPos) {
+            bestPos = { x: Math.max(2, Math.min(w - 3, anchor.x + 7)), y: Math.max(2, Math.min(h - 3, anchor.y - 1)) };
+          }
+          const adj = neighbors(bestPos.x, bestPos.y).filter((p) => {
+            if (!inBounds(p.x, p.y)) return false;
+            const t = terrainAt(p.x, p.y);
+            return !!t && t.moveCost < 999;
+          });
+          const rescueTile = nearestCellToAnchor(adj, anchor) || { x: Math.max(0, bestPos.x - 1), y: bestPos.y };
+          const wallX = Math.max(2, Math.min(w - 3, Math.floor((anchor.x + bestPos.x) / 2)));
+          for (let y = 1; y < h - 1; y++) {
+            if (Math.abs(y - rescueTile.y) <= 1) continue;
+            setMapTileCode(wallX, y, "x");
+          }
+          for (const p of [{ x: bestPos.x + 1, y: bestPos.y }, { x: bestPos.x + 1, y: bestPos.y - 1 }, { x: bestPos.x + 1, y: bestPos.y + 1 }]) {
+            if (inBounds(p.x, p.y) && !(p.x === rescueTile.x && p.y === rescueTile.y)) setMapTileCode(p.x, p.y, "x");
+          }
+
+          const farCorner = (() => {
+            const corners = [{ x: 0, y: 0 }, { x: w - 1, y: 0 }, { x: 0, y: h - 1 }, { x: w - 1, y: h - 1 }];
+            let best = corners[0];
+            let dBest = -1;
+            for (const c of corners) {
+              const d = Math.abs(anchor.x - c.x) + Math.abs(anchor.y - c.y);
+              if (d > dBest) { dBest = d; best = c; }
+            }
+            return best;
+          })();
+          const gdx = farCorner.x === 0 ? 1 : -1;
+          const gdy = farCorner.y === 0 ? 1 : -1;
+          const gateTiles = [
+            { x: farCorner.x + gdx, y: farCorner.y + gdy },
+            { x: farCorner.x + gdx * 2, y: farCorner.y + gdy }
+          ].filter((p) => inBounds(p.x, p.y));
+          const alarmTile = inBounds(farCorner.x + gdx, farCorner.y + gdy * 2)
+            ? { x: farCorner.x + gdx, y: farCorner.y + gdy * 2 }
+            : gateTiles[0];
+          if (alarmTile && inBounds(alarmTile.x, alarmTile.y)) setMapTileCode(alarmTile.x, alarmTile.y, "t");
+
+          stage._stage2KimwarePos = { x: bestPos.x, y: bestPos.y };
+          stage.tileTags = stage.tileTags || {};
+          stage.tileTags.STG2_RESCUE = [{ x: rescueTile.x, y: rescueTile.y }];
+          stage.tileTags.STG2_GUARD_GATE = gateTiles.length ? gateTiles : [{ x: Math.max(1, w - 2), y: 1 }];
+          stage.tileTags.STG2_ALARM = alarmTile ? [{ x: alarmTile.x, y: alarmTile.y }] : [];
+          currentStageRuntime.stg2KimwarePos = { x: bestPos.x, y: bestPos.y };
+          currentStageRuntime.stg2RescueTiles = cloneSimple(stage.tileTags.STG2_RESCUE);
+          currentStageRuntime.stg2GuardGate = cloneSimple(stage.tileTags.STG2_GUARD_GATE);
+          currentStageRuntime.stg2AlarmTiles = cloneSimple(stage.tileTags.STG2_ALARM);
         }
 
         function placeStage2ExitCornerTiles(anchor) {
@@ -4792,6 +4907,47 @@
           currentStageTileTags.STG2_EXIT = cloneSimple(exitTiles);
           currentStageRuntime.stg2ExitTiles = cloneSimple(exitTiles);
           if (exitTiles.length < 2) console.error("[CROP][STG2] missing exit tiles (<2) after corner relocate");
+        }
+
+        function runStage2AlarmReinforcementTick() {
+          if (battleOver || currentCampaignStageId !== "STG2" || !campaign) return;
+          const stg2State = getCampaignStageState("STG2");
+          if (!stg2State.alarm) return;
+          const alarmTurn = Number(stg2State.alarmTurn || 0);
+          if (turnCounter <= alarmTurn) return;
+          if (((turnCounter - alarmTurn) % 2) !== 0) return;
+          const maxSpawn = 6;
+          const spawned = Number(stg2State.reinforceSpawned || 0);
+          if (spawned >= maxSpawn) return;
+          const gateTiles = getTagTiles("STG2_GUARD_GATE");
+          if (!gateTiles.length) return;
+          const waveCount = Math.min(1 + Math.floor(rng() * 2), maxSpawn - spawned);
+          let made = 0;
+          for (let i = 0; i < waveCount; i++) {
+            const gate = gateTiles[i % gateTiles.length];
+            const spawn = findFreeSpawnTile(gate.x, gate.y, 5) || gate;
+            const id = `stg2_alarm_${turnCounter}_${spawned + i + 1}`;
+            const cls = (i % 2 === 0) ? "CL_SWD_GUARD" : "CL_LNC_PIKER";
+            const ok = spawnStageUnit({
+              id,
+              name: `간수${spawned + i + 1}`,
+              faction: "enemy",
+              x: spawn.x,
+              y: spawn.y,
+              spriteType: "enemy",
+              paletteKey: "enemy",
+              classId: cls,
+              perks: [],
+              aiHint: "alarmChaseExit"
+            });
+            if (ok) made++;
+          }
+          if (made > 0) {
+            stg2State.reinforceSpawned = spawned + made;
+            saveCampaign();
+            showToast("정문에서 증원 도착!");
+            addLog(`STG2 알람 증원 +${made} (누적 ${stg2State.reinforceSpawned})`);
+          }
         }
 
         function relocateUNyangsanAfterCrop() {
@@ -4927,6 +5083,9 @@
               stg2State.rescuedKimwear = false;
               changed = true;
             }
+            if (stg2State.alarm !== false) { stg2State.alarm = false; changed = true; }
+            if (Number(stg2State.alarmTurn || 0) !== 0) { stg2State.alarmTurn = 0; changed = true; }
+            if (Number(stg2State.reinforceSpawned || 0) !== 0) { stg2State.reinforceSpawned = 0; changed = true; }
             if (changed) saveCampaign();
           }
           rng = mulberry32(SEED);
@@ -4935,6 +5094,7 @@
           currentStageTileTags = cloneSimple(stage.tileTags || {});
           spawnEnemiesAndNeutralsFromStage(stage);
           spawnPlayersFromCampaignRoster();
+          if (currentCampaignStageId === "STG2") setupStage2PrisonScenario(stage);
           if (currentCampaignStageId === "STG2") relocateStage2ExitToCorner(stage);
           relocateUNyangsanAfterCrop();
           applyStageRecruitmentScaffoldOnLoad();
@@ -5027,7 +5187,7 @@
 
         function objectiveLabel(obj) {
           if (obj.type === "STG2_RESCUE") return "김웨어 구출(대화)";
-          if (obj.type === "STG2_ESCAPE") return "출구(표시된 EXIT 타일) 2칸 내로 집결";
+          if (obj.type === "STG2_ESCAPE") return "전원 출구 2칸 내 탈출(출구 표시됨)";
           if (obj.type === "ROUTE") return "모든 적 격파";
           if (obj.type === "SURVIVE") return `${obj.params?.turns || 0}턴 생존`;
           if (obj.type === "SEIZE") return `거점 점령 (${obj.params?.x},${obj.params?.y})`;
@@ -5038,10 +5198,11 @@
         function setupStageObjectivesForCampaign() {
           if (currentCampaignStageId !== "STG2") return;
           const stg2State = getCampaignStageState("STG2");
-          stageObjectives = [
-            { id: "OBJ_STG2_RESCUE", type: "STG2_RESCUE", params: {}, status: stg2State.rescuedKimwear ? "complete" : "ongoing" },
-            { id: "OBJ_STG2_ESCAPE", type: "STG2_ESCAPE", params: {}, status: "ongoing" }
-          ];
+          if (!stg2State.rescuedKimwear) {
+            stageObjectives = [{ id: "OBJ_STG2_RESCUE", type: "STG2_RESCUE", params: {}, status: "ongoing" }];
+          } else {
+            stageObjectives = [{ id: "OBJ_STG2_ESCAPE", type: "STG2_ESCAPE", params: {}, status: "ongoing" }];
+          }
         }
 
         function minExitDistToAny(unit, exitTiles) {
@@ -5062,8 +5223,6 @@
           const players = units.filter((u) => u.faction === "player");
           if (!players.length) return false;
           const allWithin = players.every((u) => minExitDistToAny(u, exitTiles) <= 2);
-          const rescueObj = stageObjectives.find((o) => o.id === "OBJ_STG2_RESCUE");
-          if (rescueObj) rescueObj.status = "complete";
           const escapeObj = stageObjectives.find((o) => o.id === "OBJ_STG2_ESCAPE");
           if (escapeObj && allWithin) escapeObj.status = "complete";
           updateObjectivePanel();
