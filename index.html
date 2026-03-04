@@ -778,7 +778,15 @@
         const CAMPAIGN_STORAGE_KEY = "srpg_campaign";
         const VISUAL_SKIN_KEY = "srpg_visual_skin";
         const DEV_BUILD = true; // set false for release
-        const CAMPAIGN_STAGE_ORDER = ["STG0_PROLOGUE", "STG1_FOREST", "STG2_CITY", "STG3_RUINS", "STG4_CORE", "STG5_EPILOGUE"];
+        const STAGE_ORDER = ["STG1", "STG2", "STG3", "STG4", "STG5", "STG6"];
+        const CAMPAIGN_STAGE_TO_PLAYABLE = {
+          STG1: "STG1_FOREST",
+          STG2: "stage1",
+          STG3: "stage1",
+          STG4: "stage1",
+          STG5: "stage1",
+          STG6: "stage1"
+        };
         const FLAT_PALETTE = {
           ink900: "#0F172A",
           ink700: "#334155",
@@ -1045,8 +1053,7 @@
               { id: "적궁1", name: "적궁1", faction: "enemy", x: 13, y: 8, spriteType: "enemy", paletteKey: "enemy", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_EAGLE_EYE"], aiHint: "holdLine" },
               { id: "적법사", name: "적법사", faction: "enemy", x: 12, y: 9, spriteType: "enemy", paletteKey: "enemy", classId: "CL_STF_HEXER", weaponType: "staff", perks: ["PRK_HEX_MARK"], aiHint: "holdCenter", hit: 78 },
               { id: "적대장", name: "적대장", faction: "enemy", x: 11, y: 10, spriteType: "enemy", paletteKey: "enemy", classId: "CL_SWD_GUARD", weaponType: "sword", perks: [], aiHint: "holdCenter", maxHp: 34, hp: 34 },
-              { id: "우냥산", name: "우냥산", faction: "neutral", x: 4, y: 10, spriteType: "cat", paletteKey: "neutral", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_SNACK_BREAK"], aiHint: "wanderSleep" },
-              { id: "너부리", name: "너부리", faction: "neutral", x: 5, y: 11, spriteType: "cat", paletteKey: "neutral", classId: "CL_STF_HEXER", weaponType: "staff", perks: ["PRK_FRIENDLY_HECKLE"], aiHint: "fleeOnHit" }
+              { id: "우냥산", name: "우냥산", faction: "neutral", x: 4, y: 10, spriteType: "cat", paletteKey: "neutral", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_SNACK_BREAK"], aiHint: "wanderSleep" }
             ],
             tuning: {
               playerBonus: { hp: 4, atk: 1, def: 1, hit: 5, crit: 0 },
@@ -1061,7 +1068,6 @@
               FLG_STG1_BOSS_DOWN: false,
               FLG_STG1_VICTORY: false,
               FLG_STG1_JESTER: false,
-              FLG_STG1_RACCOON: false,
               FLG_TUTOR_TRIANGLE: false
             },
             tileTags: {
@@ -1076,10 +1082,8 @@
               { id: "SR1", target: "STG1_CLEARING", guidanceText: "공터로 이동", expectedTurnMin: 1, expectedTurnMax: 1 },
               { id: "SR2", target: "TE_STG1_TALK_JESTER", guidanceText: "지나가와 대화", expectedTurnMin: 1, expectedTurnMax: 2 },
               { id: "SR3", target: "TE_STG1_TALK_CATNAP", guidanceText: "우냥산과 대화", expectedTurnMin: 2, expectedTurnMax: 2 },
-              { id: "SR4", target: "TE_STG1_TALK_RACCOON", guidanceText: "너부리와 대화", expectedTurnMin: 2, expectedTurnMax: 2 },
-              { id: "SR5", target: "combat", guidanceText: "증원 온다 대비", expectedTurnMin: 4, expectedTurnMax: 4 },
-              { id: "SR6", target: "combat", guidanceText: "대장부터 정리", expectedTurnMin: 4, expectedTurnMax: 6 },
-              { id: "SR7", target: "STG1_EXIT", guidanceText: "출구로 집결", expectedTurnMin: 6, expectedTurnMax: 7 }
+              { id: "SR4", target: "combat", guidanceText: "대장부터 정리", expectedTurnMin: 4, expectedTurnMax: 6 },
+              { id: "SR5", target: "STG1_EXIT", guidanceText: "출구로 집결", expectedTurnMin: 6, expectedTurnMax: 7 }
             ],
             talkEvents: [
               {
@@ -1103,18 +1107,6 @@
                 ],
                 once: true
               },
-              {
-                eventId: "TE_STG1_TALK_RACCOON",
-                trigger: "adjacent+talk",
-                condition: "talk(리더→너부리) && !FLG_STG1_RACCOON",
-                speakers: ["리더", "너부리"],
-                lines: ["여기 위험해", "난 모른 척함", "저쪽 길은 막힘"],
-                effects: [
-                  { type: "setFlag", flagId: "FLG_STG1_RACCOON", value: true },
-                  { type: "item", itemId: "SMALL_TONIC" }
-                ],
-                once: true
-              }
             ],
             triggers: [
               {
@@ -1355,9 +1347,11 @@
         let activeDialog = null;
         let stageObjectives = [];
         let stageTriggers = [];
+        let stageTurnHooks = [];
+        let reinforceQueue = [];
         let firedStageTriggers = new Set();
         let currentStageId = CURRENT_STAGE;
-        let currentCampaignStageId = "STG0_PROLOGUE";
+        let currentCampaignStageId = "STG1";
         let currentStageTileTags = {};
         let safetyRouteSteps = [];
         let firedSafetyRouteSteps = new Set();
@@ -3055,6 +3049,7 @@
           setPhase(PHASE.PLAYER);
           addLog("PLAYER PHASE 시작");
           dispatchStageTrigger("onTurnStart", { side: PHASE.PLAYER, turn: turnCounter });
+          runStageTurnHooks(PHASE.PLAYER, turnCounter);
           runTriggeredEvents("turnStart", { phase: PHASE.PLAYER, turn: turnCounter });
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
@@ -3475,7 +3470,7 @@
         }
 
         function ensureJiningTalkEventForStage() {
-          if (currentCampaignStageId !== "STG4_CORE") return;
+          if (currentCampaignStageId !== "STG5") return;
           if (!getFlag(RECRUITMENT_FLAG_IDS.JINING_HP_LOW) || getFlag(RECRUITMENT_FLAG_IDS.LEADER_TALK_SUCCESS)) return;
           const exists = TALK_EVENTS.some((e) => e && e.eventId === "TE_STG4_LEADER_TALK_JINING");
           if (exists) return;
@@ -3492,7 +3487,7 @@
         }
 
         function spawnSireoGuestIfNeeded() {
-          if (!campaign || currentCampaignStageId !== "STG3_RUINS") return;
+          if (!campaign || currentCampaignStageId !== "STG4") return;
           if (!campaign.checkpointFlags?.SIRR_GUEST_ACTIVE) return;
           const existing = unitById("시리오") || units.find((u) => u.id === "sireo" || u.name === "시리오");
           if (existing) {
@@ -3802,9 +3797,9 @@
 
         function defaultCampaign() {
           return {
-            seasonId: "S0",
+            seasonId: "Season1",
             stageProgress: 0,
-            currentStageId: "STG0_PROLOGUE",
+            currentStageId: "STG1",
             rosterIds: ["leader", "jeong2", "able"],
             playerProfile: { leaderName: "리더", mbti: "INTJ" },
             leaderBuild: {
@@ -3845,6 +3840,7 @@
             const parsed = JSON.parse(raw);
             if (parsed?.saveVersion === SAVE_VERSION && parsed?.campaign) {
               campaign = { ...defaultCampaign(), ...parsed.campaign };
+              campaign.currentStageId = normalizeCampaignStageId(campaign.currentStageId);
               ensureLeaderProfileAndBuild(campaign);
               ensureCampaignRecruitmentScaffold(campaign);
               return true;
@@ -3861,6 +3857,19 @@
           }
         }
 
+        function normalizeCampaignStageId(stageId) {
+          const legacyMap = {
+            STG1_FOREST: "STG1",
+            STG2_CITY: "STG2",
+            STG3_RUINS: "STG3",
+            STG4_CORE: "STG4",
+            STG5_EPILOGUE: "STG5"
+          };
+          const normalized = legacyMap[stageId] || stageId;
+          if (STAGE_ORDER.includes(normalized)) return normalized;
+          return STAGE_ORDER[0];
+        }
+
         function saveCampaign() {
           if (!campaign) return;
           try {
@@ -3869,31 +3878,31 @@
         }
 
         function campaignStageIndex(stageId) {
-          return CAMPAIGN_STAGE_ORDER.indexOf(stageId);
+          return STAGE_ORDER.indexOf(stageId);
         }
 
-        function nextCampaignStageId(stageId) {
+        function getNextStageId(stageId) {
           const idx = campaignStageIndex(stageId);
-          if (idx < 0 || idx >= CAMPAIGN_STAGE_ORDER.length - 1) return null;
-          return CAMPAIGN_STAGE_ORDER[idx + 1];
+          if (idx < 0 || idx >= STAGE_ORDER.length - 1) return null;
+          return STAGE_ORDER[idx + 1];
         }
 
         function unlockedCampaignStageIds() {
-          const maxIdx = Math.max(0, Math.min(CAMPAIGN_STAGE_ORDER.length - 1, campaign?.stageProgress ?? 0));
-          return CAMPAIGN_STAGE_ORDER.slice(0, maxIdx + 1);
+          const maxIdx = Math.max(0, Math.min(STAGE_ORDER.length - 1, campaign?.stageProgress ?? 0));
+          return STAGE_ORDER.slice(0, maxIdx + 1);
         }
 
         function stageLabelByCampaignId(campaignStageId) {
-          if (STAGES[campaignStageId]) return STAGES[campaignStageId].name || campaignStageId;
-          if (campaignStageId === "STG0_PROLOGUE") return "Stage1 튜토리얼";
           return campaignStageId;
         }
 
         function resolvePlayableStageId(campaignStageId) {
-          if (STAGES[campaignStageId]) return campaignStageId;
-          if (campaignStageId === "STG0_PROLOGUE" && STAGES.STG1_FOREST) return "STG1_FOREST";
+          const mapped = CAMPAIGN_STAGE_TO_PLAYABLE[campaignStageId];
+          if (mapped && STAGES[mapped]) return mapped;
+          const firstMapped = CAMPAIGN_STAGE_TO_PLAYABLE[STAGE_ORDER[0]];
+          if (firstMapped && STAGES[firstMapped]) return firstMapped;
           if (STAGES[CURRENT_STAGE]) return CURRENT_STAGE;
-          return Object.keys(STAGES)[0];
+          return CURRENT_STAGE;
         }
 
         function initializeStageSelect() {
@@ -3919,7 +3928,7 @@
 
         function loadCampaignStage(campaignStageId, { save = true } = {}) {
           const unlocked = new Set(unlockedCampaignStageIds());
-          const safeCampaignStageId = unlocked.has(campaignStageId) ? campaignStageId : unlockedCampaignStageIds()[0];
+          const safeCampaignStageId = unlocked.has(campaignStageId) ? campaignStageId : STAGE_ORDER[0];
           currentCampaignStageId = safeCampaignStageId;
           campaign.currentStageId = safeCampaignStageId;
           if (save) saveCampaign();
@@ -3932,31 +3941,24 @@
           if (speaker?.id === "지나가는사람" || partner?.id === "지나가는사람") campaign.recruitedFlags.passingPersonMet = true;
         }
 
-        function applyVictoryToCampaign() {
+        function onStageClear(stageId) {
           if (!campaign) return;
           ensureCampaignRecruitmentScaffold(campaign);
-          const clearedStageId = campaign.currentStageId;
-          const idx = campaignStageIndex(campaign.currentStageId);
+          const idx = campaignStageIndex(stageId);
           if (idx >= 0) {
-            campaign.stageProgress = Math.max(campaign.stageProgress, Math.min(CAMPAIGN_STAGE_ORDER.length - 1, idx + 1));
+            campaign.stageProgress = Math.max(campaign.stageProgress, Math.min(STAGE_ORDER.length - 1, idx + 1));
           }
-          let justUnlockedCamp = false;
-          if (clearedStageId === "STG1_FOREST") {
-            if (!campaign.campUnlocked) {
-              campaign.campUnlocked = true;
-              justUnlockedCamp = true;
-              campAutoOpenPending = true; // transient: open once in this flow only
-            }
+          const nextId = getNextStageId(stageId);
+          if (nextId) {
+            campaign.currentStageId = nextId;
+            saveCampaign();
+            initializeStageSelect();
+            loadCampaignStage(nextId, { save: false });
+            return;
           }
-          const nextId = nextCampaignStageId(campaign.currentStageId);
-          if (nextId) campaign.currentStageId = nextId;
           saveCampaign();
           initializeStageSelect();
-          nextStageBtn.style.display = nextId ? "inline-block" : "none";
-          if (justUnlockedCamp && campAutoOpenPending) {
-            openCampModal({ intro: true });
-            campAutoOpenPending = false;
-          }
+          showMenu();
         }
 
         function onNextStage() {
@@ -4126,7 +4128,68 @@
           });
         }
 
+        function getCurrentStageId() {
+          return currentCampaignStageId;
+        }
+
+        function clearAllStageHooks() {
+          stageTurnHooks = [];
+        }
+
+        function resetTurnHooks() {
+          stageTurnHooks = [];
+        }
+
+        function resetReinforceQueue() {
+          reinforceQueue = [];
+        }
+
+        function registerStageHooks(stageId) {
+          if (stageId !== "STG3") return;
+          stageTurnHooks.push({
+            id: "HOOK_STG3_NUBURI_T3",
+            side: PHASE.PLAYER,
+            turn: 3,
+            once: true,
+            fired: false,
+            run: () => spawnNuburiReinforcement()
+          });
+        }
+
+        function runStageTurnHooks(side, turn) {
+          for (const hook of stageTurnHooks) {
+            if (!hook || hook.fired) continue;
+            if (hook.side && hook.side !== side) continue;
+            if (hook.turn != null && hook.turn !== turn) continue;
+            hook.run?.();
+            if (hook.once) hook.fired = true;
+          }
+        }
+
+        function spawnNuburiReinforcement() {
+          if (getCurrentStageId() !== "STG3") return;
+          if (getFlag(RECRUITMENT_FLAG_IDS.NUBURI_JOIN)) return;
+          if (unitById("너부리")) return;
+          showToast("너부리: 지금 간다!");
+          const sideSpawn = findFreeSpawnTile(0, 10, 8) || { x: 0, y: 10 };
+          const ok = spawnStageUnit({
+            ...RECRUITMENT_UNIT_DEFS.neoburi,
+            id: "너부리",
+            name: "너부리",
+            faction: "player",
+            x: sideSpawn.x,
+            y: sideSpawn.y
+          });
+          if (ok) {
+            setFlag(RECRUITMENT_FLAG_IDS.NUBURI_JOIN, true);
+            addLog("너부리 증원 합류");
+          }
+        }
+
         function loadStage(stageId) {
+          clearAllStageHooks();
+          resetTurnHooks();
+          resetReinforceQueue();
           const stage = STAGES[stageId] || STAGES[CURRENT_STAGE];
           currentStageId = stageId in STAGES ? stageId : CURRENT_STAGE;
           stageSelect.value = currentStageId;
@@ -4146,6 +4209,7 @@
           TALK_EVENTS.length = 0;
           for (const e of stage.talkEvents || []) TALK_EVENTS.push(cloneSimple(e));
           firedStageTriggers = new Set();
+          registerStageHooks(currentCampaignStageId);
           resetFlagsToDefaults(stage.flagDefaults || null);
           if (campaign?.checkpointFlags) {
             for (const [flagId, value] of Object.entries(campaign.checkpointFlags)) {
@@ -4862,7 +4926,7 @@
           phaseBanner = { text, life: 999999, max: 999999 };
           addLog(text === "VICTORY" ? "승리!" : "패배...");
           showToast(text === "VICTORY" ? "승리!" : "패배!");
-          if (text === "VICTORY") applyVictoryToCampaign();
+          if (text === "VICTORY") onStageClear(currentCampaignStageId);
           else nextStageBtn.style.display = "none";
           restartBtn.style.display = "inline-block";
         }
@@ -5137,5 +5201,5 @@
         }
       })();
     </script>
-  <div id="buildStamp" style="position:fixed;right:8px;bottom:8px;z-index:99999;padding:6px 8px;background:rgba(0,0,0,.65);color:#fff;font:12px/1.2 monospace;border-radius:8px;">BUILD:2026-03-04_213508</div></body>
+  </body>
   </html>
