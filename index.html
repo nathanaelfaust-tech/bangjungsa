@@ -434,7 +434,7 @@
         <div class="guide">
           <span id="phasePill" class="phase-pill">PLAYER</span>
           <strong id="guideText">아군 유닛 클릭 → 이동</strong>
-          <span class="hint">Enter: 턴 종료, G: 좌표, SPACE+드래그: 화면 이동</span>
+          <span class="hint">Enter: 턴 종료, G: 좌표, Shift+드래그: 화면 이동</span>
           <span id="touchHint" class="hint"></span>
           <span id="devHint" class="hint"></span>
           <span id="touchDebug" class="hint"></span>
@@ -1061,7 +1061,6 @@
         let campaign = null;
         let mobileHintShown = false;
         let touchDebugText = "";
-        let spaceHeld = false;
         const mousePan = { active: false, button: -1, lastX: 0, lastY: 0 };
         const pointerGesture = {
           active: false,
@@ -1170,10 +1169,6 @@
               startEnemyPhase();
             }
           }
-          if (e.code === "Space") {
-            spaceHeld = true;
-            e.preventDefault();
-          }
           if (e.key === "a" || e.key === "A" || e.key === "ArrowLeft") keyPan.left = true;
           if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") keyPan.right = true;
           if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") keyPan.up = true;
@@ -1181,14 +1176,12 @@
           if (!devMode && (e.key === "h" || e.key === "H")) showDebugReadout = !showDebugReadout;
         });
         window.addEventListener("keyup", (e) => {
-          if (e.code === "Space") spaceHeld = false;
           if (e.key === "a" || e.key === "A" || e.key === "ArrowLeft") keyPan.left = false;
           if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") keyPan.right = false;
           if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") keyPan.up = false;
           if (e.key === "s" || e.key === "S" || e.key === "ArrowDown") keyPan.down = false;
         });
         window.addEventListener("blur", () => {
-          spaceHeld = false;
           stopMousePan();
         });
 
@@ -1664,9 +1657,9 @@
           hoveredUnitId = hoverTile ? (getUnitAt(hoverTile.x, hoverTile.y)?.id || null) : null;
         }
 
-        function shouldStartMousePan(buttonLike) {
+        function shouldStartMousePan(buttonLike, shiftKey = false) {
           if (buttonLike === 1) return true;
-          return buttonLike === 0 && spaceHeld;
+          return buttonLike === 0 && !!shiftKey;
         }
 
         function startMousePan(buttonLike, clientX, clientY) {
@@ -1687,8 +1680,8 @@
           handlePointerMove(e.clientX, e.clientY);
         }
 
-        function handlePointerDown(clientX, clientY, buttonLike = 0) {
-          if (shouldStartMousePan(buttonLike)) {
+        function handlePointerDown(clientX, clientY, buttonLike = 0, shiftKey = false) {
+          if (shouldStartMousePan(buttonLike, shiftKey)) {
             startMousePan(buttonLike, clientX, clientY);
             return;
           }
@@ -1759,8 +1752,8 @@
         }
 
         function onMouseDown(e) {
-          if (shouldStartMousePan(e.button)) e.preventDefault();
-          handlePointerDown(e.clientX, e.clientY, e.button);
+          if (shouldStartMousePan(e.button, e.shiftKey)) e.preventDefault();
+          handlePointerDown(e.clientX, e.clientY, e.button, e.shiftKey);
         }
 
         function onMouseUp(e) {
