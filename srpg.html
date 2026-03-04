@@ -968,6 +968,19 @@
         };
 
         let MAP_ROWS = buildMapRows(SEED);
+        function mapWidth() {
+          return MAP_ROWS?.[0]?.length || 0;
+        }
+        function mapHeight() {
+          return MAP_ROWS?.length || 0;
+        }
+        function getTile(x, y) {
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+          if (x < 0 || y < 0 || y >= mapHeight() || x >= mapWidth()) return null;
+          const row = MAP_ROWS[y];
+          if (!row) return null;
+          return row[x] ?? null;
+        }
 
         const palette = {
           player: { body: "#63b5ff", edge: "#d7edff" },
@@ -1233,8 +1246,8 @@
         const octx = offscreen.getContext("2d");
 
         const mapCache = document.createElement("canvas");
-        mapCache.width = MAP_W * TILE;
-        mapCache.height = MAP_H * TILE;
+        mapCache.width = mapWidth() * TILE;
+        mapCache.height = mapHeight() * TILE;
         const mctx = mapCache.getContext("2d");
 
         const phasePill = document.getElementById("phasePill");
@@ -1906,12 +1919,19 @@
             ? Math.round(Math.sin(renderClock * 0.2) * 2)
             : 0;
           octx.clearRect(0, 0, offscreen.width, offscreen.height);
-
-          octx.drawImage(
-            mapCache,
-            Math.floor(camera.xPx), Math.floor(camera.yPx), offscreen.width, offscreen.height,
-            0, 0, offscreen.width, offscreen.height
-          );
+          octx.fillStyle = "#0f141b";
+          octx.fillRect(0, 0, offscreen.width, offscreen.height);
+          const sx = Math.floor(camera.xPx);
+          const sy = Math.floor(camera.yPx);
+          const sw = Math.max(0, Math.min(offscreen.width, mapCache.width - sx));
+          const sh = Math.max(0, Math.min(offscreen.height, mapCache.height - sy));
+          if (sw > 0 && sh > 0) {
+            octx.drawImage(
+              mapCache,
+              sx, sy, sw, sh,
+              0, 0, sw, sh
+            );
+          }
           octx.save();
           octx.translate(-Math.floor(camera.xPx), -Math.floor(camera.yPx));
           drawOverlays(octx);
@@ -1964,8 +1984,10 @@
               const cfg = targetingConfig(attacker, targetingMode || "attack");
               const targetFaction = cfg.targetFaction;
               ctx.save();
-              for (let y = 0; y < MAP_H; y++) {
-                for (let x = 0; x < MAP_W; x++) {
+              const h = mapHeight();
+              const w = mapWidth();
+              for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
                   if (!isInAttackRange(attacker, x, y)) continue;
                   ctx.fillStyle = cfg.tint;
                   ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
@@ -2041,8 +2063,10 @@
             ctx.save();
             ctx.fillStyle = "rgba(7, 11, 16, 0.55)";
             ctx.font = "7px monospace";
-            for (let y = 0; y < MAP_H; y++) {
-              for (let x = 0; x < MAP_W; x++) {
+            const h = mapHeight();
+            const w = mapWidth();
+            for (let y = 0; y < h; y++) {
+              for (let x = 0; x < w; x++) {
                 ctx.fillText(`${x},${y}`, x * TILE + 1, y * TILE + TILE - 2);
               }
             }
@@ -2372,9 +2396,15 @@
         }
 
         function prerenderMap() {
-          for (let y = 0; y < MAP_H; y++) {
-            for (let x = 0; x < MAP_W; x++) {
+          const w = mapWidth();
+          const h = mapHeight();
+          mapCache.width = w * TILE;
+          mapCache.height = h * TILE;
+          mctx.clearRect(0, 0, mapCache.width, mapCache.height);
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
               const t = terrainAt(x, y);
+              if (!t) continue;
               const tx = x * TILE;
               const ty = y * TILE;
               if (visualSkin === "flat_v1") {
@@ -2423,20 +2453,26 @@
         }
 
         function prerenderMinimapTerrain() {
-          for (let y = 0; y < MAP_H; y++) {
-            for (let x = 0; x < MAP_W; x++) {
+          const w = Math.max(1, mapWidth());
+          const h = Math.max(1, mapHeight());
+          miniTerrainCtx.clearRect(0, 0, MINI_W, MINI_H);
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
               const t = terrainAt(x, y);
+              if (!t) continue;
               miniTerrainCtx.fillStyle = t.color;
-              const x0 = Math.floor((x / MAP_W) * MINI_W);
-              const y0 = Math.floor((y / MAP_H) * MINI_H);
-              const x1 = Math.floor(((x + 1) / MAP_W) * MINI_W);
-              const y1 = Math.floor(((y + 1) / MAP_H) * MINI_H);
+              const x0 = Math.floor((x / w) * MINI_W);
+              const y0 = Math.floor((y / h) * MINI_H);
+              const x1 = Math.floor(((x + 1) / w) * MINI_W);
+              const y1 = Math.floor(((y + 1) / h) * MINI_H);
               miniTerrainCtx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
             }
           }
         }
 
         function drawMinimap() {
+          const w = Math.max(1, mapWidth());
+          const h = Math.max(1, mapHeight());
           miniCtx.clearRect(0, 0, MINI_W, MINI_H);
           miniCtx.drawImage(minimapTerrainCache, 0, 0);
 
@@ -2444,8 +2480,8 @@
           for (const u of units) {
             const ux = u.px != null ? u.px / TILE : u.x;
             const uy = u.py != null ? u.py / TILE : u.y;
-            const mx = Math.floor((ux / MAP_W) * MINI_W);
-            const my = Math.floor((uy / MAP_H) * MINI_H);
+            const mx = Math.floor((ux / w) * MINI_W);
+            const my = Math.floor((uy / h) * MINI_H);
             miniCtx.fillStyle = u.faction === "player" ? "#63b5ff" : (u.faction === "enemy" ? "#ff6f6f" : "#ffe38f");
             miniCtx.fillRect(mx, my, 3, 3);
 
@@ -2457,10 +2493,10 @@
             }
           }
 
-          const vx = (camera.xPx / (MAP_W * TILE)) * MINI_W;
-          const vy = (camera.yPx / (MAP_H * TILE)) * MINI_H;
-          const vw = (INTERNAL_W / (MAP_W * TILE)) * MINI_W;
-          const vh = (INTERNAL_H / (MAP_H * TILE)) * MINI_H;
+          const vx = (camera.xPx / (w * TILE)) * MINI_W;
+          const vy = (camera.yPx / (h * TILE)) * MINI_H;
+          const vw = (INTERNAL_W / (w * TILE)) * MINI_W;
+          const vh = (INTERNAL_H / (h * TILE)) * MINI_H;
           miniCtx.strokeStyle = "#dbeeff";
           miniCtx.lineWidth = 1;
           miniCtx.strokeRect(
@@ -2748,8 +2784,10 @@
 
           const sx = Math.max(0, Math.min(MINI_W - 1, Math.floor((mx / rect.width) * MINI_W)));
           const sy = Math.max(0, Math.min(MINI_H - 1, Math.floor((my / rect.height) * MINI_H)));
-          const tx = Math.floor((sx / MINI_W) * MAP_W);
-          const ty = Math.floor((sy / MINI_H) * MAP_H);
+          const w = Math.max(1, mapWidth());
+          const h = Math.max(1, mapHeight());
+          const tx = Math.floor((sx / MINI_W) * w);
+          const ty = Math.floor((sy / MINI_H) * h);
 
           camera.xPx = tx * TILE - INTERNAL_W / 2;
           camera.yPx = ty * TILE - INTERNAL_H / 2;
@@ -3184,7 +3222,7 @@
           if (DEV_BUILD && showDebugReadout) {
             const cx = Math.floor(camera.xPx / TILE);
             const cy = Math.floor(camera.yPx / TILE);
-            debugReadout.textContent = `MAP(${MAP_W}x${MAP_H}) VIEW(${VIEW_W}x${VIEW_H}) CAM(${cx},${cy}) internal(${INTERNAL_W}x${INTERNAL_H}px)`;
+            debugReadout.textContent = `MAP(${mapWidth()}x${mapHeight()}) VIEW(${VIEW_W}x${VIEW_H}) CAM(${cx},${cy}) internal(${INTERNAL_W}x${INTERNAL_H}px)`;
           } else {
             debugReadout.textContent = "";
           }
@@ -3440,7 +3478,7 @@
 
           const rev = [e];
           let cur = e;
-          let safety = MAP_W * MAP_H + 5;
+          let safety = mapWidth() * mapHeight() + 5;
           while (cur !== s && safety-- > 0) {
             cur = cameFrom.get(cur);
             if (!cur) return null;
@@ -3491,7 +3529,8 @@
         }
 
         function terrainAt(x, y) {
-          const code = MAP_ROWS[y][x];
+          const code = getTile(x, y);
+          if (code == null) return null;
           return TERRAIN[code] || TERRAIN.g;
         }
 
@@ -3500,7 +3539,7 @@
         }
 
         function inBounds(x, y) {
-          return x >= 0 && y >= 0 && x < MAP_W && y < MAP_H;
+          return x >= 0 && y >= 0 && x < mapWidth() && y < mapHeight();
         }
 
         function key(x, y) {
@@ -3587,8 +3626,10 @@
           const mode = unit.weaponType === "staff" ? "heal" : "attack";
           const cfg = targetingConfig(unit, mode, true);
           const cells = [];
-          for (let y = 0; y < MAP_H; y++) {
-            for (let x = 0; x < MAP_W; x++) {
+          const h = mapHeight();
+          const w = mapWidth();
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
               if (!isInAttackRange(unit, x, y)) continue;
               cells.push({ x, y });
             }
@@ -4439,10 +4480,10 @@
           return out;
         }
 
-        function defaultPlayerStartTileByIndex(idx) {
+        function defaultPlayerStartTileByIndex(idx, stageHeight = mapHeight()) {
           const rowWidth = 3;
           const x = 2 + (idx % rowWidth);
-          const y = Math.max(1, MAP_H - 4 + Math.floor(idx / rowWidth));
+          const y = Math.max(1, stageHeight - 4 + Math.floor(idx / rowWidth));
           return { x, y };
         }
 
@@ -4508,7 +4549,7 @@
           const points = [];
           const rosterIds = Array.isArray(campaign?.rosterIds) && campaign.rosterIds.length ? campaign.rosterIds : ["leader", "jeong2", "able"];
           for (let idx = 0; idx < rosterIds.length; idx++) {
-            const p = defaultPlayerStartTileByIndex(idx);
+            const p = defaultPlayerStartTileByIndex(idx, MAP_H);
             points.push({ x: p.x, y: p.y });
           }
           return points;
@@ -4557,16 +4598,6 @@
               shift(action);
             }
           }
-        }
-
-        function padMapRows(rows) {
-          const padded = Array.from({ length: MAP_H }, () => Array.from({ length: MAP_W }, () => "x"));
-          const h = Math.min(MAP_H, rows.length);
-          const w = Math.min(MAP_W, rows[0]?.length || 0);
-          for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) padded[y][x] = rows[y][x];
-          }
-          return padded.map((r) => r.join(""));
         }
 
         function medianCoord(values) {
@@ -4659,14 +4690,13 @@
             const row = mapRows[y] || "";
             croppedRows.push(row.slice(minX, maxX + 1).padEnd(w, "g"));
           }
-          const padded = padMapRows(croppedRows);
           applyOffsetToStage(stage, minX, minY);
           if (stage && stage._stage2KimwarePos) {
             stage._stage2KimwarePos.x -= minX;
             stage._stage2KimwarePos.y -= minY;
           }
           console.log("[CROP]", stageId, oldW, oldH, "->", w, h, "off", minX, minY);
-          return { mapRows: padded, offX: minX, offY: minY, newW: w, newH: h };
+          return { mapRows: croppedRows, offX: minX, offY: minY, newW: w, newH: h };
         }
 
         function ensureStage2ScaffoldForCrop(stage) {
@@ -4693,8 +4723,8 @@
           const cat = unitById("n1") || unitById("우냥산");
           const crop = currentStageRuntime?.crop;
           if (!cat || !crop) return;
-          const maxX = Math.max(0, Math.min(MAP_W - 1, crop.newW - 1));
-          const maxY = Math.max(0, Math.min(MAP_H - 1, crop.newH - 1));
+          const maxX = Math.max(0, mapWidth() - 1);
+          const maxY = Math.max(0, mapHeight() - 1);
           let nx = Math.max(0, Math.min(maxX, cat.x));
           let ny = Math.max(0, Math.min(maxY, cat.y));
           if (cat.x !== nx || cat.y !== ny) {
@@ -4806,6 +4836,9 @@
             currentStageRuntime.stg2ExitTiles = cloneSimple(stage.tileTags?.STG2_EXIT || []);
           }
           MAP_ROWS = stageMapRows;
+          stage.mapRows = stageMapRows;
+          stage.w = mapWidth();
+          stage.h = mapHeight();
           rng = mulberry32(SEED);
           units = [];
           clearExistingPlayerUnits();
@@ -5844,8 +5877,8 @@
         }
 
         function clampCamera() {
-          const maxX = Math.max(0, MAP_W * TILE - INTERNAL_W);
-          const maxY = Math.max(0, MAP_H * TILE - INTERNAL_H);
+          const maxX = Math.max(0, mapWidth() * TILE - INTERNAL_W);
+          const maxY = Math.max(0, mapHeight() * TILE - INTERNAL_H);
           camera.xPx = Math.max(0, Math.min(maxX, camera.xPx));
           camera.yPx = Math.max(0, Math.min(maxY, camera.yPx));
         }
