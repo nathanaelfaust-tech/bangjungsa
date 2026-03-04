@@ -963,7 +963,8 @@
           g: { key: "grass", name: "초원", moveCost: 1, avoid: 0, color: "#4b8b4f" },
           f: { key: "forest", name: "숲", moveCost: 2, avoid: 20, color: "#2f6334" },
           t: { key: "fort", name: "요새", moveCost: 1, avoid: 10, color: "#8f7d4e" },
-          r: { key: "road", name: "도로", moveCost: 1, avoid: 0, color: "#7f6a4d" }
+          r: { key: "road", name: "도로", moveCost: 1, avoid: 0, color: "#7f6a4d" },
+          x: { key: "void", name: "경계", moveCost: 999, avoid: 0, color: "#1b222c" }
         };
 
         let MAP_ROWS = buildMapRows(SEED);
@@ -3248,6 +3249,7 @@
             const cur = parseKeyToObj(curK);
             for (const n of neighbors(cur.x, cur.y)) {
               if (!inBounds(n.x, n.y)) continue;
+              if (terrainAt(n.x, n.y).moveCost >= 999) continue;
               const nk = key(n.x, n.y);
               if (visited.has(nk)) continue;
               const occupied = isOccupied(n.x, n.y, ignoreId);
@@ -3710,6 +3712,12 @@
           if (targetCampaign.lastClearedStageId && !STAGE_ORDER.includes(targetCampaign.lastClearedStageId)) {
             targetCampaign.lastClearedStageId = null;
           }
+          if (!targetCampaign.stageState || typeof targetCampaign.stageState !== "object") targetCampaign.stageState = {};
+          if (!targetCampaign.stageState.STG2 || typeof targetCampaign.stageState.STG2 !== "object") {
+            targetCampaign.stageState.STG2 = { rescuedKimwear: false };
+          } else if (typeof targetCampaign.stageState.STG2.rescuedKimwear !== "boolean") {
+            targetCampaign.stageState.STG2.rescuedKimwear = false;
+          }
           if (!Array.isArray(targetCampaign.rosterIds)) targetCampaign.rosterIds = ["leader", "jeong2", "able"];
         }
 
@@ -3723,6 +3731,13 @@
 
         function showRecruitJoinToast(nameText, beforeCount, afterCount) {
           showToast(`${nameText} 합류! (${beforeCount}→${afterCount})`, 1700);
+        }
+
+        function getCampaignStageState(stageId) {
+          if (!campaign) return {};
+          ensureCampaignRecruitmentScaffold(campaign);
+          if (!campaign.stageState[stageId]) campaign.stageState[stageId] = {};
+          return campaign.stageState[stageId];
         }
 
         function getKimwareUnit() {
@@ -3760,6 +3775,7 @@
             stg2KimwareActive = false;
             return;
           }
+          const stg2State = getCampaignStageState("STG2");
           const kimPoint = currentStageRuntime?.stg2KimwarePos || { x: 6, y: 10 };
           let kimware = getKimwareUnit();
           if (!kimware) {
@@ -3778,7 +3794,8 @@
           }
           if (!kimware) return;
           stg2KimwareActive = true;
-          if (getFlag(RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS)) {
+          stg2State.rescuedKimwear = !!getFlag(RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS);
+          if (stg2State.rescuedKimwear) {
             promoteKimwareToPlayer();
           } else {
             kimware.faction = "neutral";
@@ -3870,6 +3887,8 @@
 
           if (flagId === RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS && getFlag(flagId)) {
             promoteKimwareToPlayer();
+            const stg2State = getCampaignStageState("STG2");
+            stg2State.rescuedKimwear = true;
             if (joinByRoster("kimware", "kimwareJoined", "김웨어")) changed = true;
             saveCampaign();
           }
@@ -4152,6 +4171,7 @@
             settings: { auto: false },
             pendingNextStageId: null,
             lastClearedStageId: null,
+            stageState: { STG2: { rescuedKimwear: false } },
             flags: { metMeonji: false },
             hiddenScore: 0,
             checkpointFlags: checkpointFlagDefaults(),
@@ -4540,7 +4560,7 @@
         }
 
         function padMapRows(rows) {
-          const padded = Array.from({ length: MAP_H }, () => Array.from({ length: MAP_W }, () => "g"));
+          const padded = Array.from({ length: MAP_H }, () => Array.from({ length: MAP_W }, () => "x"));
           const h = Math.min(MAP_H, rows.length);
           const w = Math.min(MAP_W, rows[0]?.length || 0);
           for (let y = 0; y < h; y++) {
@@ -4549,7 +4569,13 @@
           return padded.map((r) => r.join(""));
         }
 
-        function cropStage(stageId, stage, points, marginX = 3, marginY = 3, minW = 12, minH = 10, mapRowsInput = null) {
+        function medianCoord(values) {
+          if (!values.length) return 0;
+          const sorted = [...values].sort((a, b) => a - b);
+          return sorted[Math.floor(sorted.length / 2)];
+        }
+
+        function cropStage(stageId, stage, points, marginX = 3, marginY = 3, minW = 12, minH = 10, maxW = null, maxH = null, mapRowsInput = null) {
           const mapRows = Array.isArray(mapRowsInput) && mapRowsInput.length ? mapRowsInput : (stage?.mapData ? cloneSimple(stage.mapData) : (stage?.mapGen ? stage.mapGen() : buildMapRows(SEED)));
           const oldH = mapRows.length;
           const oldW = mapRows[0]?.length || 0;
@@ -4582,6 +4608,50 @@
             minY -= up;
             maxY += down;
             h = maxY - minY + 1;
+          }
+
+          const reqXs = valid.map((p) => p.x);
+          const reqYs = valid.map((p) => p.y);
+          const reqMinX = Math.min(...reqXs);
+          const reqMaxX = Math.max(...reqXs);
+          const reqMinY = Math.min(...reqYs);
+          const reqMaxY = Math.max(...reqYs);
+          const medX = medianCoord(reqXs);
+          const medY = medianCoord(reqYs);
+
+          if (maxW && maxW > 0 && w > maxW) {
+            let winMinX = Math.max(0, Math.min(oldW - maxW, Math.round(medX - maxW / 2)));
+            let winMaxX = winMinX + maxW - 1;
+            if (reqMinX < winMinX) {
+              winMinX = reqMinX;
+              winMaxX = winMinX + maxW - 1;
+            }
+            if (reqMaxX > winMaxX) {
+              winMaxX = reqMaxX;
+              winMinX = winMaxX - maxW + 1;
+            }
+            winMinX = Math.max(0, Math.min(oldW - maxW, winMinX));
+            winMaxX = winMinX + maxW - 1;
+            minX = winMinX;
+            maxX = winMaxX;
+            w = maxW;
+          }
+          if (maxH && maxH > 0 && h > maxH) {
+            let winMinY = Math.max(0, Math.min(oldH - maxH, Math.round(medY - maxH / 2)));
+            let winMaxY = winMinY + maxH - 1;
+            if (reqMinY < winMinY) {
+              winMinY = reqMinY;
+              winMaxY = winMinY + maxH - 1;
+            }
+            if (reqMaxY > winMaxY) {
+              winMaxY = reqMaxY;
+              winMinY = winMaxY - maxH + 1;
+            }
+            winMinY = Math.max(0, Math.min(oldH - maxH, winMinY));
+            winMaxY = winMinY + maxH - 1;
+            minY = winMinY;
+            maxY = winMaxY;
+            h = maxH;
           }
 
           const croppedRows = [];
@@ -4617,6 +4687,24 @@
             s.x = compactEnemies[s.id].x;
             s.y = compactEnemies[s.id].y;
           }
+        }
+
+        function relocateUNyangsanAfterCrop() {
+          const cat = unitById("n1") || unitById("우냥산");
+          const crop = currentStageRuntime?.crop;
+          if (!cat || !crop) return;
+          const maxX = Math.max(0, Math.min(MAP_W - 1, crop.newW - 1));
+          const maxY = Math.max(0, Math.min(MAP_H - 1, crop.newH - 1));
+          let nx = Math.max(0, Math.min(maxX, cat.x));
+          let ny = Math.max(0, Math.min(maxY, cat.y));
+          if (cat.x !== nx || cat.y !== ny) {
+            const tether = { x: Math.max(1, Math.min(maxX, Math.floor(maxX * 0.6))), y: Math.max(1, Math.min(maxY, Math.floor(maxY * 0.6))) };
+            const free = findFreeSpawnTile(tether.x, tether.y, 8);
+            nx = free ? free.x : tether.x;
+            ny = free ? free.y : tether.y;
+          }
+          cat.x = nx;
+          cat.y = ny;
         }
 
         function getCurrentStageId() {
@@ -4688,23 +4776,29 @@
           let stageMapRows = stage.mapData ? cloneSimple(stage.mapData) : (stage.mapGen ? stage.mapGen() : buildMapRows(SEED));
           currentStageRuntime = {};
           if (currentCampaignStageId === "STG1") {
+            const enemyPoints = (stage.spawns || [])
+              .filter((s) => s && s.faction === "enemy")
+              .map((s) => ({ x: s.x, y: s.y }));
             const points = [
               ...defaultRosterSpawnPointsForCrop(),
-              ...collectStagePoints(stage)
+              ...enemyPoints
             ];
-            const cropped = cropStage("STG1", stage, points, 3, 3, 12, 10, stageMapRows);
+            const cropped = cropStage("STG1", stage, points, 3, 3, 12, 10, 14, 12, stageMapRows);
             stageMapRows = cropped.mapRows;
             currentStageRuntime.crop = cropped;
           } else if (currentCampaignStageId === "STG2") {
             ensureStage2ScaffoldForCrop(stage);
+            const enemyPoints = (stage.spawns || [])
+              .filter((s) => s && s.faction === "enemy")
+              .map((s) => ({ x: s.x, y: s.y }));
             const points = [
               ...defaultRosterSpawnPointsForCrop(),
               ...(stage.tileTags?.STG2_RESCUE || []),
               ...(stage.tileTags?.STG2_EXIT || []),
               ...(stage._stage2KimwarePos ? [stage._stage2KimwarePos] : []),
-              ...collectStagePoints(stage)
+              ...enemyPoints
             ];
-            const cropped = cropStage("STG2", stage, points, 4, 4, 14, 12, stageMapRows);
+            const cropped = cropStage("STG2", stage, points, 4, 4, 14, 12, 16, 14, stageMapRows);
             stageMapRows = cropped.mapRows;
             currentStageRuntime.crop = cropped;
             currentStageRuntime.stg2KimwarePos = stage._stage2KimwarePos ? { ...stage._stage2KimwarePos } : null;
@@ -4718,8 +4812,10 @@
           currentStageTileTags = cloneSimple(stage.tileTags || {});
           spawnEnemiesAndNeutralsFromStage(stage);
           spawnPlayersFromCampaignRoster();
+          relocateUNyangsanAfterCrop();
           applyStageRecruitmentScaffoldOnLoad();
           stageObjectives = (stage.objectives || []).map((obj) => ({ ...cloneSimple(obj), status: "ongoing" }));
+          setupStageObjectivesForCampaign();
           stageTriggers = (stage.triggers || []).map((tr) => cloneSimple(tr));
           safetyRouteSteps = (stage.safetyRoute || []).map((s) => cloneSimple(s));
           firedSafetyRouteSteps = new Set();
@@ -4740,6 +4836,8 @@
             if (!currentStageRuntime.stg2KimwarePos) console.error("[CROP][STG2] missing kimware point after crop");
             if (rescueTiles.length < 1) console.error("[CROP][STG2] missing rescue trigger tile after crop");
             if (exitTiles.length < 2) console.error("[CROP][STG2] missing exit tiles (<2) after crop");
+            const invalidDefeatAll = stageObjectives.some((o) => o.type === "ROUTE" || /모든 적 격파|전멸/.test(objectiveLabel(o)));
+            if (invalidDefeatAll) console.error("[STG2][OBJECTIVE] defeat-all objective text/type detected");
           }
           ensureStg2KimwareState();
           ensureJiningTalkEventForStage();
@@ -4804,11 +4902,52 @@
         }
 
         function objectiveLabel(obj) {
+          if (obj.type === "STG2_RESCUE") return "김웨어 구출(대화)";
+          if (obj.type === "STG2_ESCAPE") return "전원 출구 2칸 내 탈출";
           if (obj.type === "ROUTE") return "모든 적 격파";
           if (obj.type === "SURVIVE") return `${obj.params?.turns || 0}턴 생존`;
           if (obj.type === "SEIZE") return `거점 점령 (${obj.params?.x},${obj.params?.y})`;
           if (obj.type === "ESCAPE") return `탈출 (${obj.params?.x},${obj.params?.y})`;
           return obj.type;
+        }
+
+        function setupStageObjectivesForCampaign() {
+          if (currentCampaignStageId !== "STG2") return;
+          const stg2State = getCampaignStageState("STG2");
+          stageObjectives = [
+            { id: "OBJ_STG2_RESCUE", type: "STG2_RESCUE", params: {}, status: stg2State.rescuedKimwear ? "complete" : "ongoing" },
+            { id: "OBJ_STG2_ESCAPE", type: "STG2_ESCAPE", params: {}, status: "ongoing" }
+          ];
+        }
+
+        function minExitDistToAny(unit, exitTiles) {
+          let best = Infinity;
+          for (const t of exitTiles) {
+            const d = Math.abs(unit.x - t.x) + Math.abs(unit.y - t.y);
+            if (d < best) best = d;
+          }
+          return best;
+        }
+
+        function checkStage2EscortClear() {
+          if (battleOver || currentCampaignStageId !== "STG2" || !campaign) return false;
+          const stg2State = getCampaignStageState("STG2");
+          if (!stg2State.rescuedKimwear) return false;
+          const exitTiles = getTagTiles("STG2_EXIT");
+          if (!exitTiles.length) return false;
+          const players = units.filter((u) => u.faction === "player");
+          if (!players.length) return false;
+          const allWithin = players.every((u) => minExitDistToAny(u, exitTiles) <= 2);
+          const rescueObj = stageObjectives.find((o) => o.id === "OBJ_STG2_RESCUE");
+          if (rescueObj) rescueObj.status = "complete";
+          const escapeObj = stageObjectives.find((o) => o.id === "OBJ_STG2_ESCAPE");
+          if (escapeObj && allWithin) escapeObj.status = "complete";
+          updateObjectivePanel();
+          if (allWithin) {
+            onStageClear("STG2");
+            return true;
+          }
+          return false;
         }
 
         function updateObjectivePanel() {
@@ -4826,10 +4965,14 @@
 
         function evaluateObjectives(context = {}) {
           if (!stageObjectives.length || battleOver) return;
+          if (currentCampaignStageId === "STG2") {
+            checkStage2EscortClear();
+            return;
+          }
           for (const obj of stageObjectives) {
             if (obj.status !== "ongoing") continue;
             if (obj.type === "ROUTE") {
-              if (units.filter((u) => u.faction === "enemy").length === 0) obj.status = "complete";
+              if (currentCampaignStageId !== "STG2" && units.filter((u) => u.faction === "enemy").length === 0) obj.status = "complete";
             } else if (obj.type === "SURVIVE") {
               if (turnCounter >= (obj.params?.turns || 0)) obj.status = "complete";
             } else if (obj.type === "SEIZE") {
@@ -4872,7 +5015,7 @@
         }
 
         function findFreeSpawnTile(x, y, maxRadius = 6) {
-          if (inBounds(x, y) && !isOccupied(x, y)) return { x, y };
+          if (inBounds(x, y) && !isOccupied(x, y) && terrainAt(x, y).moveCost < 999) return { x, y };
           for (let r = 1; r <= maxRadius; r++) {
             for (let dy = -r; dy <= r; dy++) {
               for (let dx = -r; dx <= r; dx++) {
@@ -4880,7 +5023,7 @@
                 const nx = x + dx;
                 const ny = y + dy;
                 if (!inBounds(nx, ny)) continue;
-                if (!isOccupied(nx, ny)) return { x: nx, y: ny };
+                if (!isOccupied(nx, ny) && terrainAt(nx, ny).moveCost < 999) return { x: nx, y: ny };
               }
             }
           }
@@ -5433,6 +5576,7 @@
 
         function checkBattleEnd() {
           if (checkStage2KimwareFail()) return true;
+          if (currentCampaignStageId === "STG2" && checkStage2EscortClear()) return true;
           const players = units.filter(u => u.faction === "player");
           if (players.length === 0) {
             setBattleResult("DEFEAT");
@@ -5440,7 +5584,7 @@
           }
           evaluateObjectives({ type: "check" });
           if (battleOver) return true;
-          if (!stageObjectives.length && units.filter(u => u.faction === "enemy").length === 0) {
+          if (currentCampaignStageId !== "STG2" && !stageObjectives.length && units.filter(u => u.faction === "enemy").length === 0) {
             setBattleResult("VICTORY");
             return true;
           }
