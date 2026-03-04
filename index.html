@@ -323,6 +323,42 @@
         display: flex;
       }
 
+      .camp-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(5, 8, 12, 0.78);
+        z-index: 60;
+      }
+
+      .camp-overlay.show {
+        display: flex;
+      }
+
+      .camp-panel {
+        width: min(520px, 94vw);
+        border: 1px solid #3a516d;
+        border-radius: 10px;
+        background: linear-gradient(180deg, #1b2634 0%, #121b27 100%);
+        padding: 14px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .camp-dialogue {
+        border: 1px solid #2a384a;
+        border-radius: 8px;
+        background: #0f141a;
+        padding: 10px;
+        min-height: 112px;
+        font-size: 13px;
+        line-height: 1.45;
+        color: #d7e4f2;
+        white-space: pre-line;
+      }
+
       .menu-panel {
         width: min(420px, 92vw);
         border: 1px solid #3a516d;
@@ -471,7 +507,8 @@
 
       body[data-skin="flat_v1"] .btn,
       body[data-skin="flat_v1"] .btnSmall,
-      body[data-skin="flat_v1"] .cmd-menu {
+      body[data-skin="flat_v1"] .cmd-menu,
+      body[data-skin="flat_v1"] .camp-dialogue {
         background: #f8fafc;
         color: #0f172a;
         border-color: #94a3b8;
@@ -602,6 +639,7 @@
         </div>
         <div class="btnRow">
           <select id="stageSelect" class="btnSmall"></select>
+          <button id="campBtn" class="btnSmall" style="display:none;" type="button">캠프</button>
           <button id="devToggleBtn" class="btnSmall" type="button">DEV</button>
           <button id="devMenuBtn" class="btnSmall" style="display:none;" type="button">DEV 메뉴</button>
           <button id="skinToggleBtn" class="btnSmall" type="button">스킨: 레거시</button>
@@ -654,7 +692,7 @@
     </div>
     <div id="menuOverlay" class="menu-overlay">
       <div class="menu-panel">
-        <h3 style="margin:0;color:#b9d9ff;">Season 0 캠페인</h3>
+        <h3 style="margin:0;color:#b9d9ff;">Season1 캠페인</h3>
         <div class="btnRow">
           <button id="menuContinueBtn" class="btn" type="button">이어하기</button>
           <button id="menuNewBtn" class="btn" type="button">새로 시작</button>
@@ -688,6 +726,21 @@
         <div class="small">스테이지 선택 (언락만 표시)</div>
         <select id="menuStageSelect" class="btnSmall"></select>
         <button id="menuStartBtn" class="btn" type="button">시작</button>
+      </div>
+    </div>
+    <div id="campOverlay" class="camp-overlay">
+      <div class="camp-panel">
+        <h3 style="margin:0;color:#b9d9ff;">캠프</h3>
+        <div id="campDialogue" class="camp-dialogue">캠프가 열리면 먼지가 길잡이처럼 이야기해줘여.</div>
+        <div id="campTopicRow" class="btnRow" style="display:none;">
+          <button id="campTopicRecapBtn" class="btnSmall" type="button">[리캡] 지금 뭐 하면 되나여?</button>
+          <button id="campTopicHintBtn" class="btnSmall" type="button">[힌트] 다음 스테이지… 조심할 거 있나여?</button>
+          <button id="campTopicJokeBtn" class="btnSmall" type="button">[잡담] 도망가면 되죠ㅋㅋㅋㅋㅋ</button>
+        </div>
+        <div class="btnRow">
+          <button id="campTalkBtn" class="btnSmall" type="button">먼지에게 말걸기</button>
+          <button id="campCloseBtn" class="btn" type="button">닫기</button>
+        </div>
       </div>
     </div>
 
@@ -1178,6 +1231,7 @@
         const centerCamBtn = document.getElementById("centerCamBtn");
         const followBtn = document.getElementById("followBtn");
         const stageSelect = document.getElementById("stageSelect");
+        const campBtn = document.getElementById("campBtn");
         const devToggleBtn = document.getElementById("devToggleBtn");
         const devMenuBtn = document.getElementById("devMenuBtn");
         const skinToggleBtn = document.getElementById("skinToggleBtn");
@@ -1189,6 +1243,14 @@
         const menuMbti = document.getElementById("menuMbti");
         const menuStageSelect = document.getElementById("menuStageSelect");
         const menuStartBtn = document.getElementById("menuStartBtn");
+        const campOverlay = document.getElementById("campOverlay");
+        const campDialogue = document.getElementById("campDialogue");
+        const campTopicRow = document.getElementById("campTopicRow");
+        const campTopicRecapBtn = document.getElementById("campTopicRecapBtn");
+        const campTopicHintBtn = document.getElementById("campTopicHintBtn");
+        const campTopicJokeBtn = document.getElementById("campTopicJokeBtn");
+        const campTalkBtn = document.getElementById("campTalkBtn");
+        const campCloseBtn = document.getElementById("campCloseBtn");
         const cmdMenu = document.createElement("div");
         cmdMenu.className = "cmd-menu";
         cmdMenu.innerHTML = `<button id="cmdAttack" class="btnSmall" type="button">공격</button>
@@ -1326,6 +1388,7 @@
         let devMenuOverlay = null;
         let devFlagPanelEl = null;
         let devFlagListEl = null;
+        let campTopicUnlocked = false;
         const mousePan = { active: false, button: -1, lastX: 0, lastY: 0 };
         const pointerGesture = {
           active: false,
@@ -1476,10 +1539,85 @@
           updateDevStatusLabel();
         }
 
+        function isCampAvailable() {
+          return !!(campaign && ((campaign.stageProgress ?? 0) >= 2 || campaign.checkpointFlags?.CAMP_UNLOCKED));
+        }
+
+        function updateCampButtonVisibility() {
+          if (!campBtn) return;
+          campBtn.style.display = isCampAvailable() ? "inline-block" : "none";
+        }
+
+        function setCampDialogueLines(lines) {
+          if (!campDialogue) return;
+          campDialogue.textContent = (lines || []).join("\n");
+        }
+
+        function meonjiCampLines(topic) {
+          if (topic === "intro") {
+            return [
+              "먼지: 튜토리얼 끝났네여… 캠프에서 숨 한번 고르고 가세여.",
+              "먼지: 지금부터는 제가 길잡이처럼 정리해드릴게여, 글쿤여.",
+              "먼지: 티끌 같은 정보라도 쌓이면 큰 길이 되더라구여."
+            ];
+          }
+          if (topic === "recap") {
+            return [
+              "먼지: 지금 뭐 하면 되나여? 라고 물어보시면…",
+              "먼지: 캠프에서 정리하고, 다음 전장 들어가기 전에 사람들 상태부터 봐주세여…네여.",
+              "먼지: 급하면 도망이 아니라 순서 정리부터… 그게 제일 덜 흔들리더라구여."
+            ];
+          }
+          if (topic === "hint") {
+            return [
+              "먼지: 다음엔 다치는 분이랑 지켜야 하는 분, 두 분 흐름이 겹칠 때가 있어여…어용.",
+              "먼지: 한 분이라도 놓치면 분위기가 확 식어버리니까, 먼저 붙어줄 사람 정해두세여.",
+              "먼지: 또 어떤 날은 체력이 조금 떨어진 순간에 말로 붙잡아야 길이 열리더라구여…구여."
+            ];
+          }
+          return [
+            "먼지: 도망가면 되죠ㅋㅋㅋㅋㅋ …라고 해도, 타로는 자꾸 정면승부 카드만 나오네여.",
+            "먼지: 티끌 취급 받아도 괜찮아여, 티끌이 모이면 길 표지판 되거든여.",
+            "먼지: 오늘은 웃고 넘기고, 내일은 제가 진짜로 한 칸 같이 걸어볼게여."
+          ];
+        }
+
+        function closeCampModal() {
+          if (!campOverlay) return;
+          campOverlay.classList.remove("show");
+          inputLocked = false;
+        }
+
+        function openCampModal({ intro = false } = {}) {
+          if (!isCampAvailable() || !campOverlay) return;
+          campOverlay.classList.add("show");
+          inputLocked = true;
+          campTopicUnlocked = false;
+          if (campTopicRow) campTopicRow.style.display = "none";
+          if (intro) {
+            setCampDialogueLines(meonjiCampLines("intro"));
+            if (campaign) {
+              ensureCampaignRecruitmentScaffold(campaign);
+              campaign.checkpointFlags.CAMP_INTRO_SHOWN = true;
+              saveCampaign();
+            }
+          } else {
+            setCampDialogueLines([
+              "먼지: 캠프 왔네여. 필요한 얘기부터 골라보세여…구여."
+            ]);
+          }
+        }
+
+        function openCampTopic(topic) {
+          if (!campTopicUnlocked || !campTopicRow) return;
+          setCampDialogueLines(meonjiCampLines(topic));
+        }
+
         loadVisualSkin();
         initializeCampaignSystem();
         ensureDevMenuOverlay();
         updateDevStatusLabel();
+        updateCampButtonVisibility();
 
         canvas.addEventListener("mousemove", onMouseMove);
         canvas.addEventListener("mouseleave", () => {
@@ -1502,6 +1640,19 @@
         minimap.addEventListener("mousedown", onMinimapMouseDown);
         centerCamBtn.addEventListener("click", onCenterCamera);
         followBtn.addEventListener("click", onToggleFollow);
+        if (campBtn) campBtn.addEventListener("click", () => openCampModal({ intro: false }));
+        if (campCloseBtn) campCloseBtn.addEventListener("click", () => closeCampModal());
+        if (campTalkBtn) campTalkBtn.addEventListener("click", () => {
+          campTopicUnlocked = true;
+          if (campTopicRow) campTopicRow.style.display = "grid";
+          openCampTopic("recap");
+        });
+        if (campTopicRecapBtn) campTopicRecapBtn.addEventListener("click", () => openCampTopic("recap"));
+        if (campTopicHintBtn) campTopicHintBtn.addEventListener("click", () => openCampTopic("hint"));
+        if (campTopicJokeBtn) campTopicJokeBtn.addEventListener("click", () => openCampTopic("joke"));
+        if (campOverlay) campOverlay.addEventListener("click", (e) => {
+          if (e.target === campOverlay) closeCampModal();
+        });
         if (DEV_BUILD && devToggleBtn) devToggleBtn.addEventListener("click", () => setDevMode(!devMode));
         if (DEV_BUILD && devMenuBtn) devMenuBtn.addEventListener("click", () => openDevMenu());
         skinToggleBtn.addEventListener("click", () => {
@@ -2950,6 +3101,7 @@
             debugReadout.textContent = "";
           }
           updateDevStatusLabel();
+          updateCampButtonVisibility();
         }
 
         function updateInfoPanel() {
@@ -3281,7 +3433,9 @@
             LEADER_TALK_SUCCESS: false,
             WOO_HIDDEN_TILE: false,
             WOO_DIALOG_CHAIN: false,
-            ABLE_BOSS_TURN: false
+            ABLE_BOSS_TURN: false,
+            CAMP_UNLOCKED: false,
+            CAMP_INTRO_SHOWN: false
           };
         }
 
@@ -3734,7 +3888,7 @@
 
         function stageLabelByCampaignId(campaignStageId) {
           if (STAGES[campaignStageId]) return STAGES[campaignStageId].name || campaignStageId;
-          if (campaignStageId === "STG0_PROLOGUE") return "프롤로그";
+          if (campaignStageId === "STG0_PROLOGUE") return "Stage1 튜토리얼";
           return campaignStageId;
         }
 
@@ -3763,6 +3917,7 @@
           if ([...menuStageSelect.options].some((o) => o.value === wantedCampaignId)) menuStageSelect.value = wantedCampaignId;
           else if (menuStageSelect.options.length) menuStageSelect.selectedIndex = 0;
           menuStartBtn.textContent = `시작 (로스터 ${campaign.rosterIds.length})`;
+          updateCampButtonVisibility();
         }
 
         function loadCampaignStage(campaignStageId, { save = true } = {}) {
@@ -3782,15 +3937,23 @@
 
         function applyVictoryToCampaign() {
           if (!campaign) return;
+          ensureCampaignRecruitmentScaffold(campaign);
+          const clearedStageId = campaign.currentStageId;
           const idx = campaignStageIndex(campaign.currentStageId);
           if (idx >= 0) {
             campaign.stageProgress = Math.max(campaign.stageProgress, Math.min(CAMPAIGN_STAGE_ORDER.length - 1, idx + 1));
+          }
+          let shouldOpenCampIntro = false;
+          if (clearedStageId === "STG1_FOREST") {
+            campaign.checkpointFlags.CAMP_UNLOCKED = true;
+            shouldOpenCampIntro = !campaign.checkpointFlags.CAMP_INTRO_SHOWN;
           }
           const nextId = nextCampaignStageId(campaign.currentStageId);
           if (nextId) campaign.currentStageId = nextId;
           saveCampaign();
           initializeStageSelect();
           nextStageBtn.style.display = nextId ? "inline-block" : "none";
+          if (shouldOpenCampIntro) openCampModal({ intro: true });
         }
 
         function onNextStage() {
@@ -3872,9 +4035,6 @@
           }
           if (rosterId === "passerby") {
             return { ...RECRUITMENT_UNIT_DEFS.passerby, x, y, controllable: true };
-          }
-          if (rosterId === "meonji") {
-            return { ...RECRUITMENT_UNIT_DEFS.meonji, x, y, controllable: true };
           }
           if (rosterId === "u_nyangsan") {
             return { ...RECRUITMENT_UNIT_DEFS.u_nyangsan, x, y, controllable: true };
