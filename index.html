@@ -804,7 +804,7 @@
         const STAGE_ORDER = ["STG1", "STG2", "STG3", "STG4", "STG5", "STG6"];
         const CAMPAIGN_STAGE_TO_PLAYABLE = {
           STG1: "STG1_FOREST",
-          STG2: "stage1",
+          STG2: "STG2_PRISON",
           STG3: "stage1",
           STG4: "stage1",
           STG5: "stage1",
@@ -964,7 +964,13 @@
           f: { key: "forest", name: "숲", moveCost: 2, avoid: 20, color: "#2f6334" },
           t: { key: "fort", name: "요새", moveCost: 1, avoid: 10, color: "#8f7d4e" },
           r: { key: "road", name: "도로", moveCost: 1, avoid: 0, color: "#7f6a4d" },
-          x: { key: "void", name: "경계", moveCost: 999, avoid: 0, color: "#1b222c" }
+          x: { key: "void", name: "경계", moveCost: 999, avoid: 0, color: "#1b222c" },
+          P: { key: "prison_floor", name: "PRISON_FLOOR", moveCost: 1, avoid: 0, color: "#5b6670" },
+          W: { key: "prison_wall", name: "PRISON_WALL", moveCost: 999, avoid: 0, color: "#242a31" },
+          D: { key: "prison_door", name: "PRISON_DOOR", moveCost: 1, avoid: 0, color: "#8a6a42" },
+          C: { key: "prison_cell", name: "PRISON_CELL", moveCost: 1, avoid: 0, color: "#4a5761" },
+          G: { key: "prison_gate", name: "PRISON_GATE", moveCost: 1, avoid: 0, color: "#8f5b5b" },
+          E: { key: "prison_exit", name: "PRISON_EXIT", moveCost: 1, avoid: 0, color: "#5b8f6a" }
         };
 
         let MAP_ROWS = buildMapRows(SEED);
@@ -1074,6 +1080,64 @@
           { id: "n1", name: "우냥산", faction: "neutral", x: 13, y: 1, acted: false, spriteType: "cat", paletteKey:
   "neutral", px: null, py: null, classId: "CL_NONE_JESTER", perks: [] }
         ];
+
+        function buildStage2PrisonBlueprint() {
+          const W = 18;
+          const H = 12;
+          const rows = Array.from({ length: H }, () => Array.from({ length: W }, () => "W"));
+          const carve = (x, y, code = "P") => {
+            if (x < 0 || y < 0 || x >= W || y >= H) return;
+            rows[y][x] = code;
+          };
+          const carvePath = (x1, y1, x2, y2, code = "P") => {
+            const dx = Math.sign(x2 - x1);
+            const dy = Math.sign(y2 - y1);
+            let x = x1;
+            let y = y1;
+            carve(x, y, code);
+            while (x !== x2 || y !== y2) {
+              if (x !== x2) x += dx;
+              else if (y !== y2) y += dy;
+              carve(x, y, code);
+            }
+          };
+
+          carvePath(2, 9, 2, 6, "P");
+          carvePath(2, 6, 6, 6, "P");
+          carvePath(6, 6, 6, 4, "P");
+          carvePath(6, 4, 11, 4, "P");
+          carvePath(11, 4, 11, 2, "P");
+          carvePath(11, 2, 15, 2, "P");
+          carvePath(11, 2, 11, 1, "P");
+
+          for (let y = 3; y <= 6; y++) {
+            for (let x = 7; x <= 10; x++) carve(x, y, "C");
+          }
+          carve(6, 4, "D");
+          carve(6, 5, "P");
+          carve(12, 2, "G");
+          carve(13, 2, "G");
+          carve(12, 3, "t");
+
+          const mapRows = rows.map((r) => r.join(""));
+          const tileTags = {
+            PLAYER_START: [{ x: 2, y: 9 }, { x: 2, y: 10 }, { x: 3, y: 9 }],
+            STG2_RESCUE: [{ x: 6, y: 4 }],
+            STG2_GATE: [{ x: 12, y: 2 }],
+            STG2_GUARD_GATE: [{ x: 12, y: 2 }, { x: 13, y: 2 }],
+            STG2_ALARM: [{ x: 12, y: 3 }],
+            STG2_EXIT: [{ x: 15, y: 1 }, { x: 16, y: 1 }]
+          };
+          const prisonerAnchor = { x: 8, y: 4 };
+          const spawns = [
+            { id: "감시병1", name: "감시병1", faction: "enemy", x: 11, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_SWD_GUARD", perks: [], aiHint: "holdLine" },
+            { id: "감시병2", name: "감시병2", faction: "enemy", x: 10, y: 4, spriteType: "enemy", paletteKey: "enemy", classId: "CL_LNC_PIKER", perks: [], aiHint: "holdLine" },
+            { id: "감시병3", name: "감시병3", faction: "enemy", x: 8, y: 6, spriteType: "enemy", paletteKey: "enemy", classId: "CL_AXE_BRUISER", perks: [], aiHint: "holdCenter" },
+            { id: "n1", name: "우냥산", faction: "neutral", x: 4, y: 9, spriteType: "cat", paletteKey: "neutral", classId: "CL_NONE_JESTER", perks: [] }
+          ];
+          return { mapRows, tileTags, spawns, prisonerAnchor, size: { w: W, h: H } };
+        }
+
         const CURRENT_STAGE = "STG1_FOREST";
         const STAGES = {
           STG1_FOREST: {
@@ -1210,6 +1274,14 @@
                 ]
               }
             ]
+          },
+          STG2_PRISON: {
+            name: "감옥 탈출",
+            mapGen: () => buildStage2PrisonBlueprint().mapRows,
+            spawns: buildStage2PrisonBlueprint().spawns,
+            tileTags: buildStage2PrisonBlueprint().tileTags,
+            objectives: [{ id: "OBJ_STG2_RESCUE", type: "STG2_RESCUE", params: {}, status: "ongoing" }],
+            triggers: []
           },
           stage1: {
             name: "샘플 전장",
@@ -2455,6 +2527,36 @@
                   mctx.strokeStyle = FLAT_PALETTE.fort700;
                   mctx.fillStyle = "rgba(71,85,105,0.35)";
                   mctx.fillRect(tx + 2, ty + 2, TILE - 4, TILE - 4);
+                } else if (t.key === "prison_wall") {
+                  mctx.fillStyle = "#20262e";
+                  mctx.fillRect(tx, ty, TILE, TILE);
+                  mctx.strokeStyle = "#3a434e";
+                  mctx.fillStyle = "rgba(75,85,96,0.25)";
+                  mctx.fillRect(tx + 1, ty + 1, TILE - 2, 2);
+                } else if (t.key === "prison_cell") {
+                  mctx.fillStyle = "#4c5a65";
+                  mctx.fillRect(tx, ty, TILE, TILE);
+                  mctx.strokeStyle = "#6a7a88";
+                  mctx.fillStyle = "rgba(210,220,230,0.22)";
+                  mctx.fillRect(tx + 2, ty + 2, TILE - 4, 1);
+                  mctx.fillRect(tx + 2, ty + 6, TILE - 4, 1);
+                  mctx.fillRect(tx + 2, ty + 10, TILE - 4, 1);
+                } else if (t.key === "prison_door") {
+                  mctx.fillStyle = "#8b6b46";
+                  mctx.fillRect(tx, ty, TILE, TILE);
+                  mctx.strokeStyle = "#a1845f";
+                } else if (t.key === "prison_gate") {
+                  mctx.fillStyle = "#8f5f5f";
+                  mctx.fillRect(tx, ty, TILE, TILE);
+                  mctx.strokeStyle = "#b17c7c";
+                } else if (t.key === "prison_exit") {
+                  mctx.fillStyle = "#5f8f70";
+                  mctx.fillRect(tx, ty, TILE, TILE);
+                  mctx.strokeStyle = "#89c2a0";
+                } else if (t.key === "prison_floor") {
+                  mctx.fillStyle = "#5c6974";
+                  mctx.fillRect(tx, ty, TILE, TILE);
+                  mctx.strokeStyle = "#7a8b99";
                 } else {
                   mctx.fillStyle = t.color;
                   mctx.fillRect(tx, ty, TILE, TILE);
@@ -3980,6 +4082,9 @@
             updateObjectivePanel();
             showToast("발각됐다! 증원이 온다!");
             addLog("STG2 알람 발동");
+            setStage2ExitTilesCode(true);
+            prerenderMap();
+            prerenderMinimapTerrain();
             saveCampaign();
           }
           if (flagId === RECRUITMENT_FLAG_IDS.NUBURI_JOIN && getFlag(flagId)) {
@@ -4261,7 +4366,7 @@
             settings: { auto: false },
             pendingNextStageId: null,
             lastClearedStageId: null,
-            stageState: { STG2: { rescuedKimwear: false } },
+            stageState: { STG2: { rescuedKimwear: false, alarm: false, alarmTurn: 0, reinforceSpawned: 0 } },
             flags: { metMeonji: false },
             hiddenScore: 0,
             checkpointFlags: checkpointFlagDefaults(),
@@ -4749,25 +4854,12 @@
         }
 
         function ensureStage2ScaffoldForCrop(stage) {
+          const bp = buildStage2PrisonBlueprint();
           if (!stage.tileTags) stage.tileTags = {};
-          if (!Array.isArray(stage.tileTags.STG2_RESCUE)) stage.tileTags.STG2_RESCUE = [{ x: 6, y: 10 }];
-          if (!Array.isArray(stage.tileTags.STG2_EXIT) || stage.tileTags.STG2_EXIT.length < 2) {
-            stage.tileTags.STG2_EXIT = [{ x: 13, y: 10 }, { x: 14, y: 10 }, { x: 13, y: 11 }];
-          }
-          if (!Array.isArray(stage.tileTags.STG2_GUARD_GATE)) stage.tileTags.STG2_GUARD_GATE = [{ x: 14, y: 2 }, { x: 13, y: 2 }];
-          if (!Array.isArray(stage.tileTags.STG2_ALARM)) stage.tileTags.STG2_ALARM = [{ x: 13, y: 3 }];
-          stage._stage2KimwarePos = { x: 6, y: 10 };
-          const compactEnemies = {
-            e1: { x: 12, y: 7 },
-            e2: { x: 14, y: 10 },
-            e3: { x: 13, y: 13 },
-            n1: { x: 9, y: 9 }
-          };
-          for (const s of stage.spawns || []) {
-            if (!s || !compactEnemies[s.id]) continue;
-            s.x = compactEnemies[s.id].x;
-            s.y = compactEnemies[s.id].y;
-          }
+          stage.mapData = cloneSimple(bp.mapRows);
+          stage.spawns = cloneSimple(bp.spawns);
+          stage.tileTags = cloneSimple(bp.tileTags);
+          stage._stage2KimwarePos = { ...bp.prisonerAnchor };
         }
 
         function nearestCellToAnchor(cells, anchor) {
@@ -4787,73 +4879,41 @@
           if (currentCampaignStageId !== "STG2") return;
           const leader = unitById("리더") || units.find((u) => u.faction === "player");
           const anchor = leader ? { x: leader.x, y: leader.y } : { x: 2, y: Math.max(1, mapHeight() - 3) };
-          const w = mapWidth();
-          const h = mapHeight();
           const targetDist = 9;
-          let bestPos = null;
-          let bestScore = Infinity;
-          for (let y = 1; y < h - 1; y++) {
-            for (let x = 1; x < w - 1; x++) {
-              const t = terrainAt(x, y);
-              if (!t || t.moveCost >= 999) continue;
+          const candidates = [];
+          for (let y = 1; y < mapHeight() - 1; y++) {
+            for (let x = 1; x < mapWidth() - 1; x++) {
+              const code = getTile(x, y);
+              if (code !== "C" && code !== "D" && code !== "P") continue;
               if (isOccupied(x, y)) continue;
               const d = Math.abs(x - anchor.x) + Math.abs(y - anchor.y);
-              if (d < 6) continue;
-              const score = Math.abs(d - targetDist) * 10 + (x < anchor.x ? 3 : 0);
-              if (score < bestScore) {
-                bestScore = score;
-                bestPos = { x, y };
-              }
+              const score = Math.abs(d - targetDist) + (d < 8 ? 8 : 0);
+              candidates.push({ x, y, d, score });
             }
           }
-          if (!bestPos) {
-            bestPos = { x: Math.max(2, Math.min(w - 3, anchor.x + 7)), y: Math.max(2, Math.min(h - 3, anchor.y - 1)) };
-          }
-          const adj = neighbors(bestPos.x, bestPos.y).filter((p) => {
+          candidates.sort((a, b) => a.score - b.score);
+          const chosen = candidates[0] || { x: 8, y: 4, d: 0 };
+          const rescueAdj = neighbors(chosen.x, chosen.y).filter((p) => {
             if (!inBounds(p.x, p.y)) return false;
             const t = terrainAt(p.x, p.y);
             return !!t && t.moveCost < 999;
           });
-          const rescueTile = nearestCellToAnchor(adj, anchor) || { x: Math.max(0, bestPos.x - 1), y: bestPos.y };
-          const wallX = Math.max(2, Math.min(w - 3, Math.floor((anchor.x + bestPos.x) / 2)));
-          for (let y = 1; y < h - 1; y++) {
-            if (Math.abs(y - rescueTile.y) <= 1) continue;
-            setMapTileCode(wallX, y, "x");
-          }
-          for (const p of [{ x: bestPos.x + 1, y: bestPos.y }, { x: bestPos.x + 1, y: bestPos.y - 1 }, { x: bestPos.x + 1, y: bestPos.y + 1 }]) {
-            if (inBounds(p.x, p.y) && !(p.x === rescueTile.x && p.y === rescueTile.y)) setMapTileCode(p.x, p.y, "x");
-          }
-
-          const farCorner = (() => {
-            const corners = [{ x: 0, y: 0 }, { x: w - 1, y: 0 }, { x: 0, y: h - 1 }, { x: w - 1, y: h - 1 }];
-            let best = corners[0];
-            let dBest = -1;
-            for (const c of corners) {
-              const d = Math.abs(anchor.x - c.x) + Math.abs(anchor.y - c.y);
-              if (d > dBest) { dBest = d; best = c; }
-            }
-            return best;
-          })();
-          const gdx = farCorner.x === 0 ? 1 : -1;
-          const gdy = farCorner.y === 0 ? 1 : -1;
-          const gateTiles = [
-            { x: farCorner.x + gdx, y: farCorner.y + gdy },
-            { x: farCorner.x + gdx * 2, y: farCorner.y + gdy }
-          ].filter((p) => inBounds(p.x, p.y));
-          const alarmTile = inBounds(farCorner.x + gdx, farCorner.y + gdy * 2)
-            ? { x: farCorner.x + gdx, y: farCorner.y + gdy * 2 }
-            : gateTiles[0];
-          if (alarmTile && inBounds(alarmTile.x, alarmTile.y)) setMapTileCode(alarmTile.x, alarmTile.y, "t");
-
-          stage._stage2KimwarePos = { x: bestPos.x, y: bestPos.y };
+          const rescueTile = nearestCellToAnchor(rescueAdj, anchor) || { x: chosen.x - 1, y: chosen.y };
+          stage._stage2KimwarePos = { x: chosen.x, y: chosen.y };
           stage.tileTags = stage.tileTags || {};
           stage.tileTags.STG2_RESCUE = [{ x: rescueTile.x, y: rescueTile.y }];
-          stage.tileTags.STG2_GUARD_GATE = gateTiles.length ? gateTiles : [{ x: Math.max(1, w - 2), y: 1 }];
-          stage.tileTags.STG2_ALARM = alarmTile ? [{ x: alarmTile.x, y: alarmTile.y }] : [];
-          currentStageRuntime.stg2KimwarePos = { x: bestPos.x, y: bestPos.y };
+          if (!Array.isArray(stage.tileTags.STG2_GUARD_GATE) || !stage.tileTags.STG2_GUARD_GATE.length) {
+            stage.tileTags.STG2_GUARD_GATE = [{ x: 12, y: 2 }];
+          }
+          if (!Array.isArray(stage.tileTags.STG2_GATE) || !stage.tileTags.STG2_GATE.length) {
+            stage.tileTags.STG2_GATE = cloneSimple(stage.tileTags.STG2_GUARD_GATE);
+          }
+          currentStageRuntime.stg2KimwarePos = { x: chosen.x, y: chosen.y };
           currentStageRuntime.stg2RescueTiles = cloneSimple(stage.tileTags.STG2_RESCUE);
           currentStageRuntime.stg2GuardGate = cloneSimple(stage.tileTags.STG2_GUARD_GATE);
-          currentStageRuntime.stg2AlarmTiles = cloneSimple(stage.tileTags.STG2_ALARM);
+          currentStageRuntime.stg2AlarmTiles = cloneSimple(stage.tileTags.STG2_ALARM || []);
+          const dist = Math.abs(anchor.x - chosen.x) + Math.abs(anchor.y - chosen.y);
+          if (dist < 8 || dist > 10) console.error("[STG2] kimwear distance out of target(8~10):", dist);
         }
 
         function placeStage2ExitCornerTiles(anchor) {
@@ -4909,6 +4969,15 @@
           if (exitTiles.length < 2) console.error("[CROP][STG2] missing exit tiles (<2) after corner relocate");
         }
 
+        function setStage2ExitTilesCode(showExitCode) {
+          if (currentCampaignStageId !== "STG2") return;
+          const exitTiles = getTagTiles("STG2_EXIT");
+          for (const t of exitTiles) {
+            if (!inBounds(t.x, t.y)) continue;
+            setMapTileCode(t.x, t.y, showExitCode ? "E" : "P");
+          }
+        }
+
         function runStage2AlarmReinforcementTick() {
           if (battleOver || currentCampaignStageId !== "STG2" || !campaign) return;
           const stg2State = getCampaignStageState("STG2");
@@ -4919,7 +4988,7 @@
           const maxSpawn = 6;
           const spawned = Number(stg2State.reinforceSpawned || 0);
           if (spawned >= maxSpawn) return;
-          const gateTiles = getTagTiles("STG2_GUARD_GATE");
+          const gateTiles = getTagTiles("STG2_GATE").length ? getTagTiles("STG2_GATE") : getTagTiles("STG2_GUARD_GATE");
           if (!gateTiles.length) return;
           const waveCount = Math.min(1 + Math.floor(rng() * 2), maxSpawn - spawned);
           let made = 0;
@@ -5049,22 +5118,11 @@
             currentStageRuntime.crop = cropped;
           } else if (currentCampaignStageId === "STG2") {
             ensureStage2ScaffoldForCrop(stage);
-            const enemyPoints = (stage.spawns || [])
-              .filter((s) => s && s.faction === "enemy")
-              .map((s) => ({ x: s.x, y: s.y }));
-            const points = [
-              ...defaultRosterSpawnPointsForCrop(),
-              ...(stage.tileTags?.STG2_RESCUE || []),
-              ...(stage.tileTags?.STG2_EXIT || []),
-              ...(stage._stage2KimwarePos ? [stage._stage2KimwarePos] : []),
-              ...enemyPoints
-            ];
-            const cropped = cropStage("STG2", stage, points, 4, 4, 14, 12, 16, 14, stageMapRows);
-            stageMapRows = cropped.mapRows;
-            currentStageRuntime.crop = cropped;
+            stageMapRows = cloneSimple(stage.mapData || stageMapRows);
             currentStageRuntime.stg2KimwarePos = stage._stage2KimwarePos ? { ...stage._stage2KimwarePos } : null;
             currentStageRuntime.stg2RescueTiles = cloneSimple(stage.tileTags?.STG2_RESCUE || []);
             currentStageRuntime.stg2ExitTiles = cloneSimple(stage.tileTags?.STG2_EXIT || []);
+            currentStageRuntime.stg2GuardGate = cloneSimple(stage.tileTags?.STG2_GUARD_GATE || []);
           }
           MAP_ROWS = stageMapRows;
           stage.mapRows = stageMapRows;
@@ -5096,6 +5154,7 @@
           spawnPlayersFromCampaignRoster();
           if (currentCampaignStageId === "STG2") setupStage2PrisonScenario(stage);
           if (currentCampaignStageId === "STG2") relocateStage2ExitToCorner(stage);
+          if (currentCampaignStageId === "STG2") setStage2ExitTilesCode(false);
           relocateUNyangsanAfterCrop();
           applyStageRecruitmentScaffoldOnLoad();
           stageObjectives = (stage.objectives || []).map((obj) => ({ ...cloneSimple(obj), status: "ongoing" }));
