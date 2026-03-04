@@ -1952,23 +1952,20 @@
         function drawOverlays(ctx) {
           if (currentCampaignStageId === "STG2") {
             const exitTiles = getTagTiles("STG2_EXIT");
-            if (exitTiles.length) {
-              const rescued = !!getCampaignStageState("STG2")?.rescuedKimwear;
-              const pulse = rescued ? (0.55 + 0.45 * Math.sin(renderClock * 0.08)) : 0.7;
+            const rescued = !!getCampaignStageState("STG2")?.rescuedKimwear;
+            if (rescued && exitTiles.length) {
               ctx.save();
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
-              ctx.font = "7px monospace";
+              ctx.font = "6px monospace";
               for (const t of exitTiles) {
                 if (!inBounds(t.x, t.y)) continue;
                 const tx = t.x * TILE;
                 const ty = t.y * TILE;
-                ctx.fillStyle = `rgba(90, 205, 255, ${rescued ? 0.16 + 0.14 * pulse : 0.12})`;
-                ctx.fillRect(tx + 1, ty + 1, TILE - 2, TILE - 2);
-                ctx.strokeStyle = `rgba(140, 235, 255, ${rescued ? 0.8 + 0.2 * pulse : 0.78})`;
-                ctx.lineWidth = rescued ? (1.2 + 0.8 * pulse) : 1.2;
-                ctx.strokeRect(tx + 0.8, ty + 0.8, TILE - 1.6, TILE - 1.6);
-                ctx.fillStyle = rescued ? `rgba(230, 250, 255, ${0.86 + 0.14 * pulse})` : "rgba(225,245,255,0.88)";
+                ctx.strokeStyle = "rgba(155, 238, 255, 0.86)";
+                ctx.lineWidth = 1;
+                ctx.strokeRect(tx + 0.5, ty + 0.5, TILE - 1, TILE - 1);
+                ctx.fillStyle = "rgba(235, 250, 255, 0.9)";
                 ctx.fillText("EXIT", tx + TILE / 2, ty + TILE / 2);
               }
               ctx.restore();
@@ -4744,6 +4741,59 @@
           }
         }
 
+        function placeStage2ExitCornerTiles(anchor) {
+          const w = mapWidth();
+          const h = mapHeight();
+          if (w <= 0 || h <= 0) return [];
+          const corners = [
+            { id: "TL", x: 0, y: 0 },
+            { id: "TR", x: w - 1, y: 0 },
+            { id: "BL", x: 0, y: h - 1 },
+            { id: "BR", x: w - 1, y: h - 1 }
+          ];
+          let chosen = corners[0];
+          let bestDist = -1;
+          for (const c of corners) {
+            const d = Math.abs(anchor.x - c.x) + Math.abs(anchor.y - c.y);
+            if (d > bestDist) {
+              bestDist = d;
+              chosen = c;
+            }
+          }
+          const dx = chosen.id === "TR" || chosen.id === "BR" ? -1 : 1;
+          const dy = chosen.id === "BL" || chosen.id === "BR" ? -1 : 1;
+          const candidates = [
+            { x: chosen.x, y: chosen.y },
+            { x: chosen.x + dx, y: chosen.y },
+            { x: chosen.x, y: chosen.y + dy },
+            { x: chosen.x + dx, y: chosen.y + dy },
+            { x: chosen.x + dx * 2, y: chosen.y },
+            { x: chosen.x, y: chosen.y + dy * 2 }
+          ];
+          const passable = [];
+          const fallback = [];
+          for (const p of candidates) {
+            if (!inBounds(p.x, p.y)) continue;
+            fallback.push({ x: p.x, y: p.y });
+            const t = terrainAt(p.x, p.y);
+            if (t && t.moveCost < 999) passable.push({ x: p.x, y: p.y });
+          }
+          const out = (passable.length >= 2 ? passable : fallback).slice(0, 4);
+          return out;
+        }
+
+        function relocateStage2ExitToCorner(stage) {
+          if (currentCampaignStageId !== "STG2" || !stage) return;
+          const leader = unitById("리더") || units.find((u) => u.faction === "player");
+          const anchor = leader ? { x: leader.x, y: leader.y } : { x: 2, y: Math.max(1, mapHeight() - 3) };
+          const exitTiles = placeStage2ExitCornerTiles(anchor);
+          stage.tileTags = stage.tileTags || {};
+          stage.tileTags.STG2_EXIT = exitTiles;
+          currentStageTileTags.STG2_EXIT = cloneSimple(exitTiles);
+          currentStageRuntime.stg2ExitTiles = cloneSimple(exitTiles);
+          if (exitTiles.length < 2) console.error("[CROP][STG2] missing exit tiles (<2) after corner relocate");
+        }
+
         function relocateUNyangsanAfterCrop() {
           const cat = unitById("n1") || unitById("우냥산");
           const crop = currentStageRuntime?.crop;
@@ -4864,12 +4914,28 @@
           stage.mapRows = stageMapRows;
           stage.w = mapWidth();
           stage.h = mapHeight();
+          if (currentCampaignStageId === "STG2" && campaign) {
+            ensureCampaignRecruitmentScaffold(campaign);
+            let changed = false;
+            const beforeLen = campaign.rosterIds.length;
+            campaign.rosterIds = campaign.rosterIds.filter((id) => id !== "kimwear");
+            if (campaign.rosterIds.length !== beforeLen) changed = true;
+            if (campaign.checkpointFlags[RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS] !== false) changed = true;
+            campaign.checkpointFlags[RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS] = false;
+            const stg2State = getCampaignStageState("STG2");
+            if (stg2State.rescuedKimwear !== false) {
+              stg2State.rescuedKimwear = false;
+              changed = true;
+            }
+            if (changed) saveCampaign();
+          }
           rng = mulberry32(SEED);
           units = [];
           clearExistingPlayerUnits();
           currentStageTileTags = cloneSimple(stage.tileTags || {});
           spawnEnemiesAndNeutralsFromStage(stage);
           spawnPlayersFromCampaignRoster();
+          if (currentCampaignStageId === "STG2") relocateStage2ExitToCorner(stage);
           relocateUNyangsanAfterCrop();
           applyStageRecruitmentScaffoldOnLoad();
           stageObjectives = (stage.objectives || []).map((obj) => ({ ...cloneSimple(obj), status: "ongoing" }));
