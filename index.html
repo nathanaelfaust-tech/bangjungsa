@@ -272,6 +272,10 @@
         gap: 10px;
       }
 
+      .menu-input {
+        width: 100%;
+      }
+
       .dialog-panel {
         width: min(520px, 92vw);
         border: 1px solid #3a516d;
@@ -492,6 +496,32 @@
           <button id="menuContinueBtn" class="btn" type="button">이어하기</button>
           <button id="menuNewBtn" class="btn" type="button">새로 시작</button>
         </div>
+        <div class="small">리더 이름</div>
+        <input id="menuLeaderName" class="btnSmall menu-input" type="text" maxlength="16" placeholder="리더" />
+        <div class="small">MBTI</div>
+        <select id="menuMbti" class="btnSmall menu-input">
+          <option value="INTJ">INTJ</option>
+          <option value="INTP">INTP</option>
+          <option value="ENTJ">ENTJ</option>
+          <option value="ENTP">ENTP</option>
+          <option value="INFJ">INFJ</option>
+          <option value="INFP">INFP</option>
+          <option value="ENFJ">ENFJ</option>
+          <option value="ENFP">ENFP</option>
+          <option value="ISTJ">ISTJ</option>
+          <option value="ISFJ">ISFJ</option>
+          <option value="ESTJ">ESTJ</option>
+          <option value="ESFJ">ESFJ</option>
+          <option value="ISTP">ISTP</option>
+          <option value="ISFP">ISFP</option>
+          <option value="ESTP">ESTP</option>
+          <option value="ESFP">ESFP</option>
+        </select>
+        <div class="small">
+          안내: MBTI에 따라 직업/특성이 ‘가중치 랜덤’으로 정해집니다.<br />
+          안내: 기존 회원(단톡 멤버)은 스토리의 등장인물로 나올 가능성이 높습니다.<br />
+          같은 이름+MBTI면 결과는 동일합니다(재현 가능).
+        </div>
         <div class="small">스테이지 선택 (언락만 표시)</div>
         <select id="menuStageSelect" class="btnSmall"></select>
         <button id="menuStartBtn" class="btn" type="button">시작</button>
@@ -521,6 +551,106 @@
         const SAVE_VERSION = 1;
         const CAMPAIGN_STORAGE_KEY = "srpg_campaign";
         const CAMPAIGN_STAGE_ORDER = ["STG0_PROLOGUE", "STG1_FOREST", "STG2_CITY", "STG3_RUINS", "STG4_CORE", "STG5_EPILOGUE"];
+        const MBTI_OPTIONS = ["INTJ", "INTP", "ENTJ", "ENTP", "INFJ", "INFP", "ENFJ", "ENFP", "ISTJ", "ISFJ", "ESTJ", "ESFJ", "ISTP", "ISFP", "ESTP", "ESFP"];
+        const BaseWeights_Class = {
+          CL_SWD_GUARD: 100,
+          CL_LNC_PIKER: 95,
+          CL_BOW_RANGER: 90,
+          CL_STF_MENDER: 85,
+          CL_SWD_DUELIST: 78,
+          CL_AXE_BRUISER: 74,
+          CL_STF_HEXER: 68
+        };
+        const MBTIWeight_Class = {
+          INTJ: { CL_SWD_GUARD: 8, CL_LNC_PIKER: 4, CL_BOW_RANGER: 2, CL_STF_MENDER: 3, CL_SWD_DUELIST: 1, CL_AXE_BRUISER: -2, CL_STF_HEXER: 10 },
+          INTP: { CL_SWD_GUARD: 1, CL_LNC_PIKER: 2, CL_BOW_RANGER: 4, CL_STF_MENDER: 6, CL_SWD_DUELIST: 1, CL_AXE_BRUISER: -3, CL_STF_HEXER: 10 },
+          ENTJ: { CL_SWD_GUARD: 10, CL_LNC_PIKER: 6, CL_BOW_RANGER: 2, CL_STF_MENDER: -2, CL_SWD_DUELIST: 5, CL_AXE_BRUISER: 3, CL_STF_HEXER: 2 },
+          ENTP: { CL_SWD_GUARD: 2, CL_LNC_PIKER: 4, CL_BOW_RANGER: 7, CL_STF_MENDER: 1, CL_SWD_DUELIST: 8, CL_AXE_BRUISER: -1, CL_STF_HEXER: 5 },
+          INFJ: { CL_SWD_GUARD: 5, CL_LNC_PIKER: 3, CL_BOW_RANGER: 2, CL_STF_MENDER: 10, CL_SWD_DUELIST: -1, CL_AXE_BRUISER: -4, CL_STF_HEXER: 7 },
+          INFP: { CL_SWD_GUARD: 1, CL_LNC_PIKER: 1, CL_BOW_RANGER: 3, CL_STF_MENDER: 10, CL_SWD_DUELIST: 0, CL_AXE_BRUISER: -4, CL_STF_HEXER: 8 },
+          ENFJ: { CL_SWD_GUARD: 7, CL_LNC_PIKER: 3, CL_BOW_RANGER: 2, CL_STF_MENDER: 10, CL_SWD_DUELIST: 1, CL_AXE_BRUISER: -2, CL_STF_HEXER: 4 },
+          ENFP: { CL_SWD_GUARD: 2, CL_LNC_PIKER: 2, CL_BOW_RANGER: 7, CL_STF_MENDER: 5, CL_SWD_DUELIST: 4, CL_AXE_BRUISER: -1, CL_STF_HEXER: 3 },
+          ISTJ: { CL_SWD_GUARD: 10, CL_LNC_PIKER: 7, CL_BOW_RANGER: 1, CL_STF_MENDER: 2, CL_SWD_DUELIST: -1, CL_AXE_BRUISER: 2, CL_STF_HEXER: 0 },
+          ISFJ: { CL_SWD_GUARD: 7, CL_LNC_PIKER: 4, CL_BOW_RANGER: 2, CL_STF_MENDER: 8, CL_SWD_DUELIST: -1, CL_AXE_BRUISER: -1, CL_STF_HEXER: 2 },
+          ESTJ: { CL_SWD_GUARD: 10, CL_LNC_PIKER: 6, CL_BOW_RANGER: 1, CL_STF_MENDER: -1, CL_SWD_DUELIST: 2, CL_AXE_BRUISER: 6, CL_STF_HEXER: -2 },
+          ESFJ: { CL_SWD_GUARD: 6, CL_LNC_PIKER: 3, CL_BOW_RANGER: 2, CL_STF_MENDER: 8, CL_SWD_DUELIST: -1, CL_AXE_BRUISER: 0, CL_STF_HEXER: 2 },
+          ISTP: { CL_SWD_GUARD: 2, CL_LNC_PIKER: 4, CL_BOW_RANGER: 4, CL_STF_MENDER: -1, CL_SWD_DUELIST: 8, CL_AXE_BRUISER: 5, CL_STF_HEXER: 0 },
+          ISFP: { CL_SWD_GUARD: 1, CL_LNC_PIKER: 2, CL_BOW_RANGER: 6, CL_STF_MENDER: 4, CL_SWD_DUELIST: 6, CL_AXE_BRUISER: 2, CL_STF_HEXER: 1 },
+          ESTP: { CL_SWD_GUARD: 3, CL_LNC_PIKER: 5, CL_BOW_RANGER: 5, CL_STF_MENDER: -2, CL_SWD_DUELIST: 10, CL_AXE_BRUISER: 6, CL_STF_HEXER: -2 },
+          ESFP: { CL_SWD_GUARD: 2, CL_LNC_PIKER: 3, CL_BOW_RANGER: 6, CL_STF_MENDER: 1, CL_SWD_DUELIST: 7, CL_AXE_BRUISER: 4, CL_STF_HEXER: 0 }
+        };
+        const BaseWeights_Perk = {
+          PRK_FIRST_IMPRESSION: 90,
+          PRK_TACTICAL_STEP: 90,
+          PRK_SAFE_ADVANCE: 86,
+          PRK_GUARD_STANCE: 84,
+          PRK_COUNTER_READY: 82,
+          PRK_FOCUS_AIM: 80,
+          PRK_POWER_STRIKE: 72,
+          PRK_QUICK_DRAW: 74,
+          PRK_PIN_DOWN: 78,
+          PRK_MARK_TARGET: 76,
+          PRK_FIELD_MEDIC: 75,
+          PRK_CLEANSE_TOUCH: 68,
+          PRK_CURSE_WEAVE: 66,
+          PRK_MANA_SAVER: 70,
+          PRK_LUCKY_BREAK: 69,
+          PRK_PRANKSTER_CODE: 62
+        };
+        const MBTIWeight_Perk = {
+          INTJ: { PRK_TACTICAL_STEP: 10, PRK_MARK_TARGET: 8, PRK_FOCUS_AIM: 4, PRK_CURSE_WEAVE: 6 },
+          INTP: { PRK_MARK_TARGET: 8, PRK_CURSE_WEAVE: 8, PRK_MANA_SAVER: 6, PRK_FOCUS_AIM: 4 },
+          ENTJ: { PRK_TACTICAL_STEP: 8, PRK_SAFE_ADVANCE: 8, PRK_COUNTER_READY: 5, PRK_POWER_STRIKE: 5 },
+          ENTP: { PRK_QUICK_DRAW: 8, PRK_PRANKSTER_CODE: 8, PRK_MARK_TARGET: 5, PRK_PIN_DOWN: 4 },
+          INFJ: { PRK_FIELD_MEDIC: 9, PRK_CLEANSE_TOUCH: 8, PRK_SAFE_ADVANCE: 5, PRK_MANA_SAVER: 4 },
+          INFP: { PRK_FIELD_MEDIC: 8, PRK_CLEANSE_TOUCH: 7, PRK_LUCKY_BREAK: 6, PRK_PRANKSTER_CODE: 5 },
+          ENFJ: { PRK_FIELD_MEDIC: 9, PRK_TACTICAL_STEP: 7, PRK_SAFE_ADVANCE: 5, PRK_CLEANSE_TOUCH: 4 },
+          ENFP: { PRK_PRANKSTER_CODE: 8, PRK_QUICK_DRAW: 6, PRK_LUCKY_BREAK: 6, PRK_FIELD_MEDIC: 4 },
+          ISTJ: { PRK_SAFE_ADVANCE: 10, PRK_GUARD_STANCE: 8, PRK_COUNTER_READY: 6, PRK_TACTICAL_STEP: 4 },
+          ISFJ: { PRK_SAFE_ADVANCE: 8, PRK_FIELD_MEDIC: 8, PRK_GUARD_STANCE: 6, PRK_CLEANSE_TOUCH: 5 },
+          ESTJ: { PRK_GUARD_STANCE: 8, PRK_TACTICAL_STEP: 7, PRK_POWER_STRIKE: 6, PRK_COUNTER_READY: 5 },
+          ESFJ: { PRK_FIELD_MEDIC: 8, PRK_SAFE_ADVANCE: 7, PRK_GUARD_STANCE: 5, PRK_TACTICAL_STEP: 5 },
+          ISTP: { PRK_COUNTER_READY: 8, PRK_POWER_STRIKE: 8, PRK_QUICK_DRAW: 6, PRK_PIN_DOWN: 5 },
+          ISFP: { PRK_QUICK_DRAW: 7, PRK_LUCKY_BREAK: 7, PRK_FOCUS_AIM: 6, PRK_FIELD_MEDIC: 4 },
+          ESTP: { PRK_QUICK_DRAW: 8, PRK_POWER_STRIKE: 8, PRK_COUNTER_READY: 6, PRK_PIN_DOWN: 5 },
+          ESFP: { PRK_PRANKSTER_CODE: 8, PRK_LUCKY_BREAK: 7, PRK_QUICK_DRAW: 6, PRK_POWER_STRIKE: 4 }
+        };
+        const PERK_ALIAS_MAP = {
+          PRK_FIRST_IMPRESSION: "PRK_FIRST_IMPRESSION",
+          PRK_TACTICAL_STEP: "PRK_RALLY_STEP",
+          PRK_SAFE_ADVANCE: "PRK_SHIELD_WALL",
+          PRK_GUARD_STANCE: "PRK_SHIELD_WALL",
+          PRK_COUNTER_READY: "PRK_COUNTER_GLARE",
+          PRK_FOCUS_AIM: "PRK_EAGLE_EYE",
+          PRK_POWER_STRIKE: "PRK_DEADPAN_PUNCH",
+          PRK_QUICK_DRAW: "PRK_FIRST_IMPRESSION",
+          PRK_PIN_DOWN: "PRK_PINCUSHION",
+          PRK_MARK_TARGET: "PRK_HEX_MARK",
+          PRK_FIELD_MEDIC: "PRK_SNACK_BREAK",
+          PRK_CLEANSE_TOUCH: "PRK_PURIFY",
+          PRK_CURSE_WEAVE: "PRK_HEX_MARK",
+          PRK_MANA_SAVER: "PRK_SNACK_BREAK",
+          PRK_LUCKY_BREAK: "PRK_LAST_LAUGH",
+          PRK_PRANKSTER_CODE: "PRK_SHOWTIME"
+        };
+        const PERK_BUCKETS = {
+          PRK_FIRST_IMPRESSION: "tempo",
+          PRK_TACTICAL_STEP: "tactic",
+          PRK_SAFE_ADVANCE: "defense",
+          PRK_GUARD_STANCE: "defense",
+          PRK_COUNTER_READY: "defense",
+          PRK_FOCUS_AIM: "precision",
+          PRK_POWER_STRIKE: "offense",
+          PRK_QUICK_DRAW: "tempo",
+          PRK_PIN_DOWN: "precision",
+          PRK_MARK_TARGET: "debuff",
+          PRK_FIELD_MEDIC: "support",
+          PRK_CLEANSE_TOUCH: "support",
+          PRK_CURSE_WEAVE: "debuff",
+          PRK_MANA_SAVER: "resource",
+          PRK_LUCKY_BREAK: "luck",
+          PRK_PRANKSTER_CODE: "trick"
+        };
 
         const TERRAIN = {
           g: { key: "grass", name: "초원", moveCost: 1, avoid: 0, color: "#4b8b4f" },
@@ -827,6 +957,8 @@
         const menuOverlay = document.getElementById("menuOverlay");
         const menuContinueBtn = document.getElementById("menuContinueBtn");
         const menuNewBtn = document.getElementById("menuNewBtn");
+        const menuLeaderName = document.getElementById("menuLeaderName");
+        const menuMbti = document.getElementById("menuMbti");
         const menuStageSelect = document.getElementById("menuStageSelect");
         const menuStartBtn = document.getElementById("menuStartBtn");
         const cmdMenu = document.createElement("div");
@@ -2542,6 +2674,13 @@
             stageProgress: 0,
             currentStageId: "STG0_PROLOGUE",
             rosterIds: ["leader", "jining", "able"],
+            playerProfile: { leaderName: "리더", mbti: "INTJ" },
+            leaderBuild: {
+              classId: "CL_SWD_GUARD",
+              perkIdsRaw: ["PRK_SAFE_ADVANCE", "PRK_FIRST_IMPRESSION"],
+              perkIds: ["PRK_SHIELD_WALL", "PRK_FIRST_IMPRESSION"],
+              seed: 0
+            },
             recruitedFlags: { kimwareJoined: false, jiningResolved: false, passingPersonMet: false },
             hiddenScore: 0,
             checkpointFlags: { cp1: false, cp2: false, cp3: false, cp4: false, cp5: false },
@@ -2573,9 +2712,11 @@
             const parsed = JSON.parse(raw);
             if (parsed?.saveVersion === SAVE_VERSION && parsed?.campaign) {
               campaign = { ...defaultCampaign(), ...parsed.campaign };
+              ensureLeaderProfileAndBuild(campaign);
               return true;
             }
             campaign = migrateCampaign(parsed?.saveVersion, parsed);
+            ensureLeaderProfileAndBuild(campaign);
             saveCampaign();
             showToast("세이브 버전 변경: 새로 시작");
             return false;
@@ -2628,6 +2769,8 @@
             const label = stageLabelByCampaignId(id);
             return `<option value="${escapeHtml(playable)}" data-campaign-id="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
           }).join("");
+          if (menuLeaderName) menuLeaderName.value = campaign?.playerProfile?.leaderName || "리더";
+          if (menuMbti) menuMbti.value = MBTI_OPTIONS.includes(campaign?.playerProfile?.mbti) ? campaign.playerProfile.mbti : "INTJ";
           menuStageSelect.innerHTML = unlocked.map((id) => `<option value="${escapeHtml(id)}">${escapeHtml(stageLabelByCampaignId(id))}</option>`).join("");
           const wantedCampaignId = campaign.currentStageId;
           const topOption = [...stageSelect.options].find((o) => o.dataset.campaignId === wantedCampaignId) || stageSelect.options[0];
@@ -2688,7 +2831,11 @@
         }
 
         function onMenuNew() {
+          const leaderName = (menuLeaderName?.value || "리더").trim() || "리더";
+          const mbti = MBTI_OPTIONS.includes(menuMbti?.value) ? menuMbti.value : "INTJ";
           campaign = defaultCampaign();
+          campaign.playerProfile = { leaderName, mbti };
+          campaign.leaderBuild = buildLeaderBuild(leaderName, mbti);
           saveCampaign();
           initializeStageSelect();
           hideMenu();
@@ -2717,7 +2864,7 @@
           const x = 2 + (idx % 3);
           const y = 10 + Math.floor(idx / 3);
           if (rosterId === "leader") {
-            return { id: "리더", name: "리더", faction: "player", x, y, spriteType: "soldier", paletteKey: "player", classId: "CL_SWD_GUARD", weaponType: "sword", perks: ["PRK_SHIELD_WALL"] };
+            return applyLeaderProfileToSpawn({ id: "리더", name: "리더", faction: "player", x, y, spriteType: "soldier", paletteKey: "player", classId: "CL_SWD_GUARD", weaponType: "sword", perks: ["PRK_SHIELD_WALL"] });
           }
           if (rosterId === "jining") {
             return { id: "지닝", name: "지닝", faction: "player", x, y, spriteType: "lancer", paletteKey: "player", classId: "CL_LNC_PIKER", weaponType: "lance", perks: ["PRK_STEADY_HAND"] };
@@ -2902,11 +3049,117 @@
           if (!spawnDef || !spawnDef.id || unitById(spawnDef.id)) return false;
           const tile = findFreeSpawnTile(spawnDef.x, spawnDef.y);
           if (!tile) return false;
-          const next = { acted: false, px: null, py: null, ...cloneSimple(spawnDef), x: tile.x, y: tile.y };
+          const source = applyLeaderProfileToSpawn(cloneSimple(spawnDef));
+          const next = { acted: false, px: null, py: null, ...source, x: tile.x, y: tile.y };
           initializeUnitFromTemplate(next);
           applyStageSpawnTuning(next);
           units.push(next);
           return true;
+        }
+
+        function hashString32(text) {
+          let h = 2166136261 >>> 0;
+          for (let i = 0; i < text.length; i++) {
+            h ^= text.charCodeAt(i);
+            h = Math.imul(h, 16777619) >>> 0;
+          }
+          return h >>> 0;
+        }
+
+        function normalizeMbti(value) {
+          const src = String(value || "").trim().toUpperCase();
+          return MBTI_OPTIONS.includes(src) ? src : "INTJ";
+        }
+
+        function weightedPick(weightMap, rngFn, excluded = new Set()) {
+          const pool = [];
+          for (const [key, value] of Object.entries(weightMap || {})) {
+            if (excluded.has(key)) continue;
+            const w = Math.max(0, Number(value) || 0);
+            if (w > 0) pool.push([key, w]);
+          }
+          if (!pool.length) return null;
+          const total = pool.reduce((sum, item) => sum + item[1], 0);
+          let roll = rngFn() * total;
+          for (const [key, w] of pool) {
+            roll -= w;
+            if (roll <= 0) return key;
+          }
+          return pool[pool.length - 1][0];
+        }
+
+        function resolveLeaderPerks(rawPerks) {
+          const resolved = [];
+          for (const perkId of rawPerks || []) {
+            const mapped = PERK_ALIAS_MAP[perkId] || perkId;
+            if (!mapped || !PerkCatalog[mapped]) continue;
+            if (!resolved.includes(mapped)) resolved.push(mapped);
+          }
+          return resolved.slice(0, 2);
+        }
+
+        function buildLeaderBuild(leaderName, mbti) {
+          const fixedMbti = normalizeMbti(mbti);
+          const seed = hashString32(`${leaderName}|${fixedMbti}|S0`);
+          const rr = mulberry32(seed);
+
+          const classWeights = {};
+          for (const [classId, base] of Object.entries(BaseWeights_Class)) {
+            const delta = MBTIWeight_Class[fixedMbti]?.[classId] || 0;
+            classWeights[classId] = Math.max(0, base + delta);
+          }
+          const classId = weightedPick(classWeights, rr) || "CL_SWD_GUARD";
+
+          const perkWeights = {};
+          for (const [perkId, base] of Object.entries(BaseWeights_Perk)) {
+            const delta = MBTIWeight_Perk[fixedMbti]?.[perkId] || 0;
+            perkWeights[perkId] = Math.max(0, base + delta);
+          }
+
+          const perk1 = weightedPick(perkWeights, rr) || "PRK_SAFE_ADVANCE";
+          let perk2 = weightedPick(perkWeights, rr, new Set([perk1])) || "PRK_FIRST_IMPRESSION";
+          const bucket1 = PERK_BUCKETS[perk1] || perk1;
+          for (let i = 0; i < 2; i++) {
+            if ((PERK_BUCKETS[perk2] || perk2) !== bucket1) break;
+            const rerolled = weightedPick(perkWeights, rr, new Set([perk1, perk2]));
+            if (!rerolled) break;
+            perk2 = rerolled;
+          }
+          const perkIdsRaw = [perk1, perk2];
+          const perkIds = resolveLeaderPerks(perkIdsRaw);
+          return { classId, perkIdsRaw, perkIds, seed };
+        }
+
+        function ensureLeaderProfileAndBuild(targetCampaign) {
+          if (!targetCampaign) return;
+          const currentName = (targetCampaign.playerProfile?.leaderName || "리더").trim() || "리더";
+          const currentMbti = normalizeMbti(targetCampaign.playerProfile?.mbti || "INTJ");
+          targetCampaign.playerProfile = { leaderName: currentName, mbti: currentMbti };
+          const expectedSeed = hashString32(`${currentName}|${currentMbti}|S0`);
+          const needsRebuild = !targetCampaign.leaderBuild ||
+            targetCampaign.leaderBuild.seed !== expectedSeed ||
+            !targetCampaign.leaderBuild.classId ||
+            !Array.isArray(targetCampaign.leaderBuild.perkIdsRaw);
+          if (needsRebuild) targetCampaign.leaderBuild = buildLeaderBuild(currentName, currentMbti);
+          if (!Array.isArray(targetCampaign.leaderBuild.perkIds) || !targetCampaign.leaderBuild.perkIds.length) {
+            targetCampaign.leaderBuild.perkIds = resolveLeaderPerks(targetCampaign.leaderBuild.perkIdsRaw);
+          }
+        }
+
+        function applyLeaderProfileToSpawn(spawnDef) {
+          if (!spawnDef || spawnDef.id !== "리더" || spawnDef.faction !== "player") return spawnDef;
+          ensureLeaderProfileAndBuild(campaign);
+          const leaderName = campaign?.playerProfile?.leaderName || spawnDef.name || "리더";
+          const build = campaign?.leaderBuild || buildLeaderBuild(leaderName, campaign?.playerProfile?.mbti || "INTJ");
+          const classId = build.classId || spawnDef.classId || "CL_SWD_GUARD";
+          const tpl = ClassTemplates[classId] || ClassTemplates.CL_SWD_GUARD;
+          return {
+            ...spawnDef,
+            name: leaderName,
+            classId,
+            weaponType: tpl.weaponType,
+            perks: (build.perkIds && build.perkIds.length ? build.perkIds : resolveLeaderPerks(build.perkIdsRaw))
+          };
         }
 
         function applyStageSpawnTuning(unit) {
