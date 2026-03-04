@@ -284,6 +284,35 @@
         padding: 12px;
       }
 
+      .dialog-body {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+
+      .dialog-portrait {
+        width: 96px;
+        height: 96px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #3a516d;
+        background: #0f141a;
+        display: none;
+        flex: 0 0 auto;
+      }
+
+      .dialog-portrait img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .dialog-content {
+        min-width: 0;
+        flex: 1;
+      }
+
       .dialog-speakers {
         color: #b9d9ff;
         font-weight: 700;
@@ -474,6 +503,15 @@
         .menu-panel {
           width: min(460px, 96vw);
         }
+
+        .dialog-body {
+          flex-direction: column;
+        }
+
+        .dialog-portrait {
+          width: 72px;
+          height: 72px;
+        }
       }
     </style>
   </head>
@@ -620,6 +658,18 @@
           hpAmber: "#F59E0B",
           dangerRed: "#EF4444"
         };
+        const CHARACTER_META = {
+          Player_Cute: { portraitUrl: null, portraitAlt: "뉴비" },
+          jeong2: { portraitUrl: null, portraitAlt: "정2" },
+          able: { portraitUrl: null, portraitAlt: "애블" },
+          kim_ware: { portraitUrl: null, portraitAlt: "김웨어" }
+        };
+        const TIER1_POINT_COLORS = {
+          Player_Cute: "#3498DB",
+          jeong2: "#E67E22",
+          able: "#8E44AD",
+          kim_ware: "#2C3E50"
+        };
         const MBTI_OPTIONS = ["INTJ", "INTP", "ENTJ", "ENTP", "INFJ", "INFP", "ENFJ", "ENFP", "ISTJ", "ISFJ", "ESTJ", "ESFJ", "ISTP", "ISFP", "ESTP", "ESFP"];
         const BaseWeights_Class = {
           CL_SWD_GUARD: 100,
@@ -747,6 +797,7 @@
           CL_STF_HEXER: "헥서",
           CL_NONE_JESTER: "제스터"
         };
+        const Tier1CharIds = new Set(["Player_Cute", "jeong2", "able", "kim_ware"]);
         const ClassTemplates = {
           CL_SWD_GUARD:   { weaponType: "sword", range: [1, 1], mov: 5, base: { hp: 30, atk: 10, def: 8, hit: 85, crit: 5 } },
           CL_AXE_BRUISER: { weaponType: "axe", range: [1, 1], mov: 4, base: { hp: 34, atk: 12, def: 7, hit: 75, crit: 5 } },
@@ -1057,14 +1108,25 @@
         const dialogOverlay = document.createElement("div");
         dialogOverlay.className = "dialog-overlay";
         dialogOverlay.innerHTML = `<div class="dialog-panel">
-          <div id="dialogSpeakers" class="dialog-speakers"></div>
-          <div id="dialogLine" class="dialog-line"></div>
+          <div class="dialog-body">
+            <div id="dialogPortraitWrap" class="dialog-portrait"><img id="dialogPortraitImg" alt="" /></div>
+            <div class="dialog-content">
+              <div id="dialogSpeakers" class="dialog-speakers"></div>
+              <div id="dialogLine" class="dialog-line"></div>
+            </div>
+          </div>
           <div class="dialog-actions"><button id="dialogNextBtn" class="btnSmall" type="button">다음</button></div>
         </div>`;
         document.body.appendChild(dialogOverlay);
         const dialogSpeakersEl = dialogOverlay.querySelector("#dialogSpeakers");
         const dialogLineEl = dialogOverlay.querySelector("#dialogLine");
         const dialogNextBtn = dialogOverlay.querySelector("#dialogNextBtn");
+        const dialogPortraitWrapEl = dialogOverlay.querySelector("#dialogPortraitWrap");
+        const dialogPortraitImgEl = dialogOverlay.querySelector("#dialogPortraitImg");
+        dialogPortraitImgEl.addEventListener("error", () => {
+          dialogPortraitImgEl.removeAttribute("src");
+          dialogPortraitWrapEl.style.display = "none";
+        });
         const stageToastEl = document.createElement("div");
         stageToastEl.className = "stage-toast";
         document.body.appendChild(stageToastEl);
@@ -1420,8 +1482,9 @@
             ctx.globalAlpha = a;
             const cx = hitFlash.x * TILE + TILE / 2;
             const cy = hitFlash.y * TILE + TILE / 2;
+            const accent = hitFlash.accent || FLAT_PALETTE.dangerRed;
             if (visualSkin === "flat_v1" && hitFlash.kind === "crit") {
-              ctx.strokeStyle = FLAT_PALETTE.dangerRed;
+              ctx.strokeStyle = accent;
               ctx.lineWidth = 1.6;
               ctx.beginPath();
               ctx.moveTo(cx - 5, cy - 5);
@@ -1433,13 +1496,13 @@
               ctx.beginPath();
               ctx.arc(cx, cy, 6, 0, Math.PI * 2);
               ctx.stroke();
-              ctx.fillStyle = FLAT_PALETTE.dangerRed;
+              ctx.fillStyle = accent;
               for (let i = 0; i < 6; i++) {
                 const ang = (Math.PI * 2 * i) / 6;
                 ctx.fillRect(cx + Math.cos(ang) * 7 - 0.75, cy + Math.sin(ang) * 7 - 0.75, 1.5, 1.5);
               }
             } else if (visualSkin === "flat_v1") {
-              ctx.strokeStyle = FLAT_PALETTE.hpAmber;
+              ctx.strokeStyle = hitFlash.accent || FLAT_PALETTE.hpAmber;
               ctx.lineWidth = 1.4;
               ctx.beginPath();
               ctx.arc(cx, cy, 5.2, 0, Math.PI * 2);
@@ -1489,7 +1552,8 @@
             const px = (u.px != null ? u.px : u.x * TILE);
             const py = (u.py != null ? u.py : u.y * TILE);
             if (visualSkin === "flat_v1") {
-              drawUnitFlat(ctx, u, px, py);
+              if (Tier1CharIds.has(u.charId)) drawUnitSD_Tier1(ctx, u, px, py);
+              else drawUnitFlat(ctx, u, px, py);
               continue;
             }
             const c = palette[u.paletteKey];
@@ -1591,6 +1655,95 @@
           }
           if (unit.faction === "player" && unit.acted && phase === PHASE.PLAYER) {
             ctx.fillStyle = "rgba(15,23,42,0.38)";
+            ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+          }
+          ctx.restore();
+        }
+
+        function tier1PointColor(unit) {
+          return TIER1_POINT_COLORS[unit?.charId] || FLAT_PALETTE.ink700;
+        }
+
+        function drawUnitSD_Tier1(ctx, unit, px, py) {
+          const point = tier1PointColor(unit);
+          const bob = Math.round(Math.sin((renderClock + unit.x * 19 + unit.y * 29) * 0.008));
+          const bodyY = py + bob;
+          ctx.save();
+          ctx.strokeStyle = FLAT_PALETTE.ink900;
+          ctx.lineWidth = 1.5;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          if (unit.charId === "Player_Cute") {
+            ctx.fillStyle = FLAT_PALETTE.paper100;
+            ctx.beginPath();
+            ctx.moveTo(px + 8, bodyY + 2);
+            ctx.lineTo(px + 13, bodyY + 12);
+            ctx.lineTo(px + 3, bodyY + 12);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = point;
+            ctx.fillRect(px + 6.5, bodyY + 4, 3, 6);
+            ctx.fillStyle = FLAT_PALETTE.ink700;
+            ctx.fillRect(px + 10.5, bodyY + 8, 2.5, 2.5);
+            ctx.beginPath();
+            ctx.moveTo(px + 6, bodyY + 2.5);
+            ctx.lineTo(px + 10, bodyY + 2.5);
+            ctx.lineTo(px + 8, bodyY + 0.8);
+            ctx.closePath();
+            ctx.fill();
+          } else if (unit.charId === "jeong2") {
+            ctx.fillStyle = FLAT_PALETTE.paper100;
+            ctx.beginPath();
+            ctx.arc(px + 5.3, bodyY + 4.2, 2.1, 0, Math.PI * 2);
+            ctx.arc(px + 10.7, bodyY + 4.2, 2.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(px + 4, bodyY + 6);
+            ctx.lineTo(px + 8, bodyY + 12.5);
+            ctx.lineTo(px + 12, bodyY + 6);
+            ctx.lineTo(px + 10.5, bodyY + 13);
+            ctx.lineTo(px + 5.5, bodyY + 13);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = point;
+            ctx.fillRect(px + 6.8, bodyY + 7, 2.4, 5.2);
+            ctx.fillRect(px + 12.8, bodyY + 3.8, 1, 7);
+            ctx.fillRect(px + 13.7, bodyY + 3.8, 2.3, 2.2);
+          } else if (unit.charId === "able") {
+            ctx.fillStyle = FLAT_PALETTE.paper100;
+            ctx.beginPath();
+            ctx.arc(px + 8, bodyY + 5.4, 4.4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillRect(px + 6.2, bodyY + 9, 3.6, 4.2);
+            ctx.strokeRect(px + 6.2, bodyY + 9, 3.6, 4.2);
+            ctx.fillStyle = point;
+            ctx.beginPath();
+            ctx.arc(px + 8, bodyY + 3.8, 2.2, Math.PI, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          } else if (unit.charId === "kim_ware") {
+            ctx.fillStyle = FLAT_PALETTE.paper100;
+            ctx.fillRect(px + 6, bodyY + 2, 4, 11);
+            ctx.strokeRect(px + 6, bodyY + 2, 4, 11);
+            ctx.fillStyle = point;
+            ctx.fillRect(px + 6.8, bodyY + 4.5, 2.4, 4);
+            ctx.fillStyle = FLAT_PALETTE.ink700;
+            ctx.strokeRect(px + 4.2, bodyY + 4.2, 2.4, 1.8);
+            ctx.strokeRect(px + 9.4, bodyY + 4.2, 2.4, 1.8);
+            ctx.beginPath();
+            ctx.moveTo(px + 6.6, bodyY + 6.8);
+            ctx.lineTo(px + 9.4, bodyY + 6.8);
+            ctx.stroke();
+            ctx.fillRect(px + 11.8, bodyY + 8, 2.1, 2.4);
+          } else {
+            drawUnitFlat(ctx, unit, px, py);
+          }
+          if (unit.faction === "player" && unit.acted && phase === PHASE.PLAYER) {
+            ctx.fillStyle = "rgba(15,23,42,0.36)";
             ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
           }
           ctx.restore();
@@ -2905,13 +3058,42 @@
           else if (effect.type === "openDoor") openDoorTag(effect.doorTag || effect.doorId);
         }
 
+        function updateDialogPortrait(speakerToken) {
+          const meta = characterMetaByToken(speakerToken);
+          const portraitUrl = meta?.portraitUrl || null;
+          if (!portraitUrl) {
+            dialogPortraitWrapEl.style.display = "none";
+            dialogPortraitImgEl.removeAttribute("src");
+            dialogPortraitImgEl.alt = "";
+            return;
+          }
+          dialogPortraitImgEl.src = portraitUrl;
+          dialogPortraitImgEl.alt = meta?.portraitAlt || String(speakerToken || "");
+          dialogPortraitWrapEl.style.display = "block";
+        }
+
+        function normalizeDialogueLines(speakers, lines) {
+          const src = (lines || []).slice(0, 3);
+          const out = [];
+          for (let i = 0; i < src.length; i++) {
+            const item = src[i];
+            if (item && typeof item === "object") {
+              out.push({ text: String(item.text || "").trim(), speaker: item.speaker || speakers[i % Math.max(1, speakers.length)] || "" });
+            } else {
+              out.push({ text: String(item || "").trim(), speaker: speakers[i % Math.max(1, speakers.length)] || "" });
+            }
+          }
+          return out.filter((entry) => entry.text);
+        }
+
         function showDialogue(speakers, lines) {
           return new Promise((resolve) => {
-            const clean = (lines || []).map((line) => String(line || "").trim()).filter(Boolean).slice(0, 3);
-            const textLines = clean.length ? clean : ["..."];
+            const textLines = normalizeDialogueLines(speakers || [], lines);
+            if (!textLines.length) textLines.push({ text: "...", speaker: speakers?.[0] || "" });
             activeDialog = { speakers: (speakers || []).join(" ↔ "), lines: textLines, index: 0, resolve };
             dialogSpeakersEl.textContent = activeDialog.speakers;
-            dialogLineEl.textContent = activeDialog.lines[0];
+            dialogLineEl.textContent = activeDialog.lines[0].text;
+            updateDialogPortrait(activeDialog.lines[0].speaker);
             dialogNextBtn.textContent = activeDialog.lines.length > 1 ? "다음" : "닫기";
             dialogOverlay.classList.add("show");
           });
@@ -2922,6 +3104,9 @@
           const done = activeDialog.resolve;
           activeDialog = null;
           dialogOverlay.classList.remove("show");
+          dialogPortraitWrapEl.style.display = "none";
+          dialogPortraitImgEl.removeAttribute("src");
+          dialogPortraitImgEl.alt = "";
           done();
         }
 
@@ -2932,7 +3117,8 @@
             closeDialogue();
             return;
           }
-          dialogLineEl.textContent = activeDialog.lines[activeDialog.index];
+          dialogLineEl.textContent = activeDialog.lines[activeDialog.index].text;
+          updateDialogPortrait(activeDialog.lines[activeDialog.index].speaker);
           dialogNextBtn.textContent = activeDialog.index >= activeDialog.lines.length - 1 ? "닫기" : "다음";
         }
 
@@ -3661,6 +3847,30 @@
           return targets[0];
         }
 
+        function resolveUnitCharId(unit) {
+          const id = String(unit?.id || "").toLowerCase();
+          const name = String(unit?.name || "");
+          if (id === "리더" || id === "leader" || name === "리더") return "Player_Cute";
+          if (id.includes("정2") || name === "정2" || id === "jeong2") return "jeong2";
+          if (id.includes("애블") || name === "애블" || id === "able") return "able";
+          if (id.includes("김웨어") || name === "김웨어" || id === "kimware" || id === "p1") return "kim_ware";
+          return unit?.charId || null;
+        }
+
+        function characterMetaByToken(token) {
+          const src = String(token || "");
+          for (const u of units) {
+            if (u.id === src || u.name === src) {
+              return CHARACTER_META[u.charId] || { portraitUrl: u.portraitUrl || null, portraitAlt: u.portraitAlt || u.name || "portrait" };
+            }
+          }
+          if (src === "리더" || src === "leader") return CHARACTER_META.Player_Cute;
+          if (src === "정2" || src === "jeong2") return CHARACTER_META.jeong2;
+          if (src === "애블" || src === "able") return CHARACTER_META.able;
+          if (src === "김웨어" || src === "kimware") return CHARACTER_META.kim_ware;
+          return null;
+        }
+
         function initializeUnitFromTemplate(unit) {
           const tpl = ClassTemplates[unit.classId] || ClassTemplates.CL_NONE_JESTER;
           unit.baseStats = { ...tpl.base };
@@ -3682,6 +3892,9 @@
           unit.turnFlags = unit.turnFlags || { firstAttackUsed: false };
           unit.bubbleLastProc = unit.bubbleLastProc || {};
           unit.personaLines = unit.personaLines || null;
+          unit.charId = unit.charId || resolveUnitCharId(unit);
+          unit.portraitUrl = unit.portraitUrl || (CHARACTER_META[unit.charId]?.portraitUrl ?? null);
+          unit.portraitAlt = unit.portraitAlt || unit.name || (CHARACTER_META[unit.charId]?.portraitAlt || "portrait");
           unit.movedThisTurn = !!unit.movedThisTurn;
           unit.preMove = unit.preMove || null;
           unit.actionState = unit.actionState || "idle";
@@ -3945,7 +4158,7 @@
           target.hp = Math.max(0, target.hp - dmg);
           spawnFloatingText(target.x, target.y, `HIT -${dmg}`, crit ? "#ffd38f" : "#ffadad");
           if (crit) {
-            hitFlash = { x: target.x, y: target.y, life: 360, maxLife: 360, kind: "crit" };
+            hitFlash = { x: target.x, y: target.y, life: 360, maxLife: 360, kind: "crit", accent: tier1PointColor(attacker) };
             spawnFloatingText(target.x, target.y, "CRIT!", "#ffe38f");
             triggerPerkEvent("crit", { attacker, target, dmg, dist, contextTag });
             emitBubble(attacker, "crit");
@@ -3971,7 +4184,7 @@
           if (!attacker || !target || battleOver) return;
           if (attacker.faction === "player") showTriangleTutorialHintOnce();
           inputLocked = true;
-          hitFlash = { x: target.x, y: target.y, life: 220, maxLife: 220, kind: "hit" };
+          hitFlash = { x: target.x, y: target.y, life: 220, maxLife: 220, kind: "hit", accent: tier1PointColor(attacker) };
           await wait(140);
           const first = await resolveAttack(attacker, target, { actionMode, contextTag: "initial", logPrefix: "" });
           if (first.support) {
@@ -3984,7 +4197,7 @@
           const liveDefender = unitById(target.id);
           if (canCounterattack(liveDefender, liveAttacker)) {
             await wait(120);
-            hitFlash = { x: liveAttacker.x, y: liveAttacker.y, life: 220, maxLife: 220, kind: "hit" };
+            hitFlash = { x: liveAttacker.x, y: liveAttacker.y, life: 220, maxLife: 220, kind: "hit", accent: tier1PointColor(liveDefender) };
             await wait(140);
             await resolveAttack(liveDefender, liveAttacker, { actionMode: "attack", contextTag: "counter", logPrefix: "반격! " });
           }
