@@ -1950,6 +1950,31 @@
         }
 
         function drawOverlays(ctx) {
+          if (currentCampaignStageId === "STG2") {
+            const exitTiles = getTagTiles("STG2_EXIT");
+            if (exitTiles.length) {
+              const rescued = !!getCampaignStageState("STG2")?.rescuedKimwear;
+              const pulse = rescued ? (0.55 + 0.45 * Math.sin(renderClock * 0.08)) : 0.7;
+              ctx.save();
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.font = "7px monospace";
+              for (const t of exitTiles) {
+                if (!inBounds(t.x, t.y)) continue;
+                const tx = t.x * TILE;
+                const ty = t.y * TILE;
+                ctx.fillStyle = `rgba(90, 205, 255, ${rescued ? 0.16 + 0.14 * pulse : 0.12})`;
+                ctx.fillRect(tx + 1, ty + 1, TILE - 2, TILE - 2);
+                ctx.strokeStyle = `rgba(140, 235, 255, ${rescued ? 0.8 + 0.2 * pulse : 0.78})`;
+                ctx.lineWidth = rescued ? (1.2 + 0.8 * pulse) : 1.2;
+                ctx.strokeRect(tx + 0.8, ty + 0.8, TILE - 1.6, TILE - 1.6);
+                ctx.fillStyle = rescued ? `rgba(230, 250, 255, ${0.86 + 0.14 * pulse})` : "rgba(225,245,255,0.88)";
+                ctx.fillText("EXIT", tx + TILE / 2, ty + TILE / 2);
+              }
+              ctx.restore();
+            }
+          }
+
           if (moveRange && selectedUnitId) {
             ctx.save();
             for (const k of moveRange.reachable.keys()) {
@@ -4936,7 +4961,7 @@
 
         function objectiveLabel(obj) {
           if (obj.type === "STG2_RESCUE") return "김웨어 구출(대화)";
-          if (obj.type === "STG2_ESCAPE") return "전원 출구 2칸 내 탈출";
+          if (obj.type === "STG2_ESCAPE") return "출구(표시된 EXIT 타일) 2칸 내로 집결";
           if (obj.type === "ROUTE") return "모든 적 격파";
           if (obj.type === "SURVIVE") return `${obj.params?.turns || 0}턴 생존`;
           if (obj.type === "SEIZE") return `거점 점령 (${obj.params?.x},${obj.params?.y})`;
