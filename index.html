@@ -1138,6 +1138,18 @@
           FLG_CAT_MET: false,
           FLG_CAT_JOIN: false
         };
+        const RECRUITMENT_FLAG_IDS = {
+          RESCUE_KIMWARE_SUCCESS: "RESCUE_KIMWARE_SUCCESS",
+          NUBURI_JOIN: "NUBURI_JOIN",
+          SIRR_GUEST_ACTIVE: "SIRR_GUEST_ACTIVE",
+          CIVILIAN_ESCORT_SUCCESS: "CIVILIAN_ESCORT_SUCCESS",
+          JINAGANEUN_JOIN: "JINAGANEUN_JOIN",
+          JINING_HP_LOW: "JINING_HP_LOW",
+          LEADER_TALK_SUCCESS: "LEADER_TALK_SUCCESS",
+          WOO_HIDDEN_TILE: "WOO_HIDDEN_TILE",
+          WOO_DIALOG_CHAIN: "WOO_DIALOG_CHAIN",
+          ABLE_BOSS_TURN: "ABLE_BOSS_TURN"
+        };
         const TALK_EVENTS = [];
         const RECRUIT_RULES = [];
         const EVENT_REGISTRY = {
@@ -1147,6 +1159,14 @@
           turnEnd: []
         };
         const SAMPLE_UNIT_DEFS = {};
+        const RECRUITMENT_UNIT_DEFS = {
+          jeong2: { id: "정2", name: "정2", faction: "player", x: 3, y: 10, spriteType: "scout", paletteKey: "player", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_EAGLE_EYE", "PRK_PINCUSHION"], aiHint: "focusLowDef" },
+          kimware: { id: "김웨어", name: "김웨어", faction: "player", x: 4, y: 10, spriteType: "soldier", paletteKey: "player", classId: "CL_SWD_DUELIST", weaponType: "sword", perks: ["PRK_FIRST_IMPRESSION", "PRK_COMEBACK"], aiHint: "skirmish" },
+          neoburi: { id: "너부리", name: "너부리", faction: "player", x: 5, y: 10, spriteType: "cat", paletteKey: "player", classId: "CL_STF_HEXER", weaponType: "staff", perks: ["PRK_FRIENDLY_HECKLE"], aiHint: "supportSafe" },
+          sireo: { id: "시리오", name: "시리오", faction: "player", x: 6, y: 10, spriteType: "scout", paletteKey: "player", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_EAGLE_EYE"], aiHint: "holdLine" },
+          passerby: { id: "지나가는사람", name: "지나가는사람", faction: "player", x: 7, y: 10, spriteType: "cat", paletteKey: "player", classId: "CL_NONE_JESTER", weaponType: "none", perks: ["PRK_SHOWTIME", "PRK_FRIENDLY_HECKLE", "PRK_LAST_LAUGH"], aiHint: "disrupt" },
+          u_nyangsan: { id: "우냥산", name: "우냥산", faction: "player", x: 8, y: 10, spriteType: "cat", paletteKey: "player", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_SNACK_BREAK"], aiHint: "wanderSleep" }
+        };
         const flags = { ...FLAG_DEFAULTS };
         const firedEvents = new Set();
         const inventory = {};
@@ -1297,6 +1317,12 @@
           if (devMode && e.code === "KeyC") {
             e.preventDefault();
             devTeleportLeaderToClearing();
+            return;
+          }
+          if (devMode && e.code === "KeyJ") {
+            e.preventDefault();
+            setFlag(RECRUITMENT_FLAG_IDS.LEADER_TALK_SUCCESS, true);
+            addLog("DEV: LEADER_TALK_SUCCESS=true");
             return;
           }
           if (e.key === "g" || e.key === "G") {
@@ -2075,7 +2101,7 @@
           }
 
           if (!selectedUnitId) {
-            if (!u || u.faction !== "player" || u.acted) {
+            if (!u || !isUnitControllable(u) || u.acted) {
               invalidFeedback();
               return;
             }
@@ -2521,8 +2547,54 @@
           }
         }
 
+        async function allyGuestAct(guest) {
+          if (!unitById(guest.id)) return;
+          const range = computeMoveRange(guest);
+          const enemies = units.filter((u) => u.faction === "enemy");
+          if (!enemies.length) return;
+
+          let target = pickAttackTarget(guest, "enemy");
+          if (target) {
+            await executeCombat(guest, target);
+            return;
+          }
+
+          let best = { x: guest.x, y: guest.y };
+          let bestDist = Infinity;
+          let bestCost = range.dist.get(key(guest.x, guest.y)) || 0;
+          for (const k of range.reachable.keys()) {
+            const [x, y] = parseKey(k);
+            const nearestEnemyDist = enemies.reduce((acc, e) => {
+              const d = Math.abs(e.x - x) + Math.abs(e.y - y);
+              return d < acc ? d : acc;
+            }, Infinity);
+            const cost = range.dist.get(k) || 0;
+            const better = nearestEnemyDist < bestDist || (nearestEnemyDist === bestDist && cost > bestCost);
+            if (better) {
+              bestDist = nearestEnemyDist;
+              best = { x, y };
+              bestCost = cost;
+            }
+          }
+          const path = reconstructPath(range.cameFrom, { x: guest.x, y: guest.y }, best) || [{ x: guest.x, y: guest.y }];
+          if (path.length > 1) {
+            await animateUnitAlongPath(guest, path);
+            addLog(`${guest.name} (게스트) 이동: (${best.x},${best.y})`);
+            emitUnitEnterTile(guest);
+          }
+          target = pickAttackTarget(guest, "enemy");
+          if (target) await executeCombat(guest, target);
+        }
+
         async function startNeutralPhase() {
           setPhase(PHASE.NEUTRAL);
+          const guests = units.filter((u) => u.faction === "player" && u.controllable === false);
+          for (const guest of guests) {
+            if (battleOver) break;
+            await allyGuestAct(guest);
+            await wait(120);
+          }
+          if (battleOver) return;
           const cat = unitById("우냥산") || unitById("n1");
           if (!cat) {
             await wait(120);
@@ -2580,8 +2652,8 @@
           if (battleOver) return;
           turnCounter++;
           tickTurnState();
-          for (const p of units.filter(u => u.faction === "player")) {
-            p.acted = false;
+          for (const p of units.filter((u) => u.faction === "player")) {
+            p.acted = p.controllable === false;
             p.movedThisTurn = false;
             p.actionState = "idle";
             p.preMove = null;
@@ -2623,7 +2695,7 @@
             guideText.textContent = "상대/우냥산 행동 중…";
           }
           touchHintEl.textContent = isMobileLayout() ? "드래그: 화면 이동 / 탭: 선택 / 길게: 취소" : "";
-          devHintEl.textContent = devMode ? "DEV: Tab=토글, K=적전멸, V=승리, H=적1HP, R=재시작, C=공터이동" : "";
+          devHintEl.textContent = devMode ? "DEV: Tab=토글, K=적전멸, V=승리, H=적1HP, R=재시작, C=공터이동, J=지닝합류" : "";
           touchDebugEl.textContent = devMode ? touchDebugText : "";
           endPhaseBtn.disabled = !canEndPlayerPhase();
           if (showDebugReadout) {
@@ -2763,8 +2835,12 @@
             !pendingActionUnitId && !commandMenuUnitId && !targetingUnitId;
         }
 
+        function isUnitControllable(unit) {
+          return !!(unit && unit.faction === "player" && unit.controllable !== false);
+        }
+
         function allPlayersActed() {
-          return units.filter(u => u.faction === "player").every(u => u.acted);
+          return units.filter((u) => isUnitControllable(u)).every((u) => u.acted);
         }
 
         function unitById(id) {
@@ -2948,10 +3024,183 @@
           return !!flags[flagId];
         }
 
+        function checkpointFlagDefaults() {
+          return {
+            cp1: false, cp2: false, cp3: false, cp4: false, cp5: false,
+            RESCUE_KIMWARE_SUCCESS: false,
+            NUBURI_JOIN: false,
+            SIRR_GUEST_ACTIVE: false,
+            CIVILIAN_ESCORT_SUCCESS: false,
+            JINAGANEUN_JOIN: false,
+            JINING_HP_LOW: false,
+            LEADER_TALK_SUCCESS: false,
+            WOO_HIDDEN_TILE: false,
+            WOO_DIALOG_CHAIN: false,
+            ABLE_BOSS_TURN: false
+          };
+        }
+
+        function recruitedFlagDefaults() {
+          return {
+            kimwareJoined: false,
+            neoburiJoined: false,
+            sireoJoined: false,
+            passerbyJoined: false,
+            jiningJoined: false,
+            uwuJoined: false,
+            jiningResolved: false,
+            passingPersonMet: false
+          };
+        }
+
+        function ensureCampaignRecruitmentScaffold(targetCampaign) {
+          if (!targetCampaign) return;
+          targetCampaign.recruitedFlags = {
+            ...recruitedFlagDefaults(),
+            ...(targetCampaign.recruitedFlags || {})
+          };
+          targetCampaign.checkpointFlags = {
+            ...checkpointFlagDefaults(),
+            ...(targetCampaign.checkpointFlags || {})
+          };
+          if (!Array.isArray(targetCampaign.rosterIds)) targetCampaign.rosterIds = ["leader", "jeong2", "able"];
+        }
+
+        function addToRosterOnce(charId) {
+          if (!campaign || !charId) return false;
+          if (!Array.isArray(campaign.rosterIds)) campaign.rosterIds = [];
+          if (campaign.rosterIds.includes(charId)) return false;
+          campaign.rosterIds.push(charId); // Intentionally no clamp; roster can exceed 8.
+          return true;
+        }
+
+        function showRecruitJoinToast(nameText, beforeCount, afterCount) {
+          showToast(`${nameText} 합류! (${beforeCount}→${afterCount})`, 1700);
+        }
+
+        function ensureJiningTalkEventForStage() {
+          if (currentCampaignStageId !== "STG4_CORE") return;
+          if (!getFlag(RECRUITMENT_FLAG_IDS.JINING_HP_LOW) || getFlag(RECRUITMENT_FLAG_IDS.LEADER_TALK_SUCCESS)) return;
+          const exists = TALK_EVENTS.some((e) => e && e.eventId === "TE_STG4_LEADER_TALK_JINING");
+          if (exists) return;
+          TALK_EVENTS.push({
+            eventId: "TE_STG4_LEADER_TALK_JINING",
+            trigger: "adjacent+talk",
+            condition: "talk(리더→지닝) && JINING_HP_LOW && !LEADER_TALK_SUCCESS",
+            speakers: ["리더", "지닝"],
+            lines: ["여기서 끝내자.", "같이 가자."],
+            effects: [{ type: "setFlag", flagId: RECRUITMENT_FLAG_IDS.LEADER_TALK_SUCCESS, value: true }],
+            once: true
+          });
+          showToast("리더가 지닝과 대화할 수 있게 됨", 1400);
+        }
+
+        function spawnSireoGuestIfNeeded() {
+          if (!campaign || currentCampaignStageId !== "STG3_RUINS") return;
+          if (!campaign.checkpointFlags?.SIRR_GUEST_ACTIVE) return;
+          const existing = unitById("시리오") || units.find((u) => u.id === "sireo" || u.name === "시리오");
+          if (existing) {
+            existing.faction = "player";
+            existing.paletteKey = "player";
+            existing.controllable = false;
+            existing.aiTeam = "allyGuest";
+            return;
+          }
+          const spawned = spawnStageUnit({
+            ...RECRUITMENT_UNIT_DEFS.sireo,
+            id: "시리오",
+            name: "시리오",
+            x: 6,
+            y: 11,
+            faction: "player"
+          });
+          if (spawned) {
+            const guest = unitById("시리오");
+            if (guest) {
+              guest.controllable = false;
+              guest.aiTeam = "allyGuest";
+              guest.acted = true;
+            }
+            addLog("시리오(게스트) 합류");
+            showToast("시리오 게스트 참전 (AI)");
+          }
+        }
+
+        function applyRecruitmentScheduleOnFlag(flagId) {
+          if (!campaign || !flagId) return;
+          ensureCampaignRecruitmentScaffold(campaign);
+          let changed = false;
+
+          const joinByRoster = (rosterId, recruitedFlagKey, nameText) => {
+            const before = campaign.rosterIds.length;
+            const joined = addToRosterOnce(rosterId);
+            if (!joined) return false;
+            campaign.recruitedFlags[recruitedFlagKey] = true;
+            showRecruitJoinToast(nameText, before, campaign.rosterIds.length);
+            return true;
+          };
+
+          if (flagId === RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS && getFlag(flagId)) {
+            if (joinByRoster("kimware", "kimwareJoined", "김웨어")) changed = true;
+          }
+          if (flagId === RECRUITMENT_FLAG_IDS.NUBURI_JOIN && getFlag(flagId)) {
+            if (joinByRoster("neoburi", "neoburiJoined", "너부리")) changed = true;
+          }
+          if (flagId === RECRUITMENT_FLAG_IDS.CIVILIAN_ESCORT_SUCCESS && getFlag(flagId)) {
+            if (joinByRoster("sireo", "sireoJoined", "시리오")) changed = true;
+          }
+          if (flagId === RECRUITMENT_FLAG_IDS.JINAGANEUN_JOIN && getFlag(flagId)) {
+            if (joinByRoster("passerby", "passerbyJoined", "지나가는사람")) changed = true;
+          }
+          if (flagId === RECRUITMENT_FLAG_IDS.LEADER_TALK_SUCCESS && getFlag(flagId)) {
+            applySideChange("지닝", "player");
+            const liveJining = unitById("지닝");
+            if (liveJining) {
+              liveJining.controllable = true;
+              liveJining.aiTeam = null;
+            }
+            if (joinByRoster("jining", "jiningJoined", "지닝")) changed = true;
+          }
+          if ((flagId === RECRUITMENT_FLAG_IDS.WOO_HIDDEN_TILE || flagId === RECRUITMENT_FLAG_IDS.WOO_DIALOG_CHAIN) &&
+            getFlag(RECRUITMENT_FLAG_IDS.WOO_HIDDEN_TILE) && getFlag(RECRUITMENT_FLAG_IDS.WOO_DIALOG_CHAIN)) {
+            if (joinByRoster("u_nyangsan", "uwuJoined", "우냥산")) changed = true;
+          }
+          if (flagId === RECRUITMENT_FLAG_IDS.ABLE_BOSS_TURN && getFlag(flagId)) {
+            if (campaign.abelState !== "flipped") {
+              campaign.abelState = "flipped";
+              showToast("애블 상태 변화 (스캐폴드)");
+              changed = true;
+            }
+          }
+          if (flagId === RECRUITMENT_FLAG_IDS.JINING_HP_LOW && getFlag(flagId)) {
+            ensureJiningTalkEventForStage();
+          }
+          if (flagId === RECRUITMENT_FLAG_IDS.SIRR_GUEST_ACTIVE && getFlag(flagId)) {
+            spawnSireoGuestIfNeeded();
+          }
+
+          if (changed) {
+            initializeStageSelect();
+            saveCampaign();
+          }
+        }
+
+        function applyStageRecruitmentScaffoldOnLoad() {
+          ensureJiningTalkEventForStage();
+          spawnSireoGuestIfNeeded();
+        }
+
         function setFlag(flagId, value = true) {
-          flags[flagId] = !!value;
+          const nextValue = !!value;
+          flags[flagId] = nextValue;
+          if (campaign) {
+            ensureCampaignRecruitmentScaffold(campaign);
+            campaign.checkpointFlags[flagId] = nextValue;
+            saveCampaign();
+          }
           addLog(`flag set: ${flagId}=${flags[flagId]}`);
           dispatchStageTrigger("onFlagChange", { flagId, value: flags[flagId] });
+          applyRecruitmentScheduleOnFlag(flagId);
         }
 
         function getAdjacentUnits(unit) {
@@ -3160,7 +3409,7 @@
             seasonId: "S0",
             stageProgress: 0,
             currentStageId: "STG0_PROLOGUE",
-            rosterIds: ["leader", "jining", "able"],
+            rosterIds: ["leader", "jeong2", "able"],
             playerProfile: { leaderName: "리더", mbti: "INTJ" },
             leaderBuild: {
               classId: "CL_SWD_GUARD",
@@ -3168,9 +3417,9 @@
               perkIds: ["PRK_SHIELD_WALL", "PRK_FIRST_IMPRESSION"],
               seed: 0
             },
-            recruitedFlags: { kimwareJoined: false, jiningResolved: false, passingPersonMet: false },
+            recruitedFlags: recruitedFlagDefaults(),
             hiddenScore: 0,
-            checkpointFlags: { cp1: false, cp2: false, cp3: false, cp4: false, cp5: false },
+            checkpointFlags: checkpointFlagDefaults(),
             ruleTwistSeen: false,
             endingType: "normal",
             shardPieces: { shard0: false, shard96: false, shardLink: false },
@@ -3200,10 +3449,12 @@
             if (parsed?.saveVersion === SAVE_VERSION && parsed?.campaign) {
               campaign = { ...defaultCampaign(), ...parsed.campaign };
               ensureLeaderProfileAndBuild(campaign);
+              ensureCampaignRecruitmentScaffold(campaign);
               return true;
             }
             campaign = migrateCampaign(parsed?.saveVersion, parsed);
             ensureLeaderProfileAndBuild(campaign);
+            ensureCampaignRecruitmentScaffold(campaign);
             saveCampaign();
             showToast("세이브 버전 변경: 새로 시작");
             return false;
@@ -3250,6 +3501,7 @@
 
         function initializeStageSelect() {
           if (!campaign) return;
+          ensureCampaignRecruitmentScaffold(campaign);
           const unlocked = unlockedCampaignStageIds();
           stageSelect.innerHTML = unlocked.map((id) => {
             const playable = resolvePlayableStageId(id);
@@ -3264,6 +3516,7 @@
           if (topOption) stageSelect.value = topOption.value;
           if ([...menuStageSelect.options].some((o) => o.value === wantedCampaignId)) menuStageSelect.value = wantedCampaignId;
           else if (menuStageSelect.options.length) menuStageSelect.selectedIndex = 0;
+          menuStartBtn.textContent = `시작 (로스터 ${campaign.rosterIds.length})`;
         }
 
         function loadCampaignStage(campaignStageId, { save = true } = {}) {
@@ -3353,11 +3606,29 @@
           if (rosterId === "leader") {
             return applyLeaderProfileToSpawn({ id: "리더", name: "리더", faction: "player", x, y, spriteType: "soldier", paletteKey: "player", classId: "CL_SWD_GUARD", weaponType: "sword", perks: ["PRK_SHIELD_WALL"] });
           }
+          if (rosterId === "jeong2") {
+            return { ...RECRUITMENT_UNIT_DEFS.jeong2, x, y, controllable: true };
+          }
           if (rosterId === "jining") {
-            return { id: "지닝", name: "지닝", faction: "player", x, y, spriteType: "lancer", paletteKey: "player", classId: "CL_LNC_PIKER", weaponType: "lance", perks: ["PRK_STEADY_HAND"] };
+            return { id: "지닝", name: "지닝", faction: "player", x, y, spriteType: "lancer", paletteKey: "player", classId: "CL_LNC_PIKER", weaponType: "lance", perks: ["PRK_STEADY_HAND"], controllable: true };
           }
           if (rosterId === "able") {
-            return { id: "애블", name: "애블", faction: "player", x, y, spriteType: "lancer", paletteKey: "player", classId: "CL_STF_MENDER", weaponType: "staff", perks: ["PRK_MENDER_TOUCH", "PRK_PURIFY"] };
+            return { id: "애블", name: "애블", faction: "player", x, y, spriteType: "lancer", paletteKey: "player", classId: "CL_STF_MENDER", weaponType: "staff", perks: ["PRK_MENDER_TOUCH", "PRK_PURIFY"], controllable: true };
+          }
+          if (rosterId === "kimware") {
+            return { ...RECRUITMENT_UNIT_DEFS.kimware, x, y, controllable: true };
+          }
+          if (rosterId === "neoburi") {
+            return { ...RECRUITMENT_UNIT_DEFS.neoburi, x, y, controllable: true };
+          }
+          if (rosterId === "sireo") {
+            return { ...RECRUITMENT_UNIT_DEFS.sireo, x, y, controllable: true };
+          }
+          if (rosterId === "passerby") {
+            return { ...RECRUITMENT_UNIT_DEFS.passerby, x, y, controllable: true };
+          }
+          if (rosterId === "u_nyangsan") {
+            return { ...RECRUITMENT_UNIT_DEFS.u_nyangsan, x, y, controllable: true };
           }
           return null;
         }
@@ -3381,6 +3652,7 @@
           for (const spawn of stageSpawns) {
             spawnStageUnit(spawn);
           }
+          applyStageRecruitmentScaffoldOnLoad();
           stageObjectives = (stage.objectives || []).map((obj) => ({ ...cloneSimple(obj), status: "ongoing" }));
           stageTriggers = (stage.triggers || []).map((tr) => cloneSimple(tr));
           currentStageTileTags = cloneSimple(stage.tileTags || {});
@@ -3391,6 +3663,12 @@
           for (const e of stage.talkEvents || []) TALK_EVENTS.push(cloneSimple(e));
           firedStageTriggers = new Set();
           resetFlagsToDefaults(stage.flagDefaults || null);
+          if (campaign?.checkpointFlags) {
+            for (const [flagId, value] of Object.entries(campaign.checkpointFlags)) {
+              if (value === true) flags[flagId] = true;
+            }
+          }
+          ensureJiningTalkEventForStage();
           firedEvents.clear();
           for (const key of Object.keys(inventory)) delete inventory[key];
           eventLog.length = 0;
@@ -3895,6 +4173,7 @@
           unit.charId = unit.charId || resolveUnitCharId(unit);
           unit.portraitUrl = unit.portraitUrl || (CHARACTER_META[unit.charId]?.portraitUrl ?? null);
           unit.portraitAlt = unit.portraitAlt || unit.name || (CHARACTER_META[unit.charId]?.portraitAlt || "portrait");
+          if (unit.faction === "player" && unit.controllable == null) unit.controllable = true;
           unit.movedThisTurn = !!unit.movedThisTurn;
           unit.preMove = unit.preMove || null;
           unit.actionState = unit.actionState || "idle";
