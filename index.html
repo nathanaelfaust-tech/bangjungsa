@@ -2,7 +2,7 @@
   <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <title>Stage 1 SRPG Prototype</title>
     <style>
       :root {
@@ -68,6 +68,9 @@
         padding: 10px;
         background: linear-gradient(180deg, #0f151c 0%, #0b1016 100%);
         overflow: hidden;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
       }
 
       .canvas-wrap.invalid {
@@ -91,6 +94,10 @@
         background: #000;
         max-width: 100%;
         height: auto;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
       }
 
       .side {
@@ -152,6 +159,7 @@
         padding: 8px 12px;
         cursor: pointer;
         font-weight: 700;
+        min-height: 36px;
       }
 
       .btn:disabled {
@@ -208,6 +216,7 @@
         line-height: 1.1;
         cursor: pointer;
         font-weight: 700;
+        min-height: 28px;
       }
 
       .cmd-menu {
@@ -342,6 +351,77 @@
           min-height: auto;
         }
       }
+
+      @media (max-width: 820px) {
+        .app {
+          width: 100vw;
+          margin: 0;
+          padding: 8px;
+        }
+
+        .topbar {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 8px;
+          padding: 10px;
+        }
+
+        .guide strong {
+          display: inline-block;
+          font-size: 15px;
+          line-height: 1.35;
+        }
+
+        .guide .hint {
+          display: inline-block;
+          margin-left: 0;
+          margin-top: 4px;
+          font-size: 12px;
+          line-height: 1.3;
+        }
+
+        .btnRow {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        #stageSelect,
+        #menuStageSelect,
+        .btn,
+        .btnSmall,
+        .cmd-menu .btnSmall,
+        .menu-panel .btn {
+          min-height: 44px;
+          padding: 10px 12px;
+          font-size: 14px;
+        }
+
+        .canvas-wrap {
+          padding: 6px;
+        }
+
+        canvas {
+          width: 100%;
+          height: auto;
+        }
+
+        .side {
+          width: 100%;
+          max-height: 42vh;
+          overflow: auto;
+        }
+
+        .cmd-menu {
+          flex-wrap: wrap;
+          gap: 8px;
+          padding: 8px;
+        }
+
+        .menu-panel {
+          width: min(460px, 96vw);
+        }
+      }
     </style>
   </head>
   <body>
@@ -351,7 +431,9 @@
           <span id="phasePill" class="phase-pill">PLAYER</span>
           <strong id="guideText">아군 유닛 클릭 → 이동</strong>
           <span class="hint">Space/Enter: 턴 종료, G: 좌표</span>
+          <span id="touchHint" class="hint"></span>
           <span id="devHint" class="hint"></span>
+          <span id="touchDebug" class="hint"></span>
           <span id="debugReadout" class="hint"></span>
         </div>
         <div class="btnRow">
@@ -429,6 +511,8 @@
         const PHASE_BANNER_MS = 800;
         const CAMERA_PAN_PX_PER_SEC = 120;
         const EDGE_SCROLL_PX = 12;
+        const TOUCH_DRAG_THRESHOLD = 10;
+        const TOUCH_LONG_PRESS_MS = 450;
         const CAMERA_FOLLOW_MARGIN = TILE * 3;
         const INTERNAL_W = VIEW_W * TILE;
         const INTERNAL_H = VIEW_H * TILE;
@@ -731,7 +815,9 @@
         const objectiveListEl = document.getElementById("objectiveList");
         const canvasWrap = document.getElementById("canvasWrap");
         const debugReadout = document.getElementById("debugReadout");
+        const touchHintEl = document.getElementById("touchHint");
         const devHintEl = document.getElementById("devHint");
+        const touchDebugEl = document.getElementById("touchDebug");
         const minimap = document.getElementById("minimap");
         const miniCtx = minimap.getContext("2d");
         const centerCamBtn = document.getElementById("centerCamBtn");
@@ -830,6 +916,21 @@
         let devMode = false;
         let followSelected = false;
         let campaign = null;
+        let mobileHintShown = false;
+        let touchDebugText = "";
+        const pointerGesture = {
+          active: false,
+          dragging: false,
+          pointerId: null,
+          pointerType: "",
+          startX: 0,
+          startY: 0,
+          lastX: 0,
+          lastY: 0,
+          tapX: 0,
+          tapY: 0,
+          timer: null
+        };
         const minimapTerrainCache = document.createElement("canvas");
         minimapTerrainCache.width = MINI_W;
         minimapTerrainCache.height = MINI_H;
@@ -845,6 +946,10 @@
           updateInfoPanel();
         });
         canvas.addEventListener("mousedown", onMouseDown);
+        canvas.addEventListener("pointerdown", onPointerDown, { passive: false });
+        canvas.addEventListener("pointermove", onPointerMove, { passive: false });
+        canvas.addEventListener("pointerup", onPointerUp, { passive: false });
+        canvas.addEventListener("pointercancel", onPointerUp, { passive: false });
         minimap.addEventListener("mousedown", onMinimapMouseDown);
         centerCamBtn.addEventListener("click", onCenterCamera);
         followBtn.addEventListener("click", onToggleFollow);
@@ -866,21 +971,7 @@
         menuStartBtn.addEventListener("click", onMenuStartSelected);
         canvas.addEventListener("contextmenu", (e) => {
           e.preventDefault();
-          if (phase !== PHASE.PLAYER || inputLocked) return;
-          const undoUnit = getUndoCandidateUnit();
-          if (undoUnit) {
-            undoPendingMove(undoUnit);
-            return;
-          }
-          if (targetingUnitId) {
-            cancelTargetingToMenu();
-            return;
-          }
-          if (commandMenuUnitId) {
-            closeCommandMenu();
-            return;
-          }
-          clearSelection();
+          cancelPlayerInteraction();
         });
 
         window.addEventListener("keydown", (e) => {
@@ -922,13 +1013,7 @@
           if (e.key === "g" || e.key === "G") {
             showCoords = !showCoords;
           } else if (e.key === "Escape") {
-            if (!inputLocked && phase === PHASE.PLAYER) {
-              const undoUnit = getUndoCandidateUnit();
-              if (undoUnit) undoPendingMove(undoUnit);
-              else if (targetingUnitId) cancelTargetingToMenu();
-              else if (commandMenuUnitId) closeCommandMenu();
-              else clearSelection();
-            }
+            cancelPlayerInteraction();
           } else if (e.key === " " || e.key === "Enter") {
             if (canEndPlayerPhase()) {
               startEnemyPhase();
@@ -1376,23 +1461,47 @@
           );
         }
 
-        function onMouseMove(e) {
+        function setPointerDebug(eventType, pointerType, dragging) {
+          if (!devMode) return;
+          touchDebugText = `ptr: ${eventType} type=${pointerType || "-"} dragging=${dragging ? "true" : "false"}`;
+        }
+
+        function clientToTile(clientX, clientY) {
           const rect = canvas.getBoundingClientRect();
-          const mx = e.clientX - rect.left;
-          const my = e.clientY - rect.top;
+          const mx = clientX - rect.left;
+          const my = clientY - rect.top;
+          if (mx < 0 || my < 0 || mx >= rect.width || my >= rect.height) return null;
+
+          const scaledX = (mx / rect.width) * canvas.width;
+          const scaledY = (my / rect.height) * canvas.height;
+          const ix = Math.max(0, Math.min(INTERNAL_W - 1, Math.floor(scaledX / SCALE)));
+          const iy = Math.max(0, Math.min(INTERNAL_H - 1, Math.floor(scaledY / SCALE)));
+          const wx = ix + Math.floor(camera.xPx);
+          const wy = iy + Math.floor(camera.yPx);
+          return { x: Math.floor(wx / TILE), y: Math.floor(wy / TILE) };
+        }
+
+        function handlePointerMove(clientX, clientY) {
+          const rect = canvas.getBoundingClientRect();
+          const mx = clientX - rect.left;
+          const my = clientY - rect.top;
           edgePan.x = mx <= EDGE_SCROLL_PX ? -1 : (mx >= rect.width - EDGE_SCROLL_PX ? 1 : 0);
           edgePan.y = my <= EDGE_SCROLL_PX ? -1 : (my >= rect.height - EDGE_SCROLL_PX ? 1 : 0);
-          const t = mouseToTile(e);
+          const t = clientToTile(clientX, clientY);
           hoverTile = t && inBounds(t.x, t.y) ? t : null;
         }
 
-        function onMouseDown(e) {
-          if (e.button === 2) return;
-          if (e.button !== 0) return;
+        function onMouseMove(e) {
+          handlePointerMove(e.clientX, e.clientY);
+        }
+
+        function handlePointerDown(clientX, clientY, buttonLike = 0) {
+          if (buttonLike === 2) return;
+          if (buttonLike !== 0) return;
           if (battleOver || inputLocked || activeMove || turnBusy) return;
           if (phase !== PHASE.PLAYER) return;
 
-          const t = mouseToTile(e);
+          const t = clientToTile(clientX, clientY);
           if (!t || !inBounds(t.x, t.y)) return;
 
           const u = getUnitAt(t.x, t.y);
@@ -1451,6 +1560,132 @@
           }
 
           executePlayerMove(su, path);
+        }
+
+        function onMouseDown(e) {
+          handlePointerDown(e.clientX, e.clientY, e.button);
+        }
+
+        function isMobileLayout() {
+          return window.matchMedia("(max-width: 820px)").matches;
+        }
+
+        function clearTouchLongPressTimer() {
+          if (pointerGesture.timer) {
+            clearTimeout(pointerGesture.timer);
+            pointerGesture.timer = null;
+          }
+        }
+
+        function cancelPlayerInteraction() {
+          if (phase !== PHASE.PLAYER || inputLocked) return false;
+          const undoUnit = getUndoCandidateUnit();
+          if (undoUnit) return undoPendingMove(undoUnit);
+          if (targetingUnitId) {
+            cancelTargetingToMenu();
+            return true;
+          }
+          if (commandMenuUnitId) {
+            closeCommandMenu();
+            return true;
+          }
+          if (selectedUnitId) {
+            clearSelection();
+            return true;
+          }
+          return false;
+        }
+
+        function handlePointerCancel() {
+          cancelPlayerInteraction();
+        }
+
+        function isMobilePointer(e) {
+          return e.pointerType === "touch" || e.pointerType === "pen";
+        }
+
+        function handlePointerTap(clientX, clientY) {
+          handlePointerDown(clientX, clientY, 0);
+        }
+
+        function onPointerDown(e) {
+          if (!isMobilePointer(e)) return;
+          pointerGesture.active = true;
+          pointerGesture.dragging = false;
+          pointerGesture.pointerId = e.pointerId;
+          pointerGesture.pointerType = e.pointerType;
+          pointerGesture.startX = e.clientX;
+          pointerGesture.startY = e.clientY;
+          pointerGesture.lastX = e.clientX;
+          pointerGesture.lastY = e.clientY;
+          pointerGesture.tapX = e.clientX;
+          pointerGesture.tapY = e.clientY;
+          clearTouchLongPressTimer();
+          pointerGesture.timer = setTimeout(() => {
+            if (!pointerGesture.active || pointerGesture.dragging) return;
+            handlePointerCancel();
+            setPointerDebug("longpress", pointerGesture.pointerType, false);
+          }, TOUCH_LONG_PRESS_MS);
+          if (canvas.setPointerCapture) {
+            try { canvas.setPointerCapture(e.pointerId); } catch {}
+          }
+          handlePointerMove(e.clientX, e.clientY);
+          setPointerDebug("down", e.pointerType, false);
+          e.preventDefault();
+        }
+
+        function onPointerMove(e) {
+          if (!isMobilePointer(e)) return;
+          if (!pointerGesture.active || e.pointerId !== pointerGesture.pointerId) return;
+          const dxFromStart = e.clientX - pointerGesture.startX;
+          const dyFromStart = e.clientY - pointerGesture.startY;
+          const moved = Math.hypot(dxFromStart, dyFromStart);
+          if (!pointerGesture.dragging && moved > TOUCH_DRAG_THRESHOLD) {
+            pointerGesture.dragging = true;
+            clearTouchLongPressTimer();
+          }
+          const dx = e.clientX - pointerGesture.lastX;
+          const dy = e.clientY - pointerGesture.lastY;
+          pointerGesture.lastX = e.clientX;
+          pointerGesture.lastY = e.clientY;
+          if (pointerGesture.dragging) {
+            camera.xPx -= dx / SCALE;
+            camera.yPx -= dy / SCALE;
+            clampCamera();
+            edgePan.x = 0;
+            edgePan.y = 0;
+          } else {
+            handlePointerMove(e.clientX, e.clientY);
+          }
+          setPointerDebug("move", e.pointerType, pointerGesture.dragging);
+          e.preventDefault();
+        }
+
+        function onPointerUp(e) {
+          if (!isMobilePointer(e)) return;
+          if (!pointerGesture.active || e.pointerId !== pointerGesture.pointerId) {
+            e.preventDefault();
+            return;
+          }
+          clearTouchLongPressTimer();
+          const wasDragging = pointerGesture.dragging;
+          const tapX = pointerGesture.tapX;
+          const tapY = pointerGesture.tapY;
+          const pType = pointerGesture.pointerType;
+          pointerGesture.active = false;
+          pointerGesture.dragging = false;
+          pointerGesture.pointerId = null;
+          pointerGesture.pointerType = "";
+          if (canvas.releasePointerCapture) {
+            try { canvas.releasePointerCapture(e.pointerId); } catch {}
+          }
+          setPointerDebug(e.type === "pointercancel" ? "cancel" : "up", pType, wasDragging);
+          if (wasDragging) {
+            e.preventDefault();
+            return;
+          }
+          handlePointerTap(tapX, tapY);
+          e.preventDefault();
         }
 
         function onMinimapMouseDown(e) {
@@ -1816,7 +2051,9 @@
           } else {
             guideText.textContent = "상대/우냥산 행동 중…";
           }
+          touchHintEl.textContent = isMobileLayout() ? "드래그: 화면 이동 / 탭: 선택 / 길게: 취소" : "";
           devHintEl.textContent = devMode ? "DEV: Tab=토글, K=적전멸, V=승리, H=적1HP, R=재시작, C=공터이동" : "";
+          touchDebugEl.textContent = devMode ? touchDebugText : "";
           endPhaseBtn.disabled = !canEndPlayerPhase();
           if (showDebugReadout) {
             const cx = Math.floor(camera.xPx / TILE);
@@ -1984,18 +2221,7 @@
         }
 
         function mouseToTile(e) {
-          const rect = canvas.getBoundingClientRect();
-          const mx = e.clientX - rect.left;
-          const my = e.clientY - rect.top;
-          if (mx < 0 || my < 0 || mx >= rect.width || my >= rect.height) return null;
-
-          const scaledX = (mx / rect.width) * canvas.width;
-          const scaledY = (my / rect.height) * canvas.height;
-          const ix = Math.max(0, Math.min(INTERNAL_W - 1, Math.floor(scaledX / SCALE)));
-          const iy = Math.max(0, Math.min(INTERNAL_H - 1, Math.floor(scaledY / SCALE)));
-          const wx = ix + Math.floor(camera.xPx);
-          const wy = iy + Math.floor(camera.yPx);
-          return { x: Math.floor(wx / TILE), y: Math.floor(wy / TILE) };
+          return clientToTile(e.clientX, e.clientY);
         }
 
         function invalidFeedback() {
@@ -2564,6 +2790,10 @@
           setPhase(PHASE.PLAYER, true);
           addLog(`스테이지 로드: ${stage.name || currentStageId}`);
           showToast(`${stage.name || currentStageId}`);
+          if (isMobileLayout() && !mobileHintShown) {
+            mobileHintShown = true;
+            setTimeout(() => showToast("드래그: 화면 이동 / 탭: 선택 / 길게: 취소", 1900), 220);
+          }
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
           updateTopGuide();
