@@ -695,6 +695,7 @@
         <h3 style="margin:0;color:#b9d9ff;">Season1 캠페인</h3>
         <div class="btnRow">
           <button id="menuContinueBtn" class="btn" type="button">이어하기</button>
+          <button id="menuCampBtn" class="btn" style="display:none;" type="button">캠프</button>
           <button id="menuNewBtn" class="btn" type="button">새로 시작</button>
         </div>
         <div class="small">리더 이름</div>
@@ -731,15 +732,24 @@
     <div id="campOverlay" class="camp-overlay">
       <div class="camp-panel">
         <h3 style="margin:0;color:#b9d9ff;">캠프</h3>
-        <div id="campDialogue" class="camp-dialogue">캠프가 열리면 먼지가 길잡이처럼 이야기해줘여.</div>
-        <div id="campTopicRow" class="btnRow" style="display:none;">
-          <button id="campTopicRecapBtn" class="btnSmall" type="button">[리캡] 지금 뭐 하면 되나여?</button>
-          <button id="campTopicHintBtn" class="btnSmall" type="button">[힌트] 다음 스테이지… 조심할 거 있나여?</button>
-          <button id="campTopicJokeBtn" class="btnSmall" type="button">[잡담] 도망가면 되죠ㅋㅋㅋㅋㅋ</button>
-        </div>
+        <div id="campDialogue" class="camp-dialogue">먼지가 여기 있어여. 말 걸어보세여…네여.</div>
         <div class="btnRow">
           <button id="campTalkBtn" class="btnSmall" type="button">먼지에게 말걸기</button>
           <button id="campCloseBtn" class="btn" type="button">닫기</button>
+        </div>
+      </div>
+    </div>
+    <div id="meonjiOverlay" class="camp-overlay">
+      <div class="camp-panel">
+        <h3 style="margin:0;color:#b9d9ff;">먼지</h3>
+        <div class="btnRow">
+          <button id="meonjiTopicRecapBtn" class="btnSmall" type="button">[리캡]</button>
+          <button id="meonjiTopicHintBtn" class="btnSmall" type="button">[힌트]</button>
+          <button id="meonjiTopicJokeBtn" class="btnSmall" type="button">[잡담]</button>
+        </div>
+        <div id="meonjiDialogue" class="camp-dialogue">언제 가요?? …네여</div>
+        <div class="btnRow">
+          <button id="meonjiCloseBtn" class="btn" type="button">닫기</button>
         </div>
       </div>
     </div>
@@ -1238,6 +1248,7 @@
         const nextStageBtn = document.getElementById("nextStageBtn");
         const menuOverlay = document.getElementById("menuOverlay");
         const menuContinueBtn = document.getElementById("menuContinueBtn");
+        const menuCampBtn = document.getElementById("menuCampBtn");
         const menuNewBtn = document.getElementById("menuNewBtn");
         const menuLeaderName = document.getElementById("menuLeaderName");
         const menuMbti = document.getElementById("menuMbti");
@@ -1245,12 +1256,14 @@
         const menuStartBtn = document.getElementById("menuStartBtn");
         const campOverlay = document.getElementById("campOverlay");
         const campDialogue = document.getElementById("campDialogue");
-        const campTopicRow = document.getElementById("campTopicRow");
-        const campTopicRecapBtn = document.getElementById("campTopicRecapBtn");
-        const campTopicHintBtn = document.getElementById("campTopicHintBtn");
-        const campTopicJokeBtn = document.getElementById("campTopicJokeBtn");
         const campTalkBtn = document.getElementById("campTalkBtn");
         const campCloseBtn = document.getElementById("campCloseBtn");
+        const meonjiOverlay = document.getElementById("meonjiOverlay");
+        const meonjiDialogue = document.getElementById("meonjiDialogue");
+        const meonjiTopicRecapBtn = document.getElementById("meonjiTopicRecapBtn");
+        const meonjiTopicHintBtn = document.getElementById("meonjiTopicHintBtn");
+        const meonjiTopicJokeBtn = document.getElementById("meonjiTopicJokeBtn");
+        const meonjiCloseBtn = document.getElementById("meonjiCloseBtn");
         const cmdMenu = document.createElement("div");
         cmdMenu.className = "cmd-menu";
         cmdMenu.innerHTML = `<button id="cmdAttack" class="btnSmall" type="button">공격</button>
@@ -1388,7 +1401,7 @@
         let devMenuOverlay = null;
         let devFlagPanelEl = null;
         let devFlagListEl = null;
-        let campTopicUnlocked = false;
+        let campAutoOpenPending = false;
         const mousePan = { active: false, button: -1, lastX: 0, lastY: 0 };
         const pointerGesture = {
           active: false,
@@ -1540,12 +1553,17 @@
         }
 
         function isCampAvailable() {
-          return !!(campaign && ((campaign.stageProgress ?? 0) >= 2 || campaign.checkpointFlags?.CAMP_UNLOCKED));
+          return !!(campaign && campaign.campUnlocked === true);
         }
 
         function updateCampButtonVisibility() {
           if (!campBtn) return;
           campBtn.style.display = isCampAvailable() ? "inline-block" : "none";
+        }
+
+        function updateMenuCampButtonVisibility() {
+          if (!menuCampBtn) return;
+          menuCampBtn.style.display = isCampAvailable() ? "inline-block" : "none";
         }
 
         function setCampDialogueLines(lines) {
@@ -1554,32 +1572,10 @@
         }
 
         function meonjiCampLines(topic) {
-          if (topic === "intro") {
-            return [
-              "먼지: 튜토리얼 끝났네여… 캠프에서 숨 한번 고르고 가세여.",
-              "먼지: 지금부터는 제가 길잡이처럼 정리해드릴게여, 글쿤여.",
-              "먼지: 티끌 같은 정보라도 쌓이면 큰 길이 되더라구여."
-            ];
-          }
-          if (topic === "recap") {
-            return [
-              "먼지: 지금 뭐 하면 되나여? 라고 물어보시면…",
-              "먼지: 캠프에서 정리하고, 다음 전장 들어가기 전에 사람들 상태부터 봐주세여…네여.",
-              "먼지: 급하면 도망이 아니라 순서 정리부터… 그게 제일 덜 흔들리더라구여."
-            ];
-          }
-          if (topic === "hint") {
-            return [
-              "먼지: 다음엔 다치는 분이랑 지켜야 하는 분, 두 분 흐름이 겹칠 때가 있어여…어용.",
-              "먼지: 한 분이라도 놓치면 분위기가 확 식어버리니까, 먼저 붙어줄 사람 정해두세여.",
-              "먼지: 또 어떤 날은 체력이 조금 떨어진 순간에 말로 붙잡아야 길이 열리더라구여…구여."
-            ];
-          }
-          return [
-            "먼지: 도망가면 되죠ㅋㅋㅋㅋㅋ …라고 해도, 타로는 자꾸 정면승부 카드만 나오네여.",
-            "먼지: 티끌 취급 받아도 괜찮아여, 티끌이 모이면 길 표지판 되거든여.",
-            "먼지: 오늘은 웃고 넘기고, 내일은 제가 진짜로 한 칸 같이 걸어볼게여."
-          ];
+          if (topic === "intro") return ["먼지: 튜토리얼 끝났네여.", "먼지: 캠프에서 잠깐 정리하고 가세여…어용."];
+          if (topic === "recap") return ["언제 가요?? …네여", "다음은 스테이지 2…어용"];
+          if (topic === "hint") return ["부상자랑 보호자… 구여", "체력 좀 떨어지면…네여"];
+          return ["도망가면 되죠ㅋㅋㅋㅋㅋ", "글쿤여"];
         }
 
         function closeCampModal() {
@@ -1592,25 +1588,23 @@
           if (!isCampAvailable() || !campOverlay) return;
           campOverlay.classList.add("show");
           inputLocked = true;
-          campTopicUnlocked = false;
-          if (campTopicRow) campTopicRow.style.display = "none";
-          if (intro) {
-            setCampDialogueLines(meonjiCampLines("intro"));
-            if (campaign) {
-              ensureCampaignRecruitmentScaffold(campaign);
-              campaign.checkpointFlags.CAMP_INTRO_SHOWN = true;
-              saveCampaign();
-            }
-          } else {
-            setCampDialogueLines([
-              "먼지: 캠프 왔네여. 필요한 얘기부터 골라보세여…구여."
-            ]);
-          }
+          setCampDialogueLines(intro ? meonjiCampLines("intro") : ["먼지가 기다리고 있어여.", "말 걸어서 확인해보세여."]);
         }
 
-        function openCampTopic(topic) {
-          if (!campTopicUnlocked || !campTopicRow) return;
-          setCampDialogueLines(meonjiCampLines(topic));
+        function closeMeonjiModal() {
+          if (!meonjiOverlay) return;
+          meonjiOverlay.classList.remove("show");
+        }
+
+        function openMeonjiModal() {
+          if (!meonjiOverlay) return;
+          meonjiOverlay.classList.add("show");
+          if (meonjiDialogue) meonjiDialogue.textContent = meonjiCampLines("recap").join("\n");
+        }
+
+        function openMeonjiTopic(topic) {
+          if (!meonjiDialogue) return;
+          meonjiDialogue.textContent = meonjiCampLines(topic).join("\n");
         }
 
         loadVisualSkin();
@@ -1618,6 +1612,7 @@
         ensureDevMenuOverlay();
         updateDevStatusLabel();
         updateCampButtonVisibility();
+        updateMenuCampButtonVisibility();
 
         canvas.addEventListener("mousemove", onMouseMove);
         canvas.addEventListener("mouseleave", () => {
@@ -1641,17 +1636,18 @@
         centerCamBtn.addEventListener("click", onCenterCamera);
         followBtn.addEventListener("click", onToggleFollow);
         if (campBtn) campBtn.addEventListener("click", () => openCampModal({ intro: false }));
+        if (menuCampBtn) menuCampBtn.addEventListener("click", () => openCampModal({ intro: false }));
         if (campCloseBtn) campCloseBtn.addEventListener("click", () => closeCampModal());
-        if (campTalkBtn) campTalkBtn.addEventListener("click", () => {
-          campTopicUnlocked = true;
-          if (campTopicRow) campTopicRow.style.display = "grid";
-          openCampTopic("recap");
-        });
-        if (campTopicRecapBtn) campTopicRecapBtn.addEventListener("click", () => openCampTopic("recap"));
-        if (campTopicHintBtn) campTopicHintBtn.addEventListener("click", () => openCampTopic("hint"));
-        if (campTopicJokeBtn) campTopicJokeBtn.addEventListener("click", () => openCampTopic("joke"));
+        if (campTalkBtn) campTalkBtn.addEventListener("click", () => openMeonjiModal());
+        if (meonjiTopicRecapBtn) meonjiTopicRecapBtn.addEventListener("click", () => openMeonjiTopic("recap"));
+        if (meonjiTopicHintBtn) meonjiTopicHintBtn.addEventListener("click", () => openMeonjiTopic("hint"));
+        if (meonjiTopicJokeBtn) meonjiTopicJokeBtn.addEventListener("click", () => openMeonjiTopic("joke"));
+        if (meonjiCloseBtn) meonjiCloseBtn.addEventListener("click", () => closeMeonjiModal());
         if (campOverlay) campOverlay.addEventListener("click", (e) => {
           if (e.target === campOverlay) closeCampModal();
+        });
+        if (meonjiOverlay) meonjiOverlay.addEventListener("click", (e) => {
+          if (e.target === meonjiOverlay) closeMeonjiModal();
         });
         if (DEV_BUILD && devToggleBtn) devToggleBtn.addEventListener("click", () => setDevMode(!devMode));
         if (DEV_BUILD && devMenuBtn) devMenuBtn.addEventListener("click", () => openDevMenu());
@@ -3102,6 +3098,7 @@
           }
           updateDevStatusLabel();
           updateCampButtonVisibility();
+          updateMenuCampButtonVisibility();
         }
 
         function updateInfoPanel() {
@@ -3433,9 +3430,7 @@
             LEADER_TALK_SUCCESS: false,
             WOO_HIDDEN_TILE: false,
             WOO_DIALOG_CHAIN: false,
-            ABLE_BOSS_TURN: false,
-            CAMP_UNLOCKED: false,
-            CAMP_INTRO_SHOWN: false
+            ABLE_BOSS_TURN: false
           };
         }
 
@@ -3463,6 +3458,7 @@
             ...checkpointFlagDefaults(),
             ...(targetCampaign.checkpointFlags || {})
           };
+          if (typeof targetCampaign.campUnlocked !== "boolean") targetCampaign.campUnlocked = false;
           if (!Array.isArray(targetCampaign.rosterIds)) targetCampaign.rosterIds = ["leader", "jeong2", "able"];
         }
 
@@ -3818,6 +3814,7 @@
               seed: 0
             },
             recruitedFlags: recruitedFlagDefaults(),
+            campUnlocked: false,
             hiddenScore: 0,
             checkpointFlags: checkpointFlagDefaults(),
             ruleTwistSeen: false,
@@ -3943,17 +3940,23 @@
           if (idx >= 0) {
             campaign.stageProgress = Math.max(campaign.stageProgress, Math.min(CAMPAIGN_STAGE_ORDER.length - 1, idx + 1));
           }
-          let shouldOpenCampIntro = false;
+          let justUnlockedCamp = false;
           if (clearedStageId === "STG1_FOREST") {
-            campaign.checkpointFlags.CAMP_UNLOCKED = true;
-            shouldOpenCampIntro = !campaign.checkpointFlags.CAMP_INTRO_SHOWN;
+            if (!campaign.campUnlocked) {
+              campaign.campUnlocked = true;
+              justUnlockedCamp = true;
+              campAutoOpenPending = true; // transient: open once in this flow only
+            }
           }
           const nextId = nextCampaignStageId(campaign.currentStageId);
           if (nextId) campaign.currentStageId = nextId;
           saveCampaign();
           initializeStageSelect();
           nextStageBtn.style.display = nextId ? "inline-block" : "none";
-          if (shouldOpenCampIntro) openCampModal({ intro: true });
+          if (justUnlockedCamp && campAutoOpenPending) {
+            openCampModal({ intro: true });
+            campAutoOpenPending = false;
+          }
         }
 
         function onNextStage() {
