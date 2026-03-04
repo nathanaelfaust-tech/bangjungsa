@@ -1357,6 +1357,7 @@
         let firedSafetyRouteSteps = new Set();
         let turnGuidanceText = "";
         let toastTimer = null;
+        let stg2KimwareActive = false;
 
         let rng = mulberry32(SEED);
         let phase = PHASE.PLAYER;
@@ -3469,6 +3470,86 @@
           showToast(`${nameText} 합류! (${beforeCount}→${afterCount})`, 1700);
         }
 
+        function getKimwareUnit() {
+          return unitById("김웨어") || unitById("kimware");
+        }
+
+        function promoteKimwareToPlayer() {
+          const kimware = getKimwareUnit();
+          if (!kimware) return;
+          kimware.faction = "player";
+          kimware.paletteKey = "player";
+          kimware.controllable = true;
+          kimware.aiTeam = null;
+          kimware.acted = false;
+          stg2KimwareActive = true;
+        }
+
+        function ensureStg2KimwareRescueTalkEvent() {
+          if (currentCampaignStageId !== "STG2") return;
+          const exists = TALK_EVENTS.some((e) => e && e.eventId === "TE_STG2_RESCUE_KIMWARE");
+          if (exists) return;
+          TALK_EVENTS.push({
+            eventId: "TE_STG2_RESCUE_KIMWARE",
+            trigger: "adjacent+talk",
+            condition: "talk(리더→김웨어) && !RESCUE_KIMWARE_SUCCESS",
+            speakers: ["리더", "김웨어"],
+            lines: ["문 열어줘!", "지금 바로 나간다."],
+            effects: [{ type: "setFlag", flagId: RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS, value: true }],
+            once: true
+          });
+        }
+
+        function ensureStg2KimwareState() {
+          if (currentCampaignStageId !== "STG2") {
+            stg2KimwareActive = false;
+            return;
+          }
+          let kimware = getKimwareUnit();
+          if (!kimware) {
+            spawnStageUnit({
+              ...RECRUITMENT_UNIT_DEFS.kimware,
+              id: "김웨어",
+              name: "김웨어",
+              x: 6,
+              y: 10,
+              faction: "neutral",
+              paletteKey: "neutral",
+              controllable: false,
+              aiHint: "holdLine"
+            });
+            kimware = getKimwareUnit();
+          }
+          if (!kimware) return;
+          stg2KimwareActive = true;
+          if (getFlag(RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS)) {
+            promoteKimwareToPlayer();
+          } else {
+            kimware.faction = "neutral";
+            kimware.paletteKey = "neutral";
+            kimware.controllable = false;
+            kimware.aiTeam = "allyGuest";
+            ensureStg2KimwareRescueTalkEvent();
+          }
+        }
+
+        function triggerDefeat(reasonText = "DEFEAT") {
+          if (battleOver) return;
+          addLog(reasonText);
+          showToast(reasonText);
+          setBattleResult("DEFEAT");
+        }
+
+        function checkStage2KimwareFail() {
+          if (battleOver || currentCampaignStageId !== "STG2" || !stg2KimwareActive) return false;
+          const kimware = getKimwareUnit();
+          if (!kimware || kimware.hp <= 0) {
+            triggerDefeat("Kimwear down");
+            return true;
+          }
+          return false;
+        }
+
         function ensureJiningTalkEventForStage() {
           if (currentCampaignStageId !== "STG5") return;
           if (!getFlag(RECRUITMENT_FLAG_IDS.JINING_HP_LOW) || getFlag(RECRUITMENT_FLAG_IDS.LEADER_TALK_SUCCESS)) return;
@@ -3532,7 +3613,9 @@
           };
 
           if (flagId === RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS && getFlag(flagId)) {
+            promoteKimwareToPlayer();
             if (joinByRoster("kimware", "kimwareJoined", "김웨어")) changed = true;
+            saveCampaign();
           }
           if (flagId === RECRUITMENT_FLAG_IDS.NUBURI_JOIN && getFlag(flagId)) {
             if (joinByRoster("neoburi", "neoburiJoined", "너부리")) changed = true;
@@ -4216,6 +4299,7 @@
               if (value === true) flags[flagId] = true;
             }
           }
+          ensureStg2KimwareState();
           ensureJiningTalkEventForStage();
           firedEvents.clear();
           for (const key of Object.keys(inventory)) delete inventory[key];
@@ -4257,6 +4341,7 @@
           }
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
+          checkStage2KimwareFail();
           updateTopGuide();
         }
 
@@ -4900,9 +4985,11 @@
             targetingMode = null;
           }
           evaluateObjectives({ type: "unitRemoved", unitId: id });
+          checkStage2KimwareFail();
         }
 
         function checkBattleEnd() {
+          if (checkStage2KimwareFail()) return true;
           const players = units.filter(u => u.faction === "player");
           if (players.length === 0) {
             setBattleResult("DEFEAT");
