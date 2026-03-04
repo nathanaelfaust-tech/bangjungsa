@@ -1215,6 +1215,7 @@
         let campaign = null;
         let mobileHintShown = false;
         let touchDebugText = "";
+        let stagePlayerSpawnFilterNoticeShown = false;
         const mousePan = { active: false, button: -1, lastX: 0, lastY: 0 };
         const pointerGesture = {
           active: false,
@@ -3639,6 +3640,81 @@
           if (extraDefaults) Object.assign(flags, extraDefaults);
         }
 
+        function getPlayerStartTilesFromStage() {
+          const out = [];
+          for (const [tag, tiles] of Object.entries(currentStageTileTags || {})) {
+            if (!Array.isArray(tiles)) continue;
+            if (tag === "PLAYER_START" || /_PLAYER_START$/.test(tag)) out.push(...tiles);
+          }
+          out.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+          return out;
+        }
+
+        function defaultPlayerStartTileByIndex(idx) {
+          const rowWidth = 3;
+          const x = 2 + (idx % rowWidth);
+          const y = Math.max(1, MAP_H - 4 + Math.floor(idx / rowWidth));
+          return { x, y };
+        }
+
+        function clearExistingPlayerUnits() {
+          units = units.filter((u) => u.faction !== "player");
+        }
+
+        function spawnEnemiesAndNeutralsFromStage(stage) {
+          const stageSpawns = Array.isArray(stage?.spawns) ? stage.spawns : [];
+          let filteredPlayerCount = 0;
+          for (const rawSpawn of stageSpawns) {
+            if (!rawSpawn || !rawSpawn.id) continue;
+            const spawn = cloneSimple(rawSpawn);
+
+            const explicitGuest = spawn.faction === "guest" || spawn.controllable === false || spawn.guest === true;
+            if (spawn.faction === "player" && !explicitGuest) {
+              filteredPlayerCount++;
+              continue;
+            }
+
+            if (spawn.faction === "guest") {
+              spawn.faction = "player";
+              spawn.controllable = false;
+              spawn.aiTeam = spawn.aiTeam || "allyGuest";
+            }
+            if (spawn.faction === "player" && explicitGuest) {
+              spawn.controllable = false;
+              spawn.aiTeam = spawn.aiTeam || "allyGuest";
+            }
+
+            if (spawn.faction !== "enemy" && spawn.faction !== "neutral" && spawn.faction !== "player") continue;
+            spawnStageUnit(spawn);
+          }
+          if (filteredPlayerCount > 0 && devMode && !stagePlayerSpawnFilterNoticeShown) {
+            addLog(`DEV: stage player spawns filtered (${filteredPlayerCount})`);
+            stagePlayerSpawnFilterNoticeShown = true;
+          }
+        }
+
+        function spawnPlayersFromCampaignRoster() {
+          ensureCampaignRecruitmentScaffold(campaign);
+          const rosterIds = Array.isArray(campaign?.rosterIds) ? campaign.rosterIds : [];
+          const taggedStarts = getPlayerStartTilesFromStage();
+
+          rosterIds.forEach((rosterId, idx) => {
+            const spawn = rosterSpawnById(rosterId, idx);
+            if (!spawn) return;
+            const preferred = taggedStarts[idx] || defaultPlayerStartTileByIndex(idx);
+            const tile = findFreeSpawnTile(preferred.x, preferred.y, 12);
+            if (tile) {
+              spawn.x = tile.x;
+              spawn.y = tile.y;
+            } else {
+              spawn.x = preferred.x;
+              spawn.y = preferred.y;
+            }
+            spawn.controllable = true;
+            spawnStageUnit(spawn);
+          });
+        }
+
         function loadStage(stageId) {
           const stage = STAGES[stageId] || STAGES[CURRENT_STAGE];
           currentStageId = stageId in STAGES ? stageId : CURRENT_STAGE;
@@ -3646,16 +3722,13 @@
           MAP_ROWS = stage.mapData ? cloneSimple(stage.mapData) : (stage.mapGen ? stage.mapGen() : buildMapRows(SEED));
           rng = mulberry32(SEED);
           units = [];
-          const stageSpawns = Array.isArray(stage.spawns) && stage.spawns.length
-            ? stage.spawns
-            : ((campaign?.rosterIds || []).map((id, i) => rosterSpawnById(id, i)).filter(Boolean));
-          for (const spawn of stageSpawns) {
-            spawnStageUnit(spawn);
-          }
+          clearExistingPlayerUnits();
+          currentStageTileTags = cloneSimple(stage.tileTags || {});
+          spawnEnemiesAndNeutralsFromStage(stage);
+          spawnPlayersFromCampaignRoster();
           applyStageRecruitmentScaffoldOnLoad();
           stageObjectives = (stage.objectives || []).map((obj) => ({ ...cloneSimple(obj), status: "ongoing" }));
           stageTriggers = (stage.triggers || []).map((tr) => cloneSimple(tr));
-          currentStageTileTags = cloneSimple(stage.tileTags || {});
           safetyRouteSteps = (stage.safetyRoute || []).map((s) => cloneSimple(s));
           firedSafetyRouteSteps = new Set();
           turnGuidanceText = "";
