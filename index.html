@@ -239,6 +239,47 @@
         min-width: 56px;
       }
 
+      #devMenuBtn {
+        min-height: 36px;
+        min-width: 72px;
+      }
+
+      .dev-menu-overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(5, 8, 12, 0.78);
+        z-index: 70;
+      }
+
+      .dev-menu-overlay.show {
+        display: flex;
+      }
+
+      .dev-menu-panel {
+        width: min(440px, 94vw);
+        border: 1px solid #3a516d;
+        border-radius: 10px;
+        background: linear-gradient(180deg, #1b2634 0%, #121b27 100%);
+        padding: 12px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .dev-menu-actions,
+      .dev-flag-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .dev-flag-toggle.is-on {
+        border-color: #4cae6f;
+        background: linear-gradient(180deg, #29543a, #213f2e);
+      }
+
       .cmd-menu {
         position: absolute;
         z-index: 5;
@@ -494,6 +535,11 @@
           gap: 8px;
         }
 
+        .dev-menu-actions,
+        .dev-flag-list {
+          grid-template-columns: 1fr;
+        }
+
         #stageSelect,
         #menuStageSelect,
         .btn,
@@ -557,6 +603,7 @@
         <div class="btnRow">
           <select id="stageSelect" class="btnSmall"></select>
           <button id="devToggleBtn" class="btnSmall" type="button">DEV</button>
+          <button id="devMenuBtn" class="btnSmall" style="display:none;" type="button">DEV 메뉴</button>
           <button id="skinToggleBtn" class="btnSmall" type="button">스킨: 레거시</button>
           <button id="nextStageBtn" class="btnSmall" style="display:none;" type="button">다음으로</button>
           <button id="restartBtn" class="btn" style="display:none;">재시작</button>
@@ -1132,6 +1179,7 @@
         const followBtn = document.getElementById("followBtn");
         const stageSelect = document.getElementById("stageSelect");
         const devToggleBtn = document.getElementById("devToggleBtn");
+        const devMenuBtn = document.getElementById("devMenuBtn");
         const skinToggleBtn = document.getElementById("skinToggleBtn");
         const nextStageBtn = document.getElementById("nextStageBtn");
         const menuOverlay = document.getElementById("menuOverlay");
@@ -1199,6 +1247,15 @@
           WOO_DIALOG_CHAIN: "WOO_DIALOG_CHAIN",
           ABLE_BOSS_TURN: "ABLE_BOSS_TURN"
         };
+        const DEV_MENU_FLAG_IDS = [
+          "RESCUE_KIMWARE_SUCCESS",
+          "NUBURI_JOIN",
+          "JINAGANEUN_JOIN",
+          "JINING_HP_LOW",
+          "LEADER_TALK_SUCCESS",
+          "WOO_HIDDEN_TILE",
+          "WOO_DIALOG_CHAIN"
+        ];
         const TALK_EVENTS = [];
         const RECRUIT_RULES = [];
         const EVENT_REGISTRY = {
@@ -1266,6 +1323,9 @@
         let mobileHintShown = false;
         let touchDebugText = "";
         let stagePlayerSpawnFilterNoticeShown = false;
+        let devMenuOverlay = null;
+        let devFlagPanelEl = null;
+        let devFlagListEl = null;
         const mousePan = { active: false, button: -1, lastX: 0, lastY: 0 };
         const pointerGesture = {
           active: false,
@@ -1288,14 +1348,117 @@
         if (!DEV_BUILD) {
           devMode = false;
           if (devToggleBtn) devToggleBtn.remove();
+          if (devMenuBtn) devMenuBtn.remove();
           devHintEl.style.display = "none";
           touchDebugEl.style.display = "none";
           debugReadout.style.display = "none";
         }
 
+        function updateDevControlsVisibility() {
+          if (!DEV_BUILD) return;
+          if (devToggleBtn) devToggleBtn.style.display = "inline-block";
+          if (devMenuBtn) devMenuBtn.style.display = devMode ? "inline-block" : "none";
+        }
+
         function updateDevStatusLabel() {
           if (!devStatusEl) return;
           devStatusEl.textContent = `DEV_BUILD=${DEV_BUILD ? "ON" : "OFF"}  DEV=${DEV_BUILD && devMode ? "ON" : "OFF"}`;
+          updateDevControlsVisibility();
+        }
+
+        function devSetEnemiesToOneHp() {
+          for (const u of units) {
+            if (u.faction === "enemy") u.hp = Math.min(u.hp, 1);
+          }
+          addLog("DEV: 적 HP를 1로 설정");
+          showToast("DEV: 적 1HP", 900);
+        }
+
+        function devRestartCurrentStage() {
+          loadStage(currentStageId);
+          showToast("DEV: 스테이지 리셋", 900);
+        }
+
+        function refreshDevFlagPanel() {
+          if (!DEV_BUILD || !devFlagListEl) return;
+          devFlagListEl.innerHTML = DEV_MENU_FLAG_IDS.map((flagId) => {
+            const on = getFlag(flagId);
+            return `<button type="button" class="btnSmall dev-flag-toggle ${on ? "is-on" : ""}" data-flag-id="${flagId}">${flagId}: ${on ? "ON" : "OFF"}</button>`;
+          }).join("");
+          for (const btn of devFlagListEl.querySelectorAll("[data-flag-id]")) {
+            btn.addEventListener("click", () => {
+              if (!DEV_BUILD || !devMode) return;
+              const flagId = btn.getAttribute("data-flag-id");
+              const next = !getFlag(flagId);
+              setFlag(flagId, next);
+              showToast(`FLAG ${next ? "ON" : "OFF"}: ${flagId}`, 1200);
+              refreshDevFlagPanel();
+            });
+          }
+        }
+
+        function closeDevMenu() {
+          if (!devMenuOverlay) return;
+          devMenuOverlay.classList.remove("show");
+          if (devFlagPanelEl) devFlagPanelEl.style.display = "none";
+        }
+
+        function openDevMenu() {
+          if (!DEV_BUILD || !devMode || !devMenuOverlay) return;
+          devMenuOverlay.classList.add("show");
+          if (devFlagPanelEl) devFlagPanelEl.style.display = "none";
+          refreshDevFlagPanel();
+        }
+
+        function ensureDevMenuOverlay() {
+          if (!DEV_BUILD || devMenuOverlay) return;
+          devMenuOverlay = document.createElement("div");
+          devMenuOverlay.className = "dev-menu-overlay";
+          devMenuOverlay.innerHTML = `<div class="dev-menu-panel" role="dialog" aria-modal="true">
+            <div style="font-weight:700;color:#b9d9ff;">DEV 메뉴</div>
+            <div class="dev-menu-actions">
+              <button type="button" class="btnSmall" data-dev-action="kill">적 전멸</button>
+              <button type="button" class="btnSmall" data-dev-action="victory">승리</button>
+              <button type="button" class="btnSmall" data-dev-action="hp1">적 1HP</button>
+              <button type="button" class="btnSmall" data-dev-action="reset">스테이지 리셋</button>
+              <button type="button" class="btnSmall" data-dev-action="flags">플래그</button>
+              <button type="button" class="btnSmall" data-dev-action="close">닫기</button>
+            </div>
+            <div id="devFlagPanel" style="display:none;">
+              <div class="small">Recruitment Flags</div>
+              <div id="devFlagList" class="dev-flag-list"></div>
+            </div>
+          </div>`;
+          document.body.appendChild(devMenuOverlay);
+          devFlagPanelEl = devMenuOverlay.querySelector("#devFlagPanel");
+          devFlagListEl = devMenuOverlay.querySelector("#devFlagList");
+          const panel = devMenuOverlay.querySelector(".dev-menu-panel");
+          if (panel) panel.addEventListener("click", (e) => e.stopPropagation());
+          devMenuOverlay.addEventListener("click", () => closeDevMenu());
+          for (const btn of devMenuOverlay.querySelectorAll("[data-dev-action]")) {
+            btn.addEventListener("click", () => {
+              if (!DEV_BUILD || !devMode) return;
+              const action = btn.getAttribute("data-dev-action");
+              if (action === "kill") {
+                killAllEnemiesDebug();
+                closeDevMenu();
+              } else if (action === "victory") {
+                setBattleResult("VICTORY");
+                closeDevMenu();
+              } else if (action === "hp1") {
+                devSetEnemiesToOneHp();
+                closeDevMenu();
+              } else if (action === "reset") {
+                devRestartCurrentStage();
+                closeDevMenu();
+              } else if (action === "flags") {
+                if (devFlagPanelEl) devFlagPanelEl.style.display = devFlagPanelEl.style.display === "none" ? "block" : "none";
+                refreshDevFlagPanel();
+              } else if (action === "close") {
+                closeDevMenu();
+              }
+            });
+          }
         }
 
         function setDevMode(nextValue) {
@@ -1308,12 +1471,14 @@
           devMode = next;
           addLog(devMode ? "DEV_MODE ON" : "DEV_MODE OFF");
           showToast(devMode ? "DEV ON" : "DEV OFF", 900);
+          if (!devMode) closeDevMenu();
           updateTopGuide();
           updateDevStatusLabel();
         }
 
         loadVisualSkin();
         initializeCampaignSystem();
+        ensureDevMenuOverlay();
         updateDevStatusLabel();
 
         canvas.addEventListener("mousemove", onMouseMove);
@@ -1338,6 +1503,7 @@
         centerCamBtn.addEventListener("click", onCenterCamera);
         followBtn.addEventListener("click", onToggleFollow);
         if (DEV_BUILD && devToggleBtn) devToggleBtn.addEventListener("click", () => setDevMode(!devMode));
+        if (DEV_BUILD && devMenuBtn) devMenuBtn.addEventListener("click", () => openDevMenu());
         skinToggleBtn.addEventListener("click", () => {
           const next = visualSkin === "legacy" ? "flat_v1" : "legacy";
           setVisualSkin(next, true);
