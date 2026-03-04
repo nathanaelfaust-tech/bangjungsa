@@ -434,7 +434,7 @@
         <div class="guide">
           <span id="phasePill" class="phase-pill">PLAYER</span>
           <strong id="guideText">아군 유닛 클릭 → 이동</strong>
-          <span class="hint">Space/Enter: 턴 종료, G: 좌표</span>
+          <span class="hint">Enter: 턴 종료, G: 좌표, SPACE+드래그: 화면 이동</span>
           <span id="touchHint" class="hint"></span>
           <span id="devHint" class="hint"></span>
           <span id="touchDebug" class="hint"></span>
@@ -668,6 +668,16 @@
         };
 
         const PHASE = { PLAYER: "PLAYER", ENEMY: "ENEMY", NEUTRAL: "NEUTRAL" };
+        const ClassRoleNames = {
+          CL_SWD_GUARD: "가드",
+          CL_AXE_BRUISER: "브루저",
+          CL_LNC_PIKER: "파이크",
+          CL_SWD_DUELIST: "듀얼리스트",
+          CL_BOW_RANGER: "레인저",
+          CL_STF_MENDER: "힐러",
+          CL_STF_HEXER: "헥서",
+          CL_NONE_JESTER: "제스터"
+        };
         const ClassTemplates = {
           CL_SWD_GUARD:   { weaponType: "sword", range: [1, 1], mov: 5, base: { hp: 30, atk: 10, def: 8, hit: 85, crit: 5 } },
           CL_AXE_BRUISER: { weaponType: "axe", range: [1, 1], mov: 4, base: { hp: 34, atk: 12, def: 7, hit: 75, crit: 5 } },
@@ -1023,6 +1033,7 @@
         let rng = mulberry32(SEED);
         let phase = PHASE.PLAYER;
         let selectedUnitId = null;
+        let hoveredUnitId = null;
         let hoverTile = null;
         let showCoords = false;
         let inputLocked = false;
@@ -1050,6 +1061,8 @@
         let campaign = null;
         let mobileHintShown = false;
         let touchDebugText = "";
+        let spaceHeld = false;
+        const mousePan = { active: false, button: -1, lastX: 0, lastY: 0 };
         const pointerGesture = {
           active: false,
           dragging: false,
@@ -1072,12 +1085,18 @@
 
         canvas.addEventListener("mousemove", onMouseMove);
         canvas.addEventListener("mouseleave", () => {
+          stopMousePan();
+          hoveredUnitId = null;
           hoverTile = null;
           edgePan.x = 0;
           edgePan.y = 0;
           updateInfoPanel();
         });
         canvas.addEventListener("mousedown", onMouseDown);
+        canvas.addEventListener("mouseup", onMouseUp);
+        canvas.addEventListener("auxclick", (e) => {
+          if (e.button === 1) e.preventDefault();
+        });
         canvas.addEventListener("pointerdown", onPointerDown, { passive: false });
         canvas.addEventListener("pointermove", onPointerMove, { passive: false });
         canvas.addEventListener("pointerup", onPointerUp, { passive: false });
@@ -1146,10 +1165,14 @@
             showCoords = !showCoords;
           } else if (e.key === "Escape") {
             cancelPlayerInteraction();
-          } else if (e.key === " " || e.key === "Enter") {
+          } else if (e.key === "Enter") {
             if (canEndPlayerPhase()) {
               startEnemyPhase();
             }
+          }
+          if (e.code === "Space") {
+            spaceHeld = true;
+            e.preventDefault();
           }
           if (e.key === "a" || e.key === "A" || e.key === "ArrowLeft") keyPan.left = true;
           if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") keyPan.right = true;
@@ -1158,10 +1181,15 @@
           if (!devMode && (e.key === "h" || e.key === "H")) showDebugReadout = !showDebugReadout;
         });
         window.addEventListener("keyup", (e) => {
+          if (e.code === "Space") spaceHeld = false;
           if (e.key === "a" || e.key === "A" || e.key === "ArrowLeft") keyPan.left = false;
           if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") keyPan.right = false;
           if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") keyPan.up = false;
           if (e.key === "s" || e.key === "S" || e.key === "ArrowDown") keyPan.down = false;
+        });
+        window.addEventListener("blur", () => {
+          spaceHeld = false;
+          stopMousePan();
         });
 
         endPhaseBtn.addEventListener("click", () => {
@@ -1614,6 +1642,18 @@
         }
 
         function handlePointerMove(clientX, clientY) {
+          if (mousePan.active) {
+            const dx = clientX - mousePan.lastX;
+            const dy = clientY - mousePan.lastY;
+            mousePan.lastX = clientX;
+            mousePan.lastY = clientY;
+            camera.xPx -= dx / SCALE;
+            camera.yPx -= dy / SCALE;
+            clampCamera();
+            edgePan.x = 0;
+            edgePan.y = 0;
+            return;
+          }
           const rect = canvas.getBoundingClientRect();
           const mx = clientX - rect.left;
           const my = clientY - rect.top;
@@ -1621,6 +1661,26 @@
           edgePan.y = my <= EDGE_SCROLL_PX ? -1 : (my >= rect.height - EDGE_SCROLL_PX ? 1 : 0);
           const t = clientToTile(clientX, clientY);
           hoverTile = t && inBounds(t.x, t.y) ? t : null;
+          hoveredUnitId = hoverTile ? (getUnitAt(hoverTile.x, hoverTile.y)?.id || null) : null;
+        }
+
+        function shouldStartMousePan(buttonLike) {
+          if (buttonLike === 1) return true;
+          return buttonLike === 0 && spaceHeld;
+        }
+
+        function startMousePan(buttonLike, clientX, clientY) {
+          mousePan.active = true;
+          mousePan.button = buttonLike;
+          mousePan.lastX = clientX;
+          mousePan.lastY = clientY;
+          edgePan.x = 0;
+          edgePan.y = 0;
+        }
+
+        function stopMousePan() {
+          mousePan.active = false;
+          mousePan.button = -1;
         }
 
         function onMouseMove(e) {
@@ -1628,6 +1688,10 @@
         }
 
         function handlePointerDown(clientX, clientY, buttonLike = 0) {
+          if (shouldStartMousePan(buttonLike)) {
+            startMousePan(buttonLike, clientX, clientY);
+            return;
+          }
           if (buttonLike === 2) return;
           if (buttonLike !== 0) return;
           if (battleOver || inputLocked || activeMove || turnBusy) return;
@@ -1695,7 +1759,13 @@
         }
 
         function onMouseDown(e) {
+          if (shouldStartMousePan(e.button)) e.preventDefault();
           handlePointerDown(e.clientX, e.clientY, e.button);
+        }
+
+        function onMouseUp(e) {
+          if (!mousePan.active) return;
+          if (mousePan.button === e.button || e.button === 0 || e.button === 1) stopMousePan();
         }
 
         function isMobileLayout() {
@@ -2207,10 +2277,14 @@
           }
 
           let target = selectedUnit();
+          if (!target && hoveredUnitId) target = unitById(hoveredUnitId);
           if (!target && hoverTile) target = getUnitAt(hoverTile.x, hoverTile.y);
 
           if (target) {
             const actedText = target.faction === "player" ? (target.acted ? "행동완료" : "대기") : "행동중";
+            const classLabel = target.classId || "CL_NONE";
+            const role = ClassRoleNames[classLabel] ? `(${ClassRoleNames[classLabel]})` : "";
+            const perkText = (target.perks && target.perks.length) ? target.perks.slice(0, 2).join(", ") : "-";
             let extraLine = "";
             if (hoverTile && target.x === hoverTile.x && target.y === hoverTile.y) {
               const attacker = unitById(targetingUnitId) || selectedUnit();
@@ -2225,7 +2299,9 @@
             }
             unitInfo.innerHTML =
               `<div><b>${target.name}</b> [${target.faction}]</div>` +
+              `<div class="small">직업: ${escapeHtml(classLabel)}${escapeHtml(role)} | 무기: ${escapeHtml(target.weaponType || "-")}</div>` +
               `<div class="small">HP ${target.hp}/${target.maxHp} | MOV ${target.mov} | ${actedText}</div>` +
+              `<div class="small">Perk: ${escapeHtml(perkText)}</div>` +
               extraLine;
             hpFill.style.width = `${(target.hp / target.maxHp) * 100}%`;
           } else {
@@ -2300,6 +2376,7 @@
 
         function clearSelection(removeRange = true) {
           selectedUnitId = null;
+          hoveredUnitId = null;
           if (removeRange) moveRange = null;
           rangePreview = null;
         }
@@ -2908,6 +2985,7 @@
           for (const key of Object.keys(inventory)) delete inventory[key];
           eventLog.length = 0;
           selectedUnitId = null;
+          hoveredUnitId = null;
           hoverTile = null;
           inputLocked = false;
           turnBusy = false;
