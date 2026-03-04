@@ -658,12 +658,30 @@
           hpAmber: "#F59E0B",
           dangerRed: "#EF4444"
         };
-        const CHARACTER_META = {
-          Player_Cute: { portraitUrl: null, portraitAlt: "뉴비" },
-          jeong2: { portraitUrl: null, portraitAlt: "정2" },
-          able: { portraitUrl: null, portraitAlt: "애블" },
-          kim_ware: { portraitUrl: null, portraitAlt: "김웨어" }
+        const CHAR_DB = {
+          Player_Cute: { id: "Player_Cute", name: "뉴비", tags: [], speech: { endings: [], ticks: [], emotes: [], style: "" }, quotes: [], meme: [], portraitUrl: null, portraitAlt: "뉴비" },
+          jeong2: { id: "jeong2", name: "정2", tags: [], speech: { endings: [], ticks: [], emotes: [], style: "" }, quotes: [], meme: [], portraitUrl: null, portraitAlt: "정2" },
+          able: { id: "able", name: "애블", tags: [], speech: { endings: [], ticks: [], emotes: [], style: "" }, quotes: [], meme: [], portraitUrl: null, portraitAlt: "애블" },
+          kim_ware: { id: "kim_ware", name: "김웨어", tags: [], speech: { endings: [], ticks: [], emotes: [], style: "" }, quotes: [], meme: [], portraitUrl: null, portraitAlt: "김웨어" },
+          meonji: {
+            id: "meonji",
+            name: "먼지",
+            tags: ["신입", "겸손개그", "자기소개장문", "질문러", "웃음연타", "귀여운어미", "디코언급", "타로"],
+            speech: {
+              endings: ["…네여", "…어용", "…구여"],
+              ticks: ["ㅋㅋㅋㅋㅋ", "언제 가요??", "글쿤여"],
+              emotes: [],
+              style: "존댓말 기반인데 어미를 ‘…네여/…어용/…구여’처럼 살짝 비틀어 귀엽게 만든다... (원문 그대로 유지)"
+            },
+            quotes: ["언제 가요??", "도망가면 되죠ㅋㅋ", "티끌이라 해도 돼요"],
+            meme: ["티끌", "도망(신입런)", "작은존재", "타로"],
+            portraitUrl: null,
+            portraitAlt: "먼지"
+          }
         };
+        const CHARACTER_META = Object.fromEntries(
+          Object.entries(CHAR_DB).map(([id, data]) => [id, { portraitUrl: data.portraitUrl ?? null, portraitAlt: data.portraitAlt || data.name || id }])
+        );
         const TIER1_POINT_COLORS = {
           Player_Cute: "#3498DB",
           jeong2: "#E67E22",
@@ -1165,7 +1183,8 @@
           neoburi: { id: "너부리", name: "너부리", faction: "player", x: 5, y: 10, spriteType: "cat", paletteKey: "player", classId: "CL_STF_HEXER", weaponType: "staff", perks: ["PRK_FRIENDLY_HECKLE"], aiHint: "supportSafe" },
           sireo: { id: "시리오", name: "시리오", faction: "player", x: 6, y: 10, spriteType: "scout", paletteKey: "player", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_EAGLE_EYE"], aiHint: "holdLine" },
           passerby: { id: "지나가는사람", name: "지나가는사람", faction: "player", x: 7, y: 10, spriteType: "cat", paletteKey: "player", classId: "CL_NONE_JESTER", weaponType: "none", perks: ["PRK_SHOWTIME", "PRK_FRIENDLY_HECKLE", "PRK_LAST_LAUGH"], aiHint: "disrupt" },
-          u_nyangsan: { id: "우냥산", name: "우냥산", faction: "player", x: 8, y: 10, spriteType: "cat", paletteKey: "player", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_SNACK_BREAK"], aiHint: "wanderSleep" }
+          u_nyangsan: { id: "우냥산", name: "우냥산", faction: "player", x: 8, y: 10, spriteType: "cat", paletteKey: "player", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_SNACK_BREAK"], aiHint: "wanderSleep" },
+          meonji: { id: "먼지", name: "먼지", faction: "player", x: 9, y: 10, spriteType: "scout", paletteKey: "player", classId: "CL_STF_MENDER", weaponType: "staff", perks: ["PRK_SHOWTIME", "PRK_SNACK_BREAK"], aiHint: "supportSafe", charId: "meonji" }
         };
         const flags = { ...FLAG_DEFAULTS };
         const firedEvents = new Set();
@@ -3048,6 +3067,7 @@
             sireoJoined: false,
             passerbyJoined: false,
             jiningJoined: false,
+            meonjiJoined: false,
             uwuJoined: false,
             jiningResolved: false,
             passingPersonMet: false
@@ -3628,6 +3648,9 @@
           if (rosterId === "passerby") {
             return { ...RECRUITMENT_UNIT_DEFS.passerby, x, y, controllable: true };
           }
+          if (rosterId === "meonji") {
+            return { ...RECRUITMENT_UNIT_DEFS.meonji, x, y, controllable: true };
+          }
           if (rosterId === "u_nyangsan") {
             return { ...RECRUITMENT_UNIT_DEFS.u_nyangsan, x, y, controllable: true };
           }
@@ -4205,6 +4228,7 @@
           if (id.includes("정2") || name === "정2" || id === "jeong2") return "jeong2";
           if (id.includes("애블") || name === "애블" || id === "able") return "able";
           if (id.includes("김웨어") || name === "김웨어" || id === "kimware" || id === "p1") return "kim_ware";
+          if (id.includes("먼지") || name === "먼지" || id === "meonji") return "meonji";
           return unit?.charId || null;
         }
 
@@ -4219,6 +4243,7 @@
           if (src === "정2" || src === "jeong2") return CHARACTER_META.jeong2;
           if (src === "애블" || src === "able") return CHARACTER_META.able;
           if (src === "김웨어" || src === "kimware") return CHARACTER_META.kim_ware;
+          if (src === "먼지" || src === "meonji") return CHARACTER_META.meonji;
           return null;
         }
 
