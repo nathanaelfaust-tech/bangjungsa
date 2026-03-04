@@ -639,6 +639,7 @@
         const SAVE_VERSION = 1;
         const CAMPAIGN_STORAGE_KEY = "srpg_campaign";
         const VISUAL_SKIN_KEY = "srpg_visual_skin";
+        const DEV_BUILD = true; // set false for release
         const CAMPAIGN_STAGE_ORDER = ["STG0_PROLOGUE", "STG1_FOREST", "STG2_CITY", "STG3_RUINS", "STG4_CORE", "STG5_EPILOGUE"];
         const FLAT_PALETTE = {
           ink900: "#0F172A",
@@ -1228,7 +1229,7 @@
         const camera = { xPx: 0, yPx: 0 };
         const keyPan = { left: false, right: false, up: false, down: false };
         const edgePan = { x: 0, y: 0 };
-        let showDebugReadout = true;
+        let showDebugReadout = DEV_BUILD;
         let devMode = false;
         let followSelected = false;
         let campaign = null;
@@ -1253,6 +1254,12 @@
         minimapTerrainCache.width = MINI_W;
         minimapTerrainCache.height = MINI_H;
         const miniTerrainCtx = minimapTerrainCache.getContext("2d");
+
+        if (!DEV_BUILD) {
+          devHintEl.style.display = "none";
+          touchDebugEl.style.display = "none";
+          debugReadout.style.display = "none";
+        }
 
         loadVisualSkin();
         initializeCampaignSystem();
@@ -1304,24 +1311,24 @@
         });
 
         window.addEventListener("keydown", (e) => {
-          if (e.code === "Tab") {
+          if (DEV_BUILD && e.code === "Tab") {
             e.preventDefault();
             devMode = !devMode;
             addLog(devMode ? "DEV_MODE ON" : "DEV_MODE OFF");
             updateTopGuide();
             return;
           }
-          if (devMode && e.code === "KeyK") {
+          if (DEV_BUILD && devMode && e.code === "KeyK") {
             e.preventDefault();
             killAllEnemiesDebug();
             return;
           }
-          if (devMode && e.code === "KeyV") {
+          if (DEV_BUILD && devMode && e.code === "KeyV") {
             e.preventDefault();
             setBattleResult("VICTORY");
             return;
           }
-          if (devMode && e.code === "KeyH") {
+          if (DEV_BUILD && devMode && e.code === "KeyH") {
             e.preventDefault();
             for (const u of units) {
               if (u.faction === "enemy") u.hp = Math.min(u.hp, 1);
@@ -1329,17 +1336,17 @@
             addLog("DEV: 적 HP를 1로 설정");
             return;
           }
-          if (devMode && e.code === "KeyR") {
+          if (DEV_BUILD && devMode && e.code === "KeyR") {
             e.preventDefault();
             loadStage(currentStageId);
             return;
           }
-          if (devMode && e.code === "KeyC") {
+          if (DEV_BUILD && devMode && e.code === "KeyC") {
             e.preventDefault();
             devTeleportLeaderToClearing();
             return;
           }
-          if (devMode && e.code === "KeyJ") {
+          if (DEV_BUILD && devMode && e.code === "KeyJ") {
             e.preventDefault();
             setFlag(RECRUITMENT_FLAG_IDS.LEADER_TALK_SUCCESS, true);
             addLog("DEV: LEADER_TALK_SUCCESS=true");
@@ -1358,7 +1365,7 @@
           if (e.key === "d" || e.key === "D" || e.key === "ArrowRight") keyPan.right = true;
           if (e.key === "w" || e.key === "W" || e.key === "ArrowUp") keyPan.up = true;
           if (e.key === "s" || e.key === "S" || e.key === "ArrowDown") keyPan.down = true;
-          if (!devMode && (e.key === "h" || e.key === "H")) showDebugReadout = !showDebugReadout;
+          if (DEV_BUILD && !devMode && (e.key === "h" || e.key === "H")) showDebugReadout = !showDebugReadout;
         });
         window.addEventListener("keyup", (e) => {
           if (e.key === "a" || e.key === "A" || e.key === "ArrowLeft") keyPan.left = false;
@@ -2015,7 +2022,7 @@
         }
 
         function setPointerDebug(eventType, pointerType, dragging) {
-          if (!devMode) return;
+          if (!DEV_BUILD || !devMode) return;
           touchDebugText = `ptr: ${eventType} type=${pointerType || "-"} dragging=${dragging ? "true" : "false"}`;
         }
 
@@ -2715,10 +2722,10 @@
             guideText.textContent = "상대/우냥산 행동 중…";
           }
           touchHintEl.textContent = isMobileLayout() ? "드래그: 화면 이동 / 탭: 선택 / 길게: 취소" : "";
-          devHintEl.textContent = devMode ? "DEV: Tab=토글, K=적전멸, V=승리, H=적1HP, R=재시작, C=공터이동, J=지닝합류" : "";
-          touchDebugEl.textContent = devMode ? touchDebugText : "";
+          devHintEl.textContent = DEV_BUILD && devMode ? "DEV: Tab=토글, K=적전멸, V=승리, H=적1HP, R=재시작, C=공터이동, J=지닝합류" : "";
+          touchDebugEl.textContent = DEV_BUILD && devMode ? touchDebugText : "";
           endPhaseBtn.disabled = !canEndPlayerPhase();
-          if (showDebugReadout) {
+          if (DEV_BUILD && showDebugReadout) {
             const cx = Math.floor(camera.xPx / TILE);
             const cy = Math.floor(camera.yPx / TILE);
             debugReadout.textContent = `MAP(${MAP_W}x${MAP_H}) VIEW(${VIEW_W}x${VIEW_H}) CAM(${cx},${cy}) internal(${INTERNAL_W}x${INTERNAL_H}px)`;
@@ -3710,7 +3717,7 @@
             if (spawn.faction !== "enemy" && spawn.faction !== "neutral" && spawn.faction !== "player") continue;
             spawnStageUnit(spawn);
           }
-          if (filteredPlayerCount > 0 && devMode && !stagePlayerSpawnFilterNoticeShown) {
+          if (DEV_BUILD && filteredPlayerCount > 0 && devMode && !stagePlayerSpawnFilterNoticeShown) {
             addLog(`DEV: stage player spawns filtered (${filteredPlayerCount})`);
             stagePlayerSpawnFilterNoticeShown = true;
           }
