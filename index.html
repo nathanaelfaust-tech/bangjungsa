@@ -640,6 +640,9 @@
         <div class="btnRow">
           <select id="stageSelect" class="btnSmall"></select>
           <button id="campBtn" class="btnSmall" style="display:none;" type="button">캠프</button>
+          <button id="victoryCampBtn" class="btnSmall" style="display:none;" type="button">캠프</button>
+          <button id="autoToggleBtn" class="btnSmall" type="button">AUTO: OFF</button>
+          <button id="autoRunBtn" class="btnSmall" style="display:none;" type="button">AUTO 실행</button>
           <button id="devToggleBtn" class="btnSmall" type="button">DEV</button>
           <button id="devMenuBtn" class="btnSmall" style="display:none;" type="button">DEV 메뉴</button>
           <button id="skinToggleBtn" class="btnSmall" type="button">스킨: 레거시</button>
@@ -735,7 +738,7 @@
         <div id="campDialogue" class="camp-dialogue">먼지가 여기 있어여. 말 걸어보세여…네여.</div>
         <div class="btnRow">
           <button id="campTalkBtn" class="btnSmall" type="button">먼지에게 말걸기</button>
-          <button id="campCloseBtn" class="btn" type="button">닫기</button>
+          <button id="campCloseBtn" class="btn" type="button">나가기</button>
         </div>
       </div>
     </div>
@@ -1234,6 +1237,9 @@
         const followBtn = document.getElementById("followBtn");
         const stageSelect = document.getElementById("stageSelect");
         const campBtn = document.getElementById("campBtn");
+        const victoryCampBtn = document.getElementById("victoryCampBtn");
+        const autoToggleBtn = document.getElementById("autoToggleBtn");
+        const autoRunBtn = document.getElementById("autoRunBtn");
         const devToggleBtn = document.getElementById("devToggleBtn");
         const devMenuBtn = document.getElementById("devMenuBtn");
         const skinToggleBtn = document.getElementById("skinToggleBtn");
@@ -1397,6 +1403,8 @@
         let devFlagPanelEl = null;
         let devFlagListEl = null;
         let campAutoOpenPending = false;
+        let autoDelegateEnabled = false;
+        let autoDelegateRunning = false;
         const mousePan = { active: false, button: -1, lastX: 0, lastY: 0 };
         const pointerGesture = {
           active: false,
@@ -1567,10 +1575,10 @@
         }
 
         function meonjiCampLines(topic) {
-          if (topic === "intro") return ["먼지: 튜토리얼 끝났네여.", "먼지: 캠프에서 잠깐 정리하고 가세여…어용."];
+          if (topic === "intro") return ["먼지: …네여! 먼지라구여 ㅋㅋㅋㅋㅋ (placeholder)"];
           if (topic === "recap") return ["언제 가요?? …네여", "다음은 스테이지 2…어용"];
           if (topic === "hint") return ["부상자랑 보호자… 구여", "체력 좀 떨어지면…네여"];
-          return ["도망가면 되죠ㅋㅋㅋㅋㅋ", "글쿤여"];
+          return ["먼지: 글쿤여…어용"];
         }
 
         function closeCampModal() {
@@ -1579,11 +1587,51 @@
           inputLocked = false;
         }
 
+        function returnToMenu() {
+          closeCampModal();
+          closeMeonjiModal();
+          showMenu();
+        }
+
+        function onCampExit() {
+          if (!campaign) {
+            closeCampModal();
+            return;
+          }
+          const pendingId = campaign.pendingNextStageId || null;
+          if (pendingId) {
+            campaign.pendingNextStageId = null;
+            campaign.currentStageId = pendingId;
+            saveCampaign();
+            closeCampModal();
+            closeMeonjiModal();
+            loadCampaignStage(pendingId, { save: false });
+            return;
+          }
+          returnToMenu();
+        }
+
+        function maybeShowMeonjiGreetingOnce() {
+          if (!campaign) return;
+          ensureCampaignRecruitmentScaffold(campaign);
+          if (campaign.flags.metMeonji) return;
+          setCampDialogueLines(meonjiCampLines("intro"));
+          showToast("먼지: …네여! 먼지라구여 ㅋㅋㅋㅋㅋ", 1800);
+          campaign.flags.metMeonji = true;
+          saveCampaign();
+        }
+
         function openCampModal({ intro = false } = {}) {
           if (!isCampAvailable() || !campOverlay) return;
           campOverlay.classList.add("show");
           inputLocked = true;
-          setCampDialogueLines(intro ? meonjiCampLines("intro") : ["먼지가 기다리고 있어여.", "말 걸어서 확인해보세여."]);
+          if (intro) setCampDialogueLines(meonjiCampLines("intro"));
+          else setCampDialogueLines(["먼지가 기다리고 있어여.", "말 걸어서 확인해보세여."]);
+          maybeShowMeonjiGreetingOnce();
+        }
+
+        function openCampScene() {
+          openCampModal({ intro: true });
         }
 
         function closeMeonjiModal() {
@@ -1594,7 +1642,7 @@
         function openMeonjiModal() {
           if (!meonjiOverlay) return;
           meonjiOverlay.classList.add("show");
-          if (meonjiDialogue) meonjiDialogue.textContent = meonjiCampLines("recap").join("\n");
+          if (meonjiDialogue) meonjiDialogue.textContent = meonjiCampLines("joke").join("\n");
         }
 
         function openMeonjiTopic(topic) {
@@ -1631,8 +1679,17 @@
         centerCamBtn.addEventListener("click", onCenterCamera);
         followBtn.addEventListener("click", onToggleFollow);
         if (campBtn) campBtn.addEventListener("click", () => openCampModal({ intro: false }));
+        if (victoryCampBtn) victoryCampBtn.addEventListener("click", () => {
+          if (!battleOver || !campaign) return;
+          const nextId = getNextStageId(currentCampaignStageId);
+          campaign.pendingNextStageId = nextId || null;
+          saveCampaign();
+          openCampScene();
+        });
         if (menuCampBtn) menuCampBtn.addEventListener("click", () => openCampModal({ intro: false }));
-        if (campCloseBtn) campCloseBtn.addEventListener("click", () => closeCampModal());
+        if (campCloseBtn) campCloseBtn.addEventListener("click", () => onCampExit());
+        if (autoToggleBtn) autoToggleBtn.addEventListener("click", () => toggleAutoDelegate());
+        if (autoRunBtn) autoRunBtn.addEventListener("click", () => { runAutoDelegateOnce(); });
         if (campTalkBtn) campTalkBtn.addEventListener("click", () => openMeonjiModal());
         if (meonjiTopicRecapBtn) meonjiTopicRecapBtn.addEventListener("click", () => openMeonjiTopic("recap"));
         if (meonjiTopicHintBtn) meonjiTopicHintBtn.addEventListener("click", () => openMeonjiTopic("hint"));
@@ -3054,6 +3111,8 @@
           runTriggeredEvents("turnStart", { phase: PHASE.PLAYER, turn: turnCounter });
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
+          if (autoDelegateEnabled) showToast("AUTO ON: 필요 시 [AUTO 실행]으로 남은 아군 위임", 1100);
+          updateAutoControls();
         }
 
         function setPhase(next, initial = false) {
@@ -3092,9 +3151,124 @@
           } else {
             debugReadout.textContent = "";
           }
+          updateAutoControls();
           updateDevStatusLabel();
           updateCampButtonVisibility();
           updateMenuCampButtonVisibility();
+        }
+
+        function updateAutoControls() {
+          if (autoToggleBtn) autoToggleBtn.textContent = `AUTO: ${autoDelegateEnabled ? "ON" : "OFF"}`;
+          const canRun =
+            autoDelegateEnabled &&
+            !autoDelegateRunning &&
+            !battleOver &&
+            phase === PHASE.PLAYER &&
+            units.some((u) => isUnitControllable(u) && !u.acted);
+          if (autoRunBtn) {
+            autoRunBtn.style.display = autoDelegateEnabled ? "inline-block" : "none";
+            autoRunBtn.disabled = !canRun;
+          }
+        }
+
+        function toggleAutoDelegate() {
+          autoDelegateEnabled = !autoDelegateEnabled;
+          if (!autoDelegateEnabled) autoDelegateRunning = false;
+          updateAutoControls();
+        }
+
+        function nearestEnemyFor(unit) {
+          let best = null;
+          let bestD = Infinity;
+          for (const e of units) {
+            if (e.faction !== "enemy") continue;
+            const d = Math.abs(e.x - unit.x) + Math.abs(e.y - unit.y);
+            if (d < bestD || (d === bestD && rng() < 0.5)) {
+              bestD = d;
+              best = e;
+            }
+          }
+          return best;
+        }
+
+        function pickAutoAdjacentEnemy(unit) {
+          const adj = neighbors(unit.x, unit.y)
+            .map((n) => getUnitAt(n.x, n.y))
+            .filter((u) => u && u.faction === "enemy");
+          if (!adj.length) return null;
+          return adj[Math.floor(rng() * adj.length)];
+        }
+
+        function autoStepTowardEnemy(unit, enemy) {
+          if (!enemy) return false;
+          const dx = enemy.x - unit.x;
+          const dy = enemy.y - unit.y;
+          const primary = Math.abs(dx) >= Math.abs(dy)
+            ? [{ x: Math.sign(dx), y: 0 }, { x: 0, y: Math.sign(dy) }]
+            : [{ x: 0, y: Math.sign(dy) }, { x: Math.sign(dx), y: 0 }];
+          for (const d of primary) {
+            if (!d.x && !d.y) continue;
+            const nx = unit.x + d.x;
+            const ny = unit.y + d.y;
+            if (!inBounds(nx, ny) || isOccupied(nx, ny, unit.id)) continue;
+            unit.x = nx;
+            unit.y = ny;
+            addLog(`AUTO 이동: ${unit.name} -> (${nx},${ny})`);
+            return true;
+          }
+          return false;
+        }
+
+        function autoBasicAttack(attacker, target) {
+          if (!attacker || !target || battleOver) return;
+          const hit = rng() < 0.75;
+          if (hit) {
+            const atk = Math.max(1, Number(attacker.atk || attacker.baseStats?.atk || 8));
+            const def = Math.max(0, Number(target.def || target.baseStats?.def || 3));
+            const dmg = Math.max(1, atk - def);
+            target.hp = Math.max(0, target.hp - dmg);
+            spawnFloatingText(target.x, target.y, `-${dmg}`, "#ffb4b4");
+            addLog(`AUTO 공격: ${attacker.name} -> ${target.name} (${dmg})`);
+            if (target.hp <= 0) removeUnit(target.id);
+          } else {
+            spawnFloatingText(target.x, target.y, "MISS", "#e7efff");
+            addLog(`AUTO 공격: ${attacker.name} -> ${target.name} (MISS)`);
+          }
+        }
+
+        async function autoActUnit(unit) {
+          if (!unitById(unit.id) || unit.acted || !isUnitControllable(unit) || battleOver) return;
+          const adjacentEnemy = pickAutoAdjacentEnemy(unit);
+          if (adjacentEnemy) {
+            autoBasicAttack(unit, adjacentEnemy);
+            unit.acted = true;
+            return;
+          }
+          const nearestEnemy = nearestEnemyFor(unit);
+          if (nearestEnemy) autoStepTowardEnemy(unit, nearestEnemy);
+          const postMoveTarget = pickAutoAdjacentEnemy(unit);
+          if (postMoveTarget) autoBasicAttack(unit, postMoveTarget);
+          unit.acted = true;
+        }
+
+        async function runAutoDelegateOnce() {
+          if (!autoDelegateEnabled || autoDelegateRunning || battleOver || phase !== PHASE.PLAYER) return;
+          autoDelegateRunning = true;
+          inputLocked = true;
+          updateAutoControls();
+          const pending = units.filter((u) => isUnitControllable(u) && !u.acted).map((u) => u.id);
+          for (const id of pending) {
+            if (!autoDelegateEnabled || battleOver || phase !== PHASE.PLAYER) break;
+            const u = unitById(id);
+            if (!u || u.acted || !isUnitControllable(u)) continue;
+            await autoActUnit(u);
+            if (checkBattleEnd()) break;
+            await wait(70);
+          }
+          inputLocked = false;
+          autoDelegateRunning = false;
+          updateAutoControls();
+          if (!battleOver && autoDelegateEnabled && allPlayersActed()) startEnemyPhase();
         }
 
         function updateInfoPanel() {
@@ -3455,6 +3629,12 @@
             ...(targetCampaign.checkpointFlags || {})
           };
           if (typeof targetCampaign.campUnlocked !== "boolean") targetCampaign.campUnlocked = false;
+          if (!targetCampaign.flags || typeof targetCampaign.flags !== "object") targetCampaign.flags = {};
+          if (typeof targetCampaign.flags.metMeonji !== "boolean") targetCampaign.flags.metMeonji = false;
+          if (!("pendingNextStageId" in targetCampaign)) targetCampaign.pendingNextStageId = null;
+          if (targetCampaign.pendingNextStageId && !STAGE_ORDER.includes(targetCampaign.pendingNextStageId)) {
+            targetCampaign.pendingNextStageId = null;
+          }
           if (!Array.isArray(targetCampaign.rosterIds)) targetCampaign.rosterIds = ["leader", "jeong2", "able"];
         }
 
@@ -3893,6 +4073,8 @@
             },
             recruitedFlags: recruitedFlagDefaults(),
             campUnlocked: false,
+            pendingNextStageId: null,
+            flags: { metMeonji: false },
             hiddenScore: 0,
             checkpointFlags: checkpointFlagDefaults(),
             ruleTwistSeen: false,
@@ -4032,21 +4214,24 @@
             campaign.stageProgress = Math.max(campaign.stageProgress, Math.min(STAGE_ORDER.length - 1, idx + 1));
           }
           const nextId = getNextStageId(stageId);
-          if (nextId) {
-            campaign.currentStageId = nextId;
-            saveCampaign();
-            initializeStageSelect();
-            loadCampaignStage(nextId, { save: false });
-            return;
-          }
+          if (stageId === "STG1") campaign.campUnlocked = true;
+          campaign.pendingNextStageId = nextId || null;
+          if (nextId) campaign.currentStageId = nextId;
           saveCampaign();
           initializeStageSelect();
-          showMenu();
         }
 
         function onNextStage() {
           if (!campaign) return;
-          loadCampaignStage(campaign.currentStageId, { save: false });
+          const nextId = campaign.pendingNextStageId || campaign.currentStageId;
+          if (!nextId) {
+            showMenu();
+            return;
+          }
+          campaign.pendingNextStageId = null;
+          campaign.currentStageId = nextId;
+          saveCampaign();
+          loadCampaignStage(nextId, { save: false });
         }
 
         function showMenu() {
@@ -4322,6 +4507,7 @@
           catLineIndex = 0;
           restartBtn.style.display = "none";
           nextStageBtn.style.display = "none";
+          if (victoryCampBtn) victoryCampBtn.style.display = "none";
           closeCommandMenu();
           dialogOverlay.classList.remove("show");
           activeDialog = null;
@@ -5013,9 +5199,16 @@
           phaseBanner = { text, life: 999999, max: 999999 };
           addLog(text === "VICTORY" ? "승리!" : "패배...");
           showToast(text === "VICTORY" ? "승리!" : "패배!");
-          if (text === "VICTORY") onStageClear(currentCampaignStageId);
-          else nextStageBtn.style.display = "none";
+          if (text === "VICTORY") {
+            onStageClear(currentCampaignStageId);
+            nextStageBtn.style.display = campaign?.pendingNextStageId ? "inline-block" : "none";
+            if (victoryCampBtn) victoryCampBtn.style.display = "inline-block";
+          } else {
+            nextStageBtn.style.display = "none";
+            if (victoryCampBtn) victoryCampBtn.style.display = "none";
+          }
           restartBtn.style.display = "inline-block";
+          updateAutoControls();
         }
 
         function canCounterattack(defender, attacker) {
