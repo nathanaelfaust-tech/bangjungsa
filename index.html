@@ -4299,10 +4299,16 @@
           saveCampaign();
           initializeStageSelect();
           openCampScene();
+          return;
         }
 
         function onNextStage() {
+          if (campaign && !campaign.pendingNextStageId && campaign.lastClearedStageId) {
+            campaign.pendingNextStageId = getNextStageId(campaign.lastClearedStageId) || null;
+            saveCampaign();
+          }
           openCampScene();
+          return;
         }
 
         function showMenu() {
