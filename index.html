@@ -984,7 +984,9 @@
           f: { key: "forest", name: "숲", moveCost: 2, avoid: 20, color: "#2f6334" },
           t: { key: "fort", name: "요새", moveCost: 1, avoid: 10, color: "#8f7d4e" },
           r: { key: "road", name: "도로", moveCost: 1, avoid: 0, color: "#7f6a4d" },
-          h: { key: "highlight", name: "강조", moveCost: 1, avoid: 0, color: "#5a9159" }
+          h: { key: "highlight", name: "강조", moveCost: 1, avoid: 0, color: "#5a9159" },
+          ".": { key: "floor", name: "바닥", moveCost: 1, avoid: 0, color: "#495463" },
+          "#": { key: "wall", name: "벽", moveCost: 999, avoid: 0, color: "#222b36" }
         };
 
         let MAP_ROWS = buildMapRows(SEED);
@@ -1123,10 +1125,43 @@
             stageId: "STG2",
             title: "STG2",
             name: "STG2",
-            mapGen: () => buildMapRows(SEED),
-            spawns: BASE_STAGE_SPAWNS,
+            mapSize: { w: 32, h: 20 },
+            mapRows: [
+              "################################",
+              "################################",
+              "##............................##",
+              "##............................##",
+              "##........##############....####",
+              "##........##############....####",
+              "##........##................####",
+              "##........##................####",
+              "######..####..############..####",
+              "######..####..############..####",
+              "##............................##",
+              "##............................##",
+              "##........##############......##",
+              "##........##############......##",
+              "##............................##",
+              "##............................##",
+              "##....##########################",
+              "##....##########################",
+              "##########################....##",
+              "##########################....##"
+            ],
+            poiScaled: {
+              S: [3, 17],
+              K: [5, 3],
+              R: [7, 3],
+              G1: [3, 17],
+              G2: [27, 3],
+              E: [[27, 17], [29, 17], [27, 19], [29, 19]]
+            },
+            spawns: [
+              { id: "STG2_GUARD_A", name: "경비 A", faction: "enemy", x: 22, y: 10, spriteType: "enemy", paletteKey: "enemy", classId: "CL_SWD_GUARD", weaponType: "sword", perks: [], aiHint: "holdLine", maxHp: 18, hp: 18, atk: 7, def: 3, hit: 78, crit: 0 },
+              { id: "STG2_GUARD_B", name: "경비 B", faction: "enemy", x: 25, y: 6, spriteType: "enemy", paletteKey: "enemy", classId: "CL_BOW_RANGER", weaponType: "bow", perks: [], aiHint: "holdLine", maxHp: 16, hp: 16, atk: 6, def: 2, hit: 80, crit: 0 }
+            ],
             objectives: [
-              { id: "OBJ_STG2_SURVIVE", type: "SURVIVE", params: { turns: 3 }, status: "ongoing" }
+              { id: "OBJ_STG2_RESCUE", type: "CUSTOM", params: { hint: "김웨어를 구출하고 출구 집결" }, status: "ongoing" }
             ],
             triggers: [],
             safetyRoute: [],
@@ -1479,6 +1514,7 @@
         let currentCampaignStageId = "STG1";
         let currentStageTileTags = {};
         let currentStageMarkers = { start: [], enemy: [] };
+        let currentStageRuntimeState = {};
         let stg1MarkerBlinkUntil = 0;
         let stg1TutorialQueue = [];
         let stg1IdleTimer = null;
@@ -1755,6 +1791,194 @@
 
         function isStg1TutorialStage() {
           return currentCampaignStageId === "STG1" && currentStageId === "STG1";
+        }
+
+        function isStg2Stage() {
+          return currentCampaignStageId === "STG2" && currentStageId === "STG2";
+        }
+
+        function stg2Poi() {
+          return STAGES.STG2?.poiScaled || null;
+        }
+
+        function stg2ExitTiles() {
+          const exits = stg2Poi()?.E;
+          return Array.isArray(exits) ? exits.map((p) => ({ x: p[0], y: p[1] })) : [];
+        }
+
+        function isWalkableTile(x, y) {
+          if (!inBounds(x, y)) return false;
+          const t = terrainAt(x, y);
+          return !!t && t.moveCost < 99 && t.key !== "wall";
+        }
+
+        function stg2FindNearestFloorTile(x, y, maxRadius = 12, ignoreId = null) {
+          if (isWalkableTile(x, y) && !isOccupied(x, y, ignoreId)) return { x, y };
+          for (let r = 1; r <= maxRadius; r++) {
+            for (let dy = -r; dy <= r; dy++) {
+              for (let dx = -r; dx <= r; dx++) {
+                if (Math.abs(dx) + Math.abs(dy) !== r) continue;
+                const nx = x + dx;
+                const ny = y + dy;
+                if (!isWalkableTile(nx, ny)) continue;
+                if (!isOccupied(nx, ny, ignoreId)) return { x: nx, y: ny };
+              }
+            }
+          }
+          return null;
+        }
+
+        function ensureKimwearRemovedFromRosterForStg2() {
+          if (!campaign || !Array.isArray(campaign.rosterIds)) return;
+          const before = campaign.rosterIds.length;
+          campaign.rosterIds = campaign.rosterIds.filter((id) => id !== "kimware");
+          if (campaign.rosterIds.length !== before) saveCampaign();
+        }
+
+        function ensureStg2RuntimeState() {
+          if (!currentStageRuntimeState || typeof currentStageRuntimeState !== "object") currentStageRuntimeState = {};
+          if (!currentStageRuntimeState.stg2) {
+            currentStageRuntimeState.stg2 = {
+              rescuedKimwear: false,
+              alarm: false,
+              alarmTurn: 0,
+              exitVisible: false,
+              reinforcementsSpawned: 0,
+              reinforcementSeq: 0
+            };
+          }
+          return currentStageRuntimeState.stg2;
+        }
+
+        function setupStg2Captive() {
+          if (!isStg2Stage()) return;
+          const poi = stg2Poi();
+          if (!poi?.K) return;
+          const st = ensureStg2RuntimeState();
+          const existing = unitById("kimwear");
+          if (existing) {
+            existing.faction = st.rescuedKimwear ? "player" : "neutral";
+            existing.paletteKey = st.rescuedKimwear ? "player" : "neutral";
+            existing.controllable = !!st.rescuedKimwear;
+            existing.aiTeam = st.rescuedKimwear ? null : "allyGuest";
+            return;
+          }
+          spawnStageUnit({
+            id: "kimwear",
+            name: "김웨어",
+            faction: "neutral",
+            x: poi.K[0],
+            y: poi.K[1],
+            spriteType: "soldier",
+            paletteKey: "neutral",
+            classId: "CL_SWD_DUELIST",
+            weaponType: "sword",
+            perks: [],
+            aiHint: "holdLine",
+            controllable: false,
+            aiTeam: "allyGuest",
+            maxHp: 18,
+            hp: 18,
+            atk: 6,
+            def: 2,
+            hit: 78,
+            crit: 0
+          });
+        }
+
+        function stg2TryRescueKimwear(unit) {
+          if (!isStg2Stage() || !unit || unit.faction !== "player") return false;
+          const st = ensureStg2RuntimeState();
+          if (st.rescuedKimwear) return false;
+          const poi = stg2Poi();
+          if (!poi?.R || (unit.x !== poi.R[0] || unit.y !== poi.R[1])) return false;
+          const captive = unitById("kimwear");
+          if (!captive) return false;
+          st.rescuedKimwear = true;
+          st.alarm = true;
+          st.alarmTurn = turnCounter;
+          st.exitVisible = true;
+          captive.faction = "player";
+          captive.paletteKey = "player";
+          captive.controllable = true;
+          captive.aiTeam = null;
+          addToRosterOnce("kimware");
+          saveCampaign();
+          addLog("발각됐다! 하수구로!");
+          showToast("발각됐다! 하수구로!", 1500);
+          return true;
+        }
+
+        function stg2DistanceToNearestExit(unit) {
+          const exits = stg2ExitTiles();
+          if (!unit || !exits.length) return Infinity;
+          let best = Infinity;
+          for (const e of exits) {
+            const d = Math.abs(unit.x - e.x) + Math.abs(unit.y - e.y);
+            if (d < best) best = d;
+          }
+          return best;
+        }
+
+        function stg2CheckClearCondition() {
+          if (!isStg2Stage() || battleOver) return false;
+          const st = ensureStg2RuntimeState();
+          if (!st.rescuedKimwear || !st.exitVisible) return false;
+          const players = units.filter((u) => u.faction === "player");
+          if (!players.length) return false;
+          if (players.every((u) => stg2DistanceToNearestExit(u) <= 2)) {
+            setBattleResult("VICTORY");
+            return true;
+          }
+          return false;
+        }
+
+        function spawnStg2ReinforcementsIfNeeded() {
+          if (!isStg2Stage() || battleOver) return;
+          const st = ensureStg2RuntimeState();
+          if (!st.alarm || !st.alarmTurn) return;
+          const elapsed = turnCounter - st.alarmTurn;
+          if (elapsed <= 0 || elapsed % 2 !== 0) return;
+          if ((st.reinforcementsSpawned || 0) >= 6) return;
+          const poi = stg2Poi();
+          const gates = [poi?.G1, poi?.G2].filter((g) => Array.isArray(g) && g.length >= 2);
+          if (!gates.length) return;
+
+          let requested = rng() < 0.5 ? 1 : 2;
+          requested = Math.min(requested, 6 - (st.reinforcementsSpawned || 0));
+          let spawned = 0;
+          for (let i = 0; i < requested; i++) {
+            const gate = gates[Math.floor(rng() * gates.length)];
+            const tile = stg2FindNearestFloorTile(gate[0], gate[1], 16);
+            if (!tile) continue;
+            st.reinforcementSeq = (st.reinforcementSeq || 0) + 1;
+            const spawnId = `STG2_REINF_GUARD_${st.reinforcementSeq}`;
+            const ok = spawnStageUnit({
+              id: spawnId,
+              name: "증원 경비",
+              faction: "enemy",
+              x: tile.x,
+              y: tile.y,
+              spriteType: "enemy",
+              paletteKey: "enemy",
+              classId: "CL_SWD_GUARD",
+              weaponType: "sword",
+              perks: [],
+              aiHint: "skirmish",
+              maxHp: 16,
+              hp: 16,
+              atk: 7,
+              def: 2,
+              hit: 76,
+              crit: 0
+            });
+            if (ok) spawned++;
+          }
+          if (spawned > 0) {
+            st.reinforcementsSpawned = (st.reinforcementsSpawned || 0) + spawned;
+            addLog(`적 증원 ${spawned}명 도착`);
+            showToast(`적 증원 ${spawned}명`, 1100);
+          }
         }
 
         function getUnitActiveSkillId(unit) {
@@ -3730,8 +3954,10 @@
           addLog("PLAYER PHASE 시작");
           dispatchStageTrigger("onTurnStart", { side: PHASE.PLAYER, turn: turnCounter });
           runTriggeredEvents("turnStart", { phase: PHASE.PLAYER, turn: turnCounter });
+          spawnStg2ReinforcementsIfNeeded();
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
+          stg2CheckClearCondition();
         }
 
         function setPhase(next, initial = false) {
@@ -4774,6 +5000,19 @@
             openCampModal({ intro: true });
             return;
           }
+          if (stageId === "STG2") {
+            campaign.campUnlocked = true;
+            campaign.pendingNextStageId = nextCampaignStageId("STG2");
+            campaign.currentStageId = "STG2";
+            const stg3Idx = campaignStageIndex("STG3");
+            if (stg3Idx >= 0) campaign.stageProgress = Math.max(campaign.stageProgress, stg3Idx);
+            saveCampaign();
+            initializeStageSelect();
+            updateCampNextStageButton();
+            nextStageBtn.style.display = "none";
+            openCampModal({ intro: true });
+            return;
+          }
           applyVictoryToCampaign();
         }
 
@@ -4933,12 +5172,15 @@
             : (Array.isArray(campaign?.rosterIds) ? campaign.rosterIds : []);
           const placementByRosterId = new Map((stage?.playerPlacement || []).map((p) => [p.rosterId, { x: p.x, y: p.y }]));
           const taggedStarts = getPlayerStartTilesFromStage();
+          const stg2Start = isStg2Stage() && Array.isArray(stage?.poiScaled?.S)
+            ? { x: stage.poiScaled.S[0], y: stage.poiScaled.S[1] }
+            : null;
 
           rosterIds.forEach((rosterId, idx) => {
             const spawn = rosterSpawnById(rosterId, idx);
             if (!spawn) return;
-            const preferred = placementByRosterId.get(rosterId) || taggedStarts[idx] || defaultPlayerStartTileByIndex(idx);
-            const tile = findFreeSpawnTile(preferred.x, preferred.y, 12);
+            const preferred = stg2Start || placementByRosterId.get(rosterId) || taggedStarts[idx] || defaultPlayerStartTileByIndex(idx);
+            const tile = findFreeSpawnTile(preferred.x, preferred.y, stg2Start ? 16 : 12);
             if (tile) {
               spawn.x = tile.x;
               spawn.y = tile.y;
@@ -4975,6 +5217,7 @@
         function loadStage(stageId) {
           const stage = STAGES[stageId] || STAGES[CURRENT_STAGE];
           currentStageId = stageId in STAGES ? stageId : CURRENT_STAGE;
+          currentStageRuntimeState = {};
           stageSelect.value = currentStageId;
           const parsedMap = parseStageMap(stage);
           MAP_ROWS = parsedMap.rows;
@@ -4987,9 +5230,16 @@
           units = [];
           clearExistingPlayerUnits();
           currentStageTileTags = cloneSimple(stage.tileTags || {});
+          if (stage.stageId === "STG2" || currentCampaignStageId === "STG2") {
+            ensureKimwearRemovedFromRosterForStg2();
+          }
           spawnEnemiesAndNeutralsFromStage(stage);
           spawnPlayersFromCampaignRoster(stage);
           enforceStg1SingleUyangsan();
+          if (stage.stageId === "STG2" || currentCampaignStageId === "STG2") {
+            ensureStg2RuntimeState();
+            setupStg2Captive();
+          }
           applyStageRecruitmentScaffoldOnLoad();
           stageObjectives = (stage.objectives || []).map((obj) => ({ ...cloneSimple(obj), status: "ongoing" }));
           stageTriggers = (stage.triggers || []).map((tr) => cloneSimple(tr));
@@ -5141,14 +5391,14 @@
         }
 
         function findFreeSpawnTile(x, y, maxRadius = 6) {
-          if (inBounds(x, y) && !isOccupied(x, y)) return { x, y };
+          if (isWalkableTile(x, y) && !isOccupied(x, y)) return { x, y };
           for (let r = 1; r <= maxRadius; r++) {
             for (let dy = -r; dy <= r; dy++) {
               for (let dx = -r; dx <= r; dx++) {
                 if (Math.abs(dx) + Math.abs(dy) !== r) continue;
                 const nx = x + dx;
                 const ny = y + dy;
-                if (!inBounds(nx, ny)) continue;
+                if (!isWalkableTile(nx, ny)) continue;
                 if (!isOccupied(nx, ny)) return { x: nx, y: ny };
               }
             }
@@ -5379,6 +5629,8 @@
         function emitUnitEnterTile(unit) {
           if (!unit) return;
           dispatchStageTrigger("onUnitEnterTile", { unit, x: unit.x, y: unit.y });
+          stg2TryRescueKimwear(unit);
+          stg2CheckClearCondition();
           evaluateObjectives({ type: "unitEnter", unit });
         }
 
@@ -5714,6 +5966,9 @@
           }
           if (currentCampaignStageId === "STG1" && units.filter((u) => u.faction === "enemy").length === 0) {
             setBattleResult("VICTORY");
+            return true;
+          }
+          if (isStg2Stage() && stg2CheckClearCondition()) {
             return true;
           }
           evaluateObjectives({ type: "check" });
@@ -6052,6 +6307,12 @@
           if (Array.isArray(stage?.mapData) && stage.mapData.length) {
             return { rows: cloneSimple(stage.mapData), markers: { start: [], enemy: [] } };
           }
+          if (Array.isArray(stage?.mapRows) && stage.mapRows.length) {
+            return {
+              rows: cloneSimple(stage.mapRows),
+              markers: { start: [], enemy: [], poi: cloneSimple(stage?.poiScaled || {}) }
+            };
+          }
           if (Array.isArray(stage?.layout) && stage.layout.length) {
             const paletteMap = stage.palette || {};
             const rows = [];
@@ -6106,6 +6367,32 @@
             ctx.fillRect(tx, ty, TILE, TILE);
             ctx.strokeStyle = blinkPhaseOn ? "rgba(255,180,180,0.95)" : "rgba(255,180,180,0.45)";
             ctx.strokeRect(tx + 1.5, ty + 1.5, TILE - 3, TILE - 3);
+          }
+          if (isStg2Stage()) {
+            const poi = currentStageMarkers.poi || {};
+            if (DEV_BUILD) {
+              if (Array.isArray(poi.K) && poi.K.length >= 2) {
+                const tx = poi.K[0] * TILE;
+                const ty = poi.K[1] * TILE;
+                ctx.strokeStyle = "rgba(255, 205, 96, 0.85)";
+                ctx.strokeRect(tx + 2, ty + 2, TILE - 4, TILE - 4);
+              }
+              if (Array.isArray(poi.R) && poi.R.length >= 2) {
+                const tx = poi.R[0] * TILE;
+                const ty = poi.R[1] * TILE;
+                ctx.strokeStyle = "rgba(120, 220, 255, 0.88)";
+                ctx.strokeRect(tx + 2, ty + 2, TILE - 4, TILE - 4);
+              }
+            }
+            const st = currentStageRuntimeState?.stg2;
+            if (st?.exitVisible) {
+              for (const e of stg2ExitTiles()) {
+                const tx = e.x * TILE;
+                const ty = e.y * TILE;
+                ctx.strokeStyle = "rgba(143, 241, 183, 0.82)";
+                ctx.strokeRect(tx + 2, ty + 2, TILE - 4, TILE - 4);
+              }
+            }
           }
           ctx.restore();
         }
