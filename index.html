@@ -1125,40 +1125,36 @@
             stageId: "STG2",
             title: "STG2",
             name: "STG2",
-            mapSize: { w: 32, h: 20 },
+            mapSize: { w: 24, h: 16 },
             mapRows: [
-              "################################",
-              "################################",
-              "##............................##",
-              "##............................##",
-              "##........##############....####",
-              "##........##############....####",
-              "##........##................####",
-              "##........##................####",
-              "######..####..############..####",
-              "######..####..############..####",
-              "##............................##",
-              "##............................##",
-              "##........##############......##",
-              "##........##############......##",
-              "##............................##",
-              "##............................##",
-              "##....##########################",
-              "##....##########################",
-              "##########################....##",
-              "##########################....##"
+              "########################",
+              "#KR...#..............G.#",
+              "#.....#................#",
+              "#.....#..####..####..###",
+              "####..#..#........#....#",
+              "#........#........#....#",
+              "#........#........#....#",
+              "#..##########..####..###",
+              "#..............#.......#",
+              "#..............#.......#",
+              "#..######..#####..######",
+              "#.......#..#...........#",
+              "#.......#..#...........#",
+              "#.......#..#.........EE#",
+              "#S......#..#.........EE#",
+              "########################"
             ],
             poiScaled: {
-              S: [3, 17],
-              K: [5, 3],
-              R: [7, 3],
-              G1: [3, 17],
-              G2: [27, 3],
-              E: [[27, 17], [29, 17], [27, 19], [29, 19]]
+              S: [1, 14],
+              K: [1, 1],
+              R: [2, 1],
+              G1: [1, 14],
+              G2: [22, 1],
+              E: [[21, 13], [22, 13], [21, 14], [22, 14]]
             },
             spawns: [
-              { id: "STG2_GUARD_A", name: "경비 A", faction: "enemy", x: 22, y: 10, spriteType: "enemy", paletteKey: "enemy", classId: "CL_SWD_GUARD", weaponType: "sword", perks: [], aiHint: "holdLine", maxHp: 18, hp: 18, atk: 7, def: 3, hit: 78, crit: 0 },
-              { id: "STG2_GUARD_B", name: "경비 B", faction: "enemy", x: 25, y: 6, spriteType: "enemy", paletteKey: "enemy", classId: "CL_BOW_RANGER", weaponType: "bow", perks: [], aiHint: "holdLine", maxHp: 16, hp: 16, atk: 6, def: 2, hit: 80, crit: 0 }
+              { id: "STG2_GUARD_A", name: "경비 A", faction: "enemy", x: 15, y: 8, spriteType: "enemy", paletteKey: "enemy", classId: "CL_SWD_GUARD", weaponType: "sword", perks: [], aiHint: "CHASE_PLAYER", maxHp: 18, hp: 18, atk: 7, def: 3, hit: 78, crit: 0 },
+              { id: "STG2_GUARD_B", name: "경비 B", faction: "enemy", x: 17, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_BOW_RANGER", weaponType: "bow", perks: [], aiHint: "CHASE_PLAYER", maxHp: 16, hp: 16, atk: 6, def: 2, hit: 80, crit: 0 }
             ],
             objectives: [
               { id: "OBJ_STG2_RESCUE", type: "CUSTOM", params: { hint: "김웨어를 구출하고 출구 집결" }, status: "ongoing" }
@@ -1857,7 +1853,7 @@
           const st = ensureStg2RuntimeState();
           const existing = unitById("kimwear");
           if (existing) {
-            existing.faction = st.rescuedKimwear ? "player" : "neutral";
+            existing.faction = st.rescuedKimwear ? "player" : "captive";
             existing.paletteKey = st.rescuedKimwear ? "player" : "neutral";
             existing.controllable = !!st.rescuedKimwear;
             existing.aiTeam = st.rescuedKimwear ? null : "allyGuest";
@@ -1866,7 +1862,7 @@
           spawnStageUnit({
             id: "kimwear",
             name: "김웨어",
-            faction: "neutral",
+            faction: "captive",
             x: poi.K[0],
             y: poi.K[1],
             spriteType: "soldier",
@@ -1892,6 +1888,7 @@
           if (st.rescuedKimwear) return false;
           const poi = stg2Poi();
           if (!poi?.R || (unit.x !== poi.R[0] || unit.y !== poi.R[1])) return false;
+          if (!poi?.K || (Math.abs(unit.x - poi.K[0]) + Math.abs(unit.y - poi.K[1]) !== 1)) return false;
           const captive = unitById("kimwear");
           if (!captive) return false;
           st.rescuedKimwear = true;
@@ -1964,7 +1961,7 @@
               classId: "CL_SWD_GUARD",
               weaponType: "sword",
               perks: [],
-              aiHint: "skirmish",
+              aiHint: "CHASE_PLAYER",
               maxHp: 16,
               hp: 16,
               atk: 7,
@@ -6308,8 +6305,9 @@
             return { rows: cloneSimple(stage.mapData), markers: { start: [], enemy: [] } };
           }
           if (Array.isArray(stage?.mapRows) && stage.mapRows.length) {
+            const normalizedRows = stage.mapRows.map((row) => String(row || "").replace(/[SKRGE]/g, "."));
             return {
-              rows: cloneSimple(stage.mapRows),
+              rows: normalizedRows,
               markers: { start: [], enemy: [], poi: cloneSimple(stage?.poiScaled || {}) }
             };
           }
@@ -6391,6 +6389,9 @@
                 const ty = e.y * TILE;
                 ctx.strokeStyle = "rgba(143, 241, 183, 0.82)";
                 ctx.strokeRect(tx + 2, ty + 2, TILE - 4, TILE - 4);
+                ctx.fillStyle = "rgba(143, 241, 183, 0.90)";
+                ctx.font = "6px monospace";
+                ctx.fillText("EXIT", tx + 1, ty + 7);
               }
             }
           }
