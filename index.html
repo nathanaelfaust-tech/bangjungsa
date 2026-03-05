@@ -1794,6 +1794,14 @@
           SK_STRIKE_BASIC: { uiName: "공격" },
           SK_STRIKE: { uiName: "공격" },
           SK_ATTACK: { uiName: "공격" },
+          SK_SNIPER_LONG: {
+            uiName: "저격",
+            desc: "장거리 단일 저격",
+            type: "SNIPER",
+            targetRange: 5,
+            moveRange: 0,
+            cooldown: 0
+          },
           SK_REPOSITION_2: {
             uiName: "전술 명령",
             desc: "정2 2칸 이내 아군을 최대 2칸 재배치(벽 통과 불가)",
@@ -1804,6 +1812,7 @@
           }
         };
         const missingSkillUiNameWarned = new Set();
+        const verifyRoleLogs = { jung2Ready: false };
 
         function isStg1TutorialStage() {
           return currentCampaignStageId === "STG1" && currentStageId === "STG1";
@@ -3774,11 +3783,17 @@
           cmdNyangBtn.style.display = canNyangInteract ? "inline-block" : "none";
           cmdNyangBtn.disabled = !canNyangInteract;
           cmdTalkBtn.style.display = canTalk ? "inline-block" : "none";
+          if (isKimwearUnit(unit)) {
+            console.log("[VERIFY_KW] reposAvailable=true");
+            console.log("[VERIFY_KW] attackButtonHidden=true");
+          }
           if (sid) {
             if (sid === "SK_REPOSITION_2") {
               const hasTarget = units.some((t) => t.faction === "player" && t.id !== unit.id && Math.abs(t.x - unit.x) + Math.abs(t.y - unit.y) <= 2);
               const cd = unit.skillCooldowns?.[sid] || 0;
               cmdAttackBtn.disabled = cd > 0 || !hasTarget;
+            } else if (sid === "SK_SNIPER_LONG") {
+              cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, "sniper_long"), "sniper_long").length === 0;
             } else {
               const activeMode = unit.activeSkill?.type === "STRIKE" ? "strike" : "attack";
               cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, activeMode), activeMode).length === 0;
@@ -3799,11 +3814,12 @@
           const u = unitById(commandMenuUnitId);
           if (!u) return;
           normalizeUnitSkillContract(u);
-          if (getUnitActiveSkillId(u) === "SK_REPOSITION_2") {
+          const sid = getUnitActiveSkillId(u);
+          if (sid === "SK_REPOSITION_2") {
             startRepositionMode(u);
             return;
           }
-          const mode = u.activeSkill?.type === "STRIKE" ? "strike" : "attack";
+          const mode = sid === "SK_SNIPER_LONG" ? "sniper_long" : (u.activeSkill?.type === "STRIKE" ? "strike" : "attack");
           if (!canUseAttackNow(mode)) {
             nudgeTutorial("지금은 공격할 단계가 아니구여");
             return;
@@ -4015,7 +4031,7 @@
         }
 
         function startRepositionMode(caster) {
-          if (!caster || !isJung2Unit(caster)) return;
+          if (!caster || (!isJung2Unit(caster) && !isKimwearUnit(caster))) return;
           const sid = "SK_REPOSITION_2";
           const cd = caster.skillCooldowns?.[sid] || 0;
           if (cd > 0) {
@@ -4037,7 +4053,8 @@
           }
           closeCommandMenu();
           showToast("아군 대상 선택(2칸 이내)", 1200);
-          console.log("[VERIFY_REPOS] mode=ON caster=jung2");
+          if (isKimwearUnit(caster)) console.log("[VERIFY_KW] reposMode=ON");
+          else console.log("[VERIFY_REPOS] mode=ON caster=jung2");
           console.log("[VERIFY_REPOS] rangeShown=2");
         }
 
@@ -4059,6 +4076,7 @@
           repositionState.candidateSet = new Set(repositionState.candidates.map((c) => key(c.x, c.y)));
           console.log("[VERIFY_REPOS] target=", target.id, "ok=true");
           console.log("[VERIFY_REPOS] candidates=", repositionState.candidates.length, "maxStep=2");
+          if (isKimwearUnit(caster)) console.log("[VERIFY_KW] candidates=", repositionState.candidates.length);
           showToast("이동할 칸 선택", 900);
           return true;
         }
@@ -4080,6 +4098,7 @@
           console.log("[VERIFY_REPOS] cooldownSet=2");
           emitUnitEnterTile(target);
           console.log("[VERIFY_REPOS] moved target=", target.id, "to", { x, y });
+          if (isKimwearUnit(caster)) console.log("[VERIFY_KW] moved=", { target: target.id, x, y });
           resetRepositionMode();
           finalizePlayerAction(caster);
           return true;
@@ -4369,6 +4388,20 @@
             if (reposCd > 0) p.skillCooldowns.SK_REPOSITION_2 = Math.max(0, reposCd - 1);
             if (isJung2Unit(p)) {
               console.log("[VERIFY_REPOS] cooldownNow=", p.skillCooldowns.SK_REPOSITION_2 || 0);
+            }
+            if (isKimwearUnit(p) && p.passivePerk?.id === "PK_HEAL_AURA_SMALL") {
+              let healed = 0;
+              for (const ally of units) {
+                if (ally.faction !== "player") continue;
+                const d = Math.abs(ally.x - p.x) + Math.abs(ally.y - p.y);
+                if (d <= 1 && ally.hp < ally.maxHp) {
+                  const before = ally.hp;
+                  ally.hp = Math.min(ally.maxHp, ally.hp + 2);
+                  if (ally.hp > before) healed++;
+                }
+              }
+              if (healed > 0) addLog(`김웨어 치유 오라 +${healed}`);
+              console.log("[VERIFY_KW] healAuraTick=", healed);
             }
             if (p.heroState) {
               p.heroState.dashCd = Math.max(0, (p.heroState.dashCd || 0) - 1);
@@ -4687,6 +4720,10 @@
           return !!unit && (unit.id === "jung2" || unit.id === "정2" || unit.unitId === "jung2" || unit.charId === "jeong2");
         }
 
+        function isKimwearUnit(unit) {
+          return !!unit && (unit.id === "kimwear" || unit.id === "김웨어" || unit.unitId === "kimwear" || unit.charId === "kim_ware");
+        }
+
         function buildDefaultActiveSkill(unit) {
           if (isHeroUnit(unit)) {
             return { id: "SK_STRIKE", type: "STRIKE", name: "Strike", dmgMult: 1.2 };
@@ -4711,8 +4748,19 @@
             unit.activeSkillId = "SK_STRIKE";
             unit.passivePerk = { id: "SURVIVOR_TEMP", name: "용사의 본능(임시)" };
           } else if (isJung2Unit(unit)) {
+            unit.activeSkillId = "SK_SNIPER_LONG";
+            unit.activeSkill = { id: "SK_SNIPER_LONG", type: "SNIPER", name: "저격", dmgMult: 1.0 };
+            unit.passivePerk = { id: "PK_SUPPORT_SHOT_WEAK", name: "지원사격(약)" };
+            unit.skillCooldowns = unit.skillCooldowns || {};
+            if (!verifyRoleLogs.jung2Ready) {
+              verifyRoleLogs.jung2Ready = true;
+              console.log("[VERIFY_J2] sniperReady=true");
+            }
+          } else if (isKimwearUnit(unit)) {
             unit.activeSkillId = "SK_REPOSITION_2";
             unit.activeSkill = { id: "SK_REPOSITION_2", type: "TACTIC", name: "전술 명령", dmgMult: 0 };
+            unit.passivePerk = { id: "PK_HEAL_AURA_SMALL", name: "치유 오라(소)" };
+            unit.weaponType = "staff";
             unit.skillCooldowns = unit.skillCooldowns || {};
           } else if (!unit.passivePerk) {
             unit.passivePerk = null;
@@ -4723,6 +4771,7 @@
 
         function commandRangeForMode(attacker, mode = "attack") {
           if (mode === "strike") return { min: 1, max: 1 };
+          if (mode === "sniper_long") return { min: 2, max: 5 };
           if (mode === "hero_bolt") return { min: 2, max: 2 };
           if (mode === "hero_dash") return { min: 1, max: 2 };
           if (mode === "hero_arc") return { min: 1, max: HERO_ARC_RANGE };
@@ -6621,7 +6670,7 @@
             ? HERO_BOLT_DMG_MULT
             : (actionMode === "hero_dash"
                 ? HERO_DASH_DMG_MULT
-                : (actionMode === "hero_arc" ? HERO_ARC_DMG_MULT : (actionMode === "strike" ? 1.2 : HERO_MELEE_DMG_BASE)));
+                : (actionMode === "hero_arc" ? HERO_ARC_DMG_MULT : (actionMode === "strike" ? 1.2 : (actionMode === "sniper_long" ? 1.0 : HERO_MELEE_DMG_BASE))));
           const first = await resolveAttack(attacker, target, {
             actionMode,
             contextTag: "initial",
@@ -6640,6 +6689,10 @@
             return;
           }
 
+          if (attacker.faction === "player" && target.faction === "enemy") {
+            triggerJung2SupportShot(attacker, target);
+          }
+
           const liveAttacker = unitById(attacker.id);
           const liveDefender = unitById(target.id);
           if (canCounterattack(liveDefender, liveAttacker)) {
@@ -6652,6 +6705,24 @@
           await wait(220);
           checkBattleEnd();
           if (!battleOver) inputLocked = false;
+        }
+
+        function triggerJung2SupportShot(attacker, target) {
+          if (!attacker || !target || battleOver) return;
+          if (attacker.faction !== "player" || target.faction !== "enemy") return;
+          const jung2 = units.find((u) => isJung2Unit(u) && u.hp > 0 && u.passivePerk?.id === "PK_SUPPORT_SHOT_WEAK");
+          if (!jung2) return;
+          if (jung2.id === attacker.id) return;
+          const liveTarget = unitById(target.id);
+          if (!liveTarget || liveTarget.hp <= 0) return;
+          if (!isInAttackRange(jung2, liveTarget.x, liveTarget.y, "sniper_long")) return;
+          const raw = Math.max(0, Math.round(statWithEffects(jung2, "atk") * 0.35 - statWithEffects(liveTarget, "def")));
+          const dmg = Math.max(0, Math.min(raw, Math.max(0, liveTarget.hp - 1)));
+          if (dmg <= 0) return;
+          liveTarget.hp = Math.max(1, liveTarget.hp - dmg);
+          spawnFloatingText(liveTarget.x, liveTarget.y, `지원 -${dmg}`, "#a9d7ff");
+          addLog(`정2 지원사격: ${liveTarget.name} -${dmg}`);
+          console.log("[VERIFY_J2] supportShotFired target=", liveTarget.id, "dmgScale=0.35");
         }
 
         function spawnFloatingText(tx, ty, text, color = "#ffffff") {
