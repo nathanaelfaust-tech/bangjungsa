@@ -1483,6 +1483,8 @@
         let stg1IdleTimer = null;
         let tutorialDialogQueue = [];
         let tutorialDialogOpen = false;
+        const STG1_TUTOR_STEP = { INIT: 0, MOVE: 1, FOREST: 2, ATTACK: 3, ENDTURN: 4, KILL1: 5, CLEAR: 6, CAMP: 7 };
+        let stg1TutorialState = { active: false, step: STG1_TUTOR_STEP.INIT, nudgeAt: 0 };
         let stg1TutorialFlags = {
           enter: false,
           moveIntent: false,
@@ -1736,6 +1738,32 @@
           return currentCampaignStageId === "STG1" && currentStageId === "STG1";
         }
 
+        function stg1LeaderUnit() {
+          const leader = getLeaderUnit();
+          return leader && leader.id ? leader : null;
+        }
+
+        function setStg1TutorialStep(step) {
+          if (!isStg1TutorialStage()) return;
+          stg1TutorialState.step = step;
+          if (step === STG1_TUTOR_STEP.ATTACK) queueStg1TutorialLine("moveCommit", "TUT_STG1_03");
+          if (step === STG1_TUTOR_STEP.ENDTURN) queueStg1TutorialLine("idle", "TUT_STG1_05");
+        }
+
+        function nudgeTutorial(message) {
+          const now = Date.now();
+          if (now - stg1TutorialState.nudgeAt < 700) return;
+          stg1TutorialState.nudgeAt = now;
+          showToast(message, 900);
+          stg1MarkerBlinkUntil = performance.now() + 900;
+        }
+
+        function canUseAttackNow(mode = "attack") {
+          if (!isStg1TutorialStage() || !stg1TutorialState.active) return true;
+          if (stg1TutorialState.step === STG1_TUTOR_STEP.ATTACK) return mode === "attack" || mode === "hero_bolt";
+          return stg1TutorialState.step >= STG1_TUTOR_STEP.KILL1;
+        }
+
         function resetStg1TutorialState() {
           stg1TutorialFlags = {
             enter: false,
@@ -1752,6 +1780,11 @@
           tutorialDialogQueue = [];
           tutorialDialogOpen = false;
           tutorialDialogEl.classList.remove("show");
+          stg1TutorialState = {
+            active: isStg1TutorialStage(),
+            step: isStg1TutorialStage() ? STG1_TUTOR_STEP.MOVE : STG1_TUTOR_STEP.INIT,
+            nudgeAt: 0
+          };
           if (stg1IdleTimer) {
             clearTimeout(stg1IdleTimer);
             stg1IdleTimer = null;
@@ -1791,6 +1824,7 @@
         }
 
         function queueStg1IdleTutorial() {
+          if (stg1TutorialState.active) return;
           if (!isStg1TutorialStage() || stg1TutorialFlags.idle) return;
           if (stg1IdleTimer) clearTimeout(stg1IdleTimer);
           stg1IdleTimer = setTimeout(() => {
@@ -1813,6 +1847,10 @@
 
         function closeCampModal() {
           if (!campOverlay) return;
+          if (isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.step === STG1_TUTOR_STEP.CAMP) {
+            nudgeTutorial("지금은 다음 스테이지 버튼만 눌러여");
+            return;
+          }
           campOverlay.classList.remove("show");
           inputLocked = false;
         }
@@ -1824,6 +1862,7 @@
           const hasPending = !!campaign?.pendingNextStageId;
           if (hasPending) {
             setCampDialogueLines(["먼지: 튜토리얼 클리어 확인.", `먼지: 다음 스테이지(${campaign.pendingNextStageId})는 여기서만 출발해여.`]);
+            if (isStg1TutorialStage()) stg1TutorialState.step = STG1_TUTOR_STEP.CAMP;
           } else {
             setCampDialogueLines(intro ? meonjiCampLines("intro") : ["먼지가 기다리고 있어여.", "말 걸어서 확인해보세여."]);
           }
@@ -1833,8 +1872,11 @@
 
         function onCampNextStage() {
           if (!campaign || !campaign.pendingNextStageId) return;
+          if (isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.step !== STG1_TUTOR_STEP.CAMP) return;
           const nextId = campaign.pendingNextStageId;
           campaign.pendingNextStageId = null;
+          stg1TutorialState.active = false;
+          stg1TutorialState.step = STG1_TUTOR_STEP.INIT;
           campaign.currentStageId = nextId;
           saveCampaign();
           initializeStageSelect();
@@ -1891,7 +1933,13 @@
         if (campBtn) campBtn.addEventListener("click", () => openCampModal({ intro: false }));
         if (menuCampBtn) menuCampBtn.addEventListener("click", () => openCampModal({ intro: false }));
         if (campCloseBtn) campCloseBtn.addEventListener("click", () => closeCampModal());
-        if (campTalkBtn) campTalkBtn.addEventListener("click", () => openMeonjiModal());
+        if (campTalkBtn) campTalkBtn.addEventListener("click", () => {
+          if (isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.step === STG1_TUTOR_STEP.CAMP) {
+            nudgeTutorial("지금은 다음 스테이지 버튼만 눌러여");
+            return;
+          }
+          openMeonjiModal();
+        });
         if (campNextStageBtn) campNextStageBtn.addEventListener("click", () => onCampNextStage());
         if (meonjiTopicRecapBtn) meonjiTopicRecapBtn.addEventListener("click", () => openMeonjiTopic("recap"));
         if (meonjiTopicHintBtn) meonjiTopicHintBtn.addEventListener("click", () => openMeonjiTopic("hint"));
@@ -1983,6 +2031,13 @@
             cancelPlayerInteraction();
           } else if (e.key === "Enter") {
             if (canEndPlayerPhase()) {
+              if (isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.step !== STG1_TUTOR_STEP.ENDTURN && stg1TutorialState.step < STG1_TUTOR_STEP.KILL1) {
+                nudgeTutorial("지금은 턴 종료 단계가 아니구여");
+                return;
+              }
+              if (isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.step === STG1_TUTOR_STEP.ENDTURN) {
+                setStg1TutorialStep(STG1_TUTOR_STEP.KILL1);
+              }
               startEnemyPhase();
             }
           }
@@ -2003,7 +2058,15 @@
         });
 
         endPhaseBtn.addEventListener("click", () => {
-          if (canEndPlayerPhase()) startEnemyPhase();
+          if (!canEndPlayerPhase()) return;
+          if (isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.step !== STG1_TUTOR_STEP.ENDTURN && stg1TutorialState.step < STG1_TUTOR_STEP.KILL1) {
+            nudgeTutorial("지금은 턴 종료 단계가 아니구여");
+            return;
+          }
+          if (isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.step === STG1_TUTOR_STEP.ENDTURN) {
+            setStg1TutorialStep(STG1_TUTOR_STEP.KILL1);
+          }
+          startEnemyPhase();
         });
 
         let last = performance.now();
@@ -2726,6 +2789,8 @@
           if (buttonLike !== 0) return;
           if (battleOver || inputLocked || activeMove || turnBusy) return;
           if (phase !== PHASE.PLAYER) return;
+          const tutOn = isStg1TutorialStage() && stg1TutorialState.active;
+          const tutStep = stg1TutorialState.step;
 
           const t = clientToTile(clientX, clientY);
           if (!t || !inBounds(t.x, t.y)) return;
@@ -2733,6 +2798,10 @@
           const u = getUnitAt(t.x, t.y);
 
           if (targetingUnitId) {
+            if (!canUseAttackNow(targetingMode || "attack")) {
+              nudgeTutorial("지금은 공격 타이밍이 아니구여");
+              return;
+            }
             const attacker = unitById(targetingUnitId);
             const cfg = attacker ? targetingConfig(attacker, targetingMode || "attack") : null;
             const targetFaction = cfg ? cfg.targetFaction : null;
@@ -2763,6 +2832,17 @@
               invalidFeedback();
               return;
             }
+            if (tutOn) {
+              const leader = stg1LeaderUnit();
+              if ((tutStep === STG1_TUTOR_STEP.MOVE || tutStep === STG1_TUTOR_STEP.FOREST) && leader && u.id !== leader.id) {
+                nudgeTutorial("지금은 리더부터 움직여보세여");
+                return;
+              }
+              if (tutStep === STG1_TUTOR_STEP.ENDTURN) {
+                nudgeTutorial("지금은 턴 종료부터 해여");
+                return;
+              }
+            }
             if (isStg1TutorialStage() && !stg1TutorialFlags.enter) {
               queueStg1TutorialLine("enter", "TUT_STG1_01");
               queueStg1TutorialLine("moveIntent", "TUT_STG1_02");
@@ -2778,6 +2858,10 @@
           }
 
           const su = selectedUnit();
+          if (tutOn && (tutStep === STG1_TUTOR_STEP.ATTACK || tutStep === STG1_TUTOR_STEP.ENDTURN)) {
+            nudgeTutorial(tutStep === STG1_TUTOR_STEP.ATTACK ? "지금은 공격부터 해여" : "지금은 턴 종료만 눌러여");
+            return;
+          }
           const targetKey = key(t.x, t.y);
 
           if (!moveRange.reachable.has(targetKey)) {
@@ -2788,6 +2872,10 @@
           const path = reconstructPath(moveRange.cameFrom, { x: su.x, y: su.y }, { x: t.x, y: t.y });
           if (!path) {
             invalidFeedback();
+            return;
+          }
+          if (tutOn && (tutStep === STG1_TUTOR_STEP.MOVE || tutStep === STG1_TUTOR_STEP.FOREST) && path.length <= 1) {
+            nudgeTutorial("지금은 이동부터 해여");
             return;
           }
 
@@ -3045,6 +3133,10 @@
         function onCommandAttack() {
           const u = unitById(commandMenuUnitId);
           if (!u) return;
+          if (!canUseAttackNow("attack")) {
+            nudgeTutorial("지금은 공격할 단계가 아니구여");
+            return;
+          }
           targetingUnitId = u.id;
           targetingMode = "attack";
           showTriangleTutorialHintOnce();
@@ -3059,6 +3151,10 @@
         function onCommandHeroBolt() {
           const u = unitById(commandMenuUnitId);
           if (!u || !isHeroUnit(u)) return;
+          if (!canUseAttackNow("hero_bolt")) {
+            nudgeTutorial("지금은 공격할 단계가 아니구여");
+            return;
+          }
           targetingUnitId = u.id;
           targetingMode = "hero_bolt";
           cmdMenu.classList.remove("show");
@@ -3068,6 +3164,10 @@
         function onCommandHeroDash() {
           const u = unitById(commandMenuUnitId);
           if (!u || !isHeroUnit(u)) return;
+          if (!canUseAttackNow("hero_dash")) {
+            nudgeTutorial("지금은 기본공격/마법탄만 써보세여");
+            return;
+          }
           if ((u.heroState?.dashCd || 0) > 0) {
             addLog(`돌진베기 쿨다운 ${u.heroState.dashCd}턴`);
             return;
@@ -3081,6 +3181,10 @@
         function onCommandHeroArc() {
           const u = unitById(commandMenuUnitId);
           if (!u || !isHeroUnit(u)) return;
+          if (!canUseAttackNow("hero_arc")) {
+            nudgeTutorial("지금은 기본공격/마법탄만 써보세여");
+            return;
+          }
           if ((u.heroState?.arcCd || 0) > 0) {
             addLog(`마력견제탄 쿨다운 ${u.heroState.arcCd}턴`);
             return;
@@ -3094,6 +3198,10 @@
         function onCommandHeal() {
           const u = unitById(commandMenuUnitId);
           if (!u) return;
+          if (!canUseAttackNow("heal")) {
+            nudgeTutorial("지금은 해당 행동이 막혀있어여");
+            return;
+          }
           targetingUnitId = u.id;
           targetingMode = "heal";
           showTriangleTutorialHintOnce();
@@ -3107,6 +3215,10 @@
         function onCommandPurify() {
           const u = unitById(commandMenuUnitId);
           if (!u) return;
+          if (!canUseAttackNow("purify")) {
+            nudgeTutorial("지금은 해당 행동이 막혀있어여");
+            return;
+          }
           targetingUnitId = u.id;
           targetingMode = "purify";
           showTriangleTutorialHintOnce();
@@ -3120,6 +3232,10 @@
         function onCommandWait() {
           const u = unitById(commandMenuUnitId);
           if (!u) return;
+          if (isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.step < STG1_TUTOR_STEP.KILL1) {
+            nudgeTutorial(stg1TutorialState.step === STG1_TUTOR_STEP.ENDTURN ? "지금은 턴 종료 버튼을 눌러여" : "지금은 지정된 행동부터 해여");
+            return;
+          }
           triggerPerkEvent("wait", { unit: u });
           finalizePlayerAction(u);
         }
@@ -3170,7 +3286,15 @@
             await animateUnitAlongPath(unit, path);
             addLog(`${unit.name} 이동: (${path[path.length - 1].x},${path[path.length - 1].y})`);
             emitUnitEnterTile(unit);
-            if (isStg1TutorialStage()) queueStg1TutorialLine("moveCommit", "TUT_STG1_03");
+            if (isStg1TutorialStage() && stg1TutorialState.active) {
+              if (stg1TutorialState.step === STG1_TUTOR_STEP.MOVE) {
+                setStg1TutorialStep(STG1_TUTOR_STEP.FOREST);
+              }
+              const t = terrainAt(unit.x, unit.y);
+              if (stg1TutorialState.step === STG1_TUTOR_STEP.FOREST && t?.key === "forest") {
+                setStg1TutorialStep(STG1_TUTOR_STEP.ATTACK);
+              }
+            }
           } else {
             addLog(`${unit.name} 이동 후 명령 대기`);
           }
@@ -4376,6 +4500,8 @@
           ensureCampaignRecruitmentScaffold(campaign);
           if (stageId === "STG1") {
             queueStg1TutorialLine("clear", "TUT_STG1_07");
+            stg1TutorialState.active = true;
+            stg1TutorialState.step = STG1_TUTOR_STEP.CLEAR;
             campaign.campUnlocked = true;
             campaign.pendingNextStageId = "STG2";
             campaign.currentStageId = "STG1";
@@ -5427,6 +5553,10 @@
           emitBubble(attacker, "hit");
           if (onHitEffect) onHitEffect(attacker, target);
           triggerHeroPassiveIfNeeded(target);
+          if (isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.step === STG1_TUTOR_STEP.ATTACK &&
+            attacker.faction === "player" && target.faction === "enemy" && dmg > 0) {
+            setStg1TutorialStep(STG1_TUTOR_STEP.ENDTURN);
+          }
           if (isStg1TutorialStage() && attacker.faction === "player") queueStg1TutorialLine("attackSuccess", "TUT_STG1_04");
           let targetDefeated = false;
           if (target.hp === 0) {
