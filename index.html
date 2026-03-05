@@ -1011,7 +1011,7 @@
         };
         const Tier1CharIds = new Set(["Player_Cute", "jeong2", "able", "kim_ware"]);
         const ClassTemplates = {
-          CL_HERO_HYBRID: { weaponType: "sword", range: [1, 1], mov: 5, base: { hp: 32, atk: 9, def: 8, hit: 88, crit: 6 } },
+          CL_HERO_HYBRID: { weaponType: "sword", range: [1, 1], mov: 5, base: { hp: 32, atk: 12, def: 8, hit: 88, crit: 6 } },
           CL_SWD_GUARD:   { weaponType: "sword", range: [1, 1], mov: 5, base: { hp: 30, atk: 10, def: 8, hit: 85, crit: 5 } },
           CL_AXE_BRUISER: { weaponType: "axe", range: [1, 1], mov: 4, base: { hp: 34, atk: 12, def: 7, hit: 75, crit: 5 } },
           CL_LNC_PIKER:   { weaponType: "lance", range: [1, 1], mov: 5, base: { hp: 28, atk: 10, def: 7, hit: 88, crit: 5 } },
@@ -1499,8 +1499,8 @@
         };
         const SAMPLE_UNIT_DEFS = {};
         const RECRUITMENT_UNIT_DEFS = {
-          jeong2: { id: "정2", name: "정2", faction: "player", x: 3, y: 10, spriteType: "scout", paletteKey: "player", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_EAGLE_EYE", "PRK_PINCUSHION"], aiHint: "focusLowDef" },
-          kimware: { id: "김웨어", name: "김웨어", faction: "player", x: 4, y: 10, spriteType: "soldier", paletteKey: "player", classId: "CL_SWD_DUELIST", weaponType: "sword", perks: ["PRK_FIRST_IMPRESSION", "PRK_COMEBACK"], aiHint: "skirmish" },
+          jeong2: { id: "정2", name: "정2", faction: "player", x: 3, y: 10, spriteType: "scout", paletteKey: "player", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_EAGLE_EYE", "PRK_PINCUSHION"], aiHint: "focusLowDef", atk: 12 },
+          kimware: { id: "김웨어", name: "김웨어", faction: "player", x: 4, y: 10, spriteType: "soldier", paletteKey: "player", classId: "CL_SWD_DUELIST", weaponType: "sword", perks: ["PRK_FIRST_IMPRESSION", "PRK_COMEBACK"], aiHint: "skirmish", atk: 14 },
           neoburi: { id: "너부리", name: "너부리", faction: "player", x: 5, y: 10, spriteType: "cat", paletteKey: "player", classId: "CL_STF_HEXER", weaponType: "staff", perks: ["PRK_FRIENDLY_HECKLE"], aiHint: "supportSafe" },
           sireo: { id: "시리오", name: "시리오", faction: "player", x: 6, y: 10, spriteType: "scout", paletteKey: "player", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_EAGLE_EYE"], aiHint: "holdLine" },
           passerby: { id: "지나가는사람", name: "지나가는사람", faction: "player", x: 7, y: 10, spriteType: "cat", paletteKey: "player", classId: "CL_NONE_JESTER", weaponType: "none", perks: ["PRK_SHOWTIME", "PRK_FRIENDLY_HECKLE", "PRK_LAST_LAUGH"], aiHint: "disrupt" },
@@ -1991,7 +1991,7 @@
             aiTeam: "allyGuest",
             maxHp: 18,
             hp: 18,
-            atk: 6,
+            atk: 9,
             def: 2,
             hit: 78,
             crit: 0
@@ -2128,6 +2128,19 @@
             hp: 99
           });
           const spawned = units.find((u) => isNyangsanUnit(u));
+          if (spawned) {
+            const nx = 15;
+            const ny = 1;
+            const passable = inBounds(nx, ny) && (terrainAt(nx, ny)?.moveCost || 999) < 999;
+            const vacant = !isOccupied(nx, ny, spawned.id);
+            if (passable && vacant) {
+              spawned.x = nx;
+              spawned.y = ny;
+              spawned.px = null;
+              spawned.py = null;
+            }
+            console.log(`[VERIFY_NY] stg=STG2 requested=(15,1) used=(${spawned.x},${spawned.y})`);
+          }
           const pos = spawned ? { x: spawned.x, y: spawned.y } : null;
           console.log("[VERIFY_NY] spawnStrategy=nearExitDist4to6 pos=", pos);
           console.log("[VERIFY_NY] spawned=", !!spawned, "pos=", pos, "awake=", !!st.nyangAwake, "gone=", !!st.nyangGone);
@@ -5800,7 +5813,7 @@
             return { id: "지닝", name: "지닝", faction: "player", x, y, spriteType: "lancer", paletteKey: "player", classId: "CL_LNC_PIKER", weaponType: "lance", perks: ["PRK_STEADY_HAND"], controllable: true };
           }
           if (rosterId === "able") {
-            return { id: "애블", name: "애블", faction: "player", x, y, spriteType: "lancer", paletteKey: "player", classId: "CL_STF_MENDER", weaponType: "staff", perks: ["PRK_MENDER_TOUCH", "PRK_PURIFY"], controllable: true };
+            return { id: "애블", name: "애블", faction: "player", x, y, spriteType: "lancer", paletteKey: "player", classId: "CL_STF_MENDER", weaponType: "staff", perks: ["PRK_MENDER_TOUCH", "PRK_PURIFY"], controllable: true, atk: 10 };
           }
           if (rosterId === "kimware") {
             return { ...RECRUITMENT_UNIT_DEFS.kimware, x, y, controllable: true };
@@ -5928,6 +5941,14 @@
           spawnStageUnit(uySpawn);
         }
 
+        function logBaseAtkVerify() {
+          const hero = units.find((u) => isHeroUnit(u));
+          const jeong2 = units.find((u) => u && (u.id === "정2" || u.id === "jeong2" || u.unitId === "jung2"));
+          const abel = units.find((u) => u && (u.id === "애블" || u.id === "able"));
+          const kimwear = units.find((u) => u && (u.id === "김웨어" || u.id === "kimwear"));
+          console.log(`[VERIFY_STATS] baseAtkUp=+3 hero=${hero?.atk ?? "NA"} jeong2=${jeong2?.atk ?? "NA"} abel=${abel?.atk ?? "NA"} kimwear=${kimwear?.atk ?? "NA"}`);
+        }
+
         function loadStage(stageId) {
           const stage = STAGES[stageId] || STAGES[CURRENT_STAGE];
           currentStageId = stageId in STAGES ? stageId : CURRENT_STAGE;
@@ -5956,6 +5977,7 @@
             setupStg2Captive();
             spawnStg2NyangsanIfNeeded();
           }
+          logBaseAtkVerify();
           applyStageRecruitmentScaffoldOnLoad();
           stageObjectives = (stage.objectives || []).map((obj) => ({ ...cloneSimple(obj), status: "ongoing" }));
           stageTriggers = (stage.triggers || []).map((tr) => cloneSimple(tr));
