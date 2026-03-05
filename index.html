@@ -814,6 +814,15 @@
         const CAMERA_FOLLOW_MARGIN = TILE * 3;
         const INTERNAL_W = VIEW_W * TILE;
         const INTERNAL_H = VIEW_H * TILE;
+        const HERO_MELEE_DMG_BASE = 1.0;
+        const HERO_BOLT_DMG_MULT = 0.65;
+        const HERO_DASH_DMG_MULT = 1.20;
+        const HERO_ARC_DMG_MULT = 0.80;
+        const HERO_DASH_CD = 2;
+        const HERO_ARC_CD = 3;
+        const HERO_ARC_RANGE = 3;
+        const HERO_PASSIVE_HP_THRESHOLD = 0.50;
+        const HERO_PASSIVE_DR_MULT = 0.80;
         const MINI_W = 225;
         const MINI_H = 150;
         const SAVE_VERSION = 1;
@@ -1000,7 +1009,7 @@
         };
         const Tier1CharIds = new Set(["Player_Cute", "jeong2", "able", "kim_ware"]);
         const ClassTemplates = {
-          CL_HERO_HYBRID: { weaponType: "sword", range: [1, 2], mov: 5, base: { hp: 32, atk: 9, def: 8, hit: 88, crit: 6 } },
+          CL_HERO_HYBRID: { weaponType: "sword", range: [1, 1], mov: 5, base: { hp: 32, atk: 9, def: 8, hit: 88, crit: 6 } },
           CL_SWD_GUARD:   { weaponType: "sword", range: [1, 1], mov: 5, base: { hp: 30, atk: 10, def: 8, hit: 85, crit: 5 } },
           CL_AXE_BRUISER: { weaponType: "axe", range: [1, 1], mov: 4, base: { hp: 34, atk: 12, def: 7, hit: 75, crit: 5 } },
           CL_LNC_PIKER:   { weaponType: "lance", range: [1, 1], mov: 5, base: { hp: 28, atk: 10, def: 7, hit: 88, crit: 5 } },
@@ -1361,12 +1370,18 @@
         const cmdMenu = document.createElement("div");
         cmdMenu.className = "cmd-menu";
         cmdMenu.innerHTML = `<button id="cmdAttack" class="btnSmall" type="button">공격</button>
+          <button id="cmdHeroBolt" class="btnSmall" type="button">마법탄</button>
+          <button id="cmdHeroDash" class="btnSmall" type="button">돌진베기</button>
+          <button id="cmdHeroArc" class="btnSmall" type="button">마력견제탄</button>
           <button id="cmdHeal" class="btnSmall" type="button">치유</button>
           <button id="cmdPurify" class="btnSmall" type="button">정화</button>
           <button id="cmdTalk" class="btnSmall" type="button">대화</button>
           <button id="cmdWait" class="btnSmall" type="button">대기</button>`;
         canvasWrap.appendChild(cmdMenu);
         const cmdAttackBtn = cmdMenu.querySelector("#cmdAttack");
+        const cmdHeroBoltBtn = cmdMenu.querySelector("#cmdHeroBolt");
+        const cmdHeroDashBtn = cmdMenu.querySelector("#cmdHeroDash");
+        const cmdHeroArcBtn = cmdMenu.querySelector("#cmdHeroArc");
         const cmdHealBtn = cmdMenu.querySelector("#cmdHeal");
         const cmdPurifyBtn = cmdMenu.querySelector("#cmdPurify");
         const cmdTalkBtn = cmdMenu.querySelector("#cmdTalk");
@@ -1895,6 +1910,9 @@
           setVisualSkin(next, true);
         });
         cmdAttackBtn.addEventListener("click", onCommandAttack);
+        cmdHeroBoltBtn.addEventListener("click", onCommandHeroBolt);
+        cmdHeroDashBtn.addEventListener("click", onCommandHeroDash);
+        cmdHeroArcBtn.addEventListener("click", onCommandHeroArc);
         cmdHealBtn.addEventListener("click", onCommandHeal);
         cmdPurifyBtn.addEventListener("click", onCommandPurify);
         cmdTalkBtn.addEventListener("click", onCommandTalk);
@@ -2120,17 +2138,18 @@
           if (targetingUnitId) {
             const attacker = unitById(targetingUnitId);
             if (attacker) {
-              const cfg = targetingConfig(attacker, targetingMode || "attack");
+              const mode = targetingMode || "attack";
+              const cfg = targetingConfig(attacker, mode);
               const targetFaction = cfg.targetFaction;
               ctx.save();
               for (let y = 0; y < MAP_H; y++) {
                 for (let x = 0; x < MAP_W; x++) {
-                  if (!isInAttackRange(attacker, x, y)) continue;
+                  if (!isInAttackRange(attacker, x, y, mode)) continue;
                   ctx.fillStyle = cfg.tint;
                   ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
                 }
               }
-              for (const t of getAttackTargets(attacker, targetFaction)) {
+              for (const t of getAttackTargets(attacker, targetFaction, mode)) {
                 ctx.strokeStyle = cfg.stroke;
                 ctx.strokeRect(t.x * TILE + 1.5, t.y * TILE + 1.5, TILE - 3, TILE - 3);
               }
@@ -2717,11 +2736,12 @@
             const attacker = unitById(targetingUnitId);
             const cfg = attacker ? targetingConfig(attacker, targetingMode || "attack") : null;
             const targetFaction = cfg ? cfg.targetFaction : null;
-            if (!attacker || !u || u.faction !== targetFaction || !isInAttackRange(attacker, u.x, u.y)) {
+            const mode = targetingMode || "attack";
+            if (!attacker || !u || u.faction !== targetFaction || !isTargetValidForMode(attacker, u, mode)) {
               invalidFeedback();
               return;
             }
-            executeCombat(attacker, u, targetingMode || "attack").then(() => {
+            executeCombat(attacker, u, mode).then(() => {
               finalizePlayerAction(attacker);
             });
             return;
@@ -2996,10 +3016,21 @@
           targetingMode = null;
           const canTalk = !!getAvailableTalkEvent(unit);
           const isStaff = unit.weaponType === "staff";
+          const isHero = isHeroUnit(unit);
+          const dashCd = unit.heroState?.dashCd || 0;
+          const arcCd = unit.heroState?.arcCd || 0;
           cmdAttackBtn.style.display = isStaff ? "none" : "inline-block";
+          cmdHeroBoltBtn.style.display = isHero ? "inline-block" : "none";
+          cmdHeroDashBtn.style.display = isHero ? "inline-block" : "none";
+          cmdHeroArcBtn.style.display = isHero ? "inline-block" : "none";
           cmdHealBtn.style.display = isStaff ? "inline-block" : "none";
           cmdPurifyBtn.style.display = isStaff ? "inline-block" : "none";
           cmdTalkBtn.style.display = canTalk ? "inline-block" : "none";
+          cmdHeroBoltBtn.disabled = !isHero || getAttackTargets(unit, getCommandTargetFaction(unit, "hero_bolt"), "hero_bolt").length === 0;
+          cmdHeroDashBtn.disabled = !isHero || dashCd > 0 || getAttackTargets(unit, getCommandTargetFaction(unit, "hero_dash"), "hero_dash").length === 0;
+          cmdHeroArcBtn.disabled = !isHero || arcCd > 0 || getAttackTargets(unit, getCommandTargetFaction(unit, "hero_arc"), "hero_arc").length === 0;
+          cmdHeroDashBtn.textContent = dashCd > 0 ? `돌진베기(${dashCd})` : "돌진베기";
+          cmdHeroArcBtn.textContent = arcCd > 0 ? `마력견제탄(${arcCd})` : "마력견제탄";
           cmdMenu.classList.add("show");
           positionCommandMenu();
         }
@@ -3019,10 +3050,45 @@
           showTriangleTutorialHintOnce();
           cmdMenu.classList.remove("show");
           const targetFaction = getCommandTargetFaction(u, "attack");
-          if (getAttackTargets(u, targetFaction).length === 0) {
+          if (getAttackTargets(u, targetFaction, "attack").length === 0) {
             addLog(targetFaction === u.faction ? "사거리 내 아군이 없음" : "사거리 내 적이 없음");
           }
           emitBubble(u, "attack");
+        }
+
+        function onCommandHeroBolt() {
+          const u = unitById(commandMenuUnitId);
+          if (!u || !isHeroUnit(u)) return;
+          targetingUnitId = u.id;
+          targetingMode = "hero_bolt";
+          cmdMenu.classList.remove("show");
+          if (getAttackTargets(u, getCommandTargetFaction(u, "hero_bolt"), "hero_bolt").length === 0) addLog("사거리 내 적이 없음");
+        }
+
+        function onCommandHeroDash() {
+          const u = unitById(commandMenuUnitId);
+          if (!u || !isHeroUnit(u)) return;
+          if ((u.heroState?.dashCd || 0) > 0) {
+            addLog(`돌진베기 쿨다운 ${u.heroState.dashCd}턴`);
+            return;
+          }
+          targetingUnitId = u.id;
+          targetingMode = "hero_dash";
+          cmdMenu.classList.remove("show");
+          if (getAttackTargets(u, getCommandTargetFaction(u, "hero_dash"), "hero_dash").length === 0) addLog("돌진 가능한 대상이 없음");
+        }
+
+        function onCommandHeroArc() {
+          const u = unitById(commandMenuUnitId);
+          if (!u || !isHeroUnit(u)) return;
+          if ((u.heroState?.arcCd || 0) > 0) {
+            addLog(`마력견제탄 쿨다운 ${u.heroState.arcCd}턴`);
+            return;
+          }
+          targetingUnitId = u.id;
+          targetingMode = "hero_arc";
+          cmdMenu.classList.remove("show");
+          if (getAttackTargets(u, getCommandTargetFaction(u, "hero_arc"), "hero_arc").length === 0) addLog("사거리 내 적이 없음");
         }
 
         function onCommandHeal() {
@@ -3032,7 +3098,7 @@
           targetingMode = "heal";
           showTriangleTutorialHintOnce();
           cmdMenu.classList.remove("show");
-          if (getAttackTargets(u, getCommandTargetFaction(u, "heal")).length === 0) {
+          if (getAttackTargets(u, getCommandTargetFaction(u, "heal"), "heal").length === 0) {
             addLog("사거리 내 아군이 없음");
           }
           emitBubble(u, "attack");
@@ -3045,7 +3111,7 @@
           targetingMode = "purify";
           showTriangleTutorialHintOnce();
           cmdMenu.classList.remove("show");
-          if (getAttackTargets(u, getCommandTargetFaction(u, "purify")).length === 0) {
+          if (getAttackTargets(u, getCommandTargetFaction(u, "purify"), "purify").length === 0) {
             addLog("사거리 내 아군이 없음");
           }
           emitBubble(u, "attack");
@@ -3303,6 +3369,10 @@
             p.actionState = "idle";
             p.preMove = null;
             p.turnFlags.firstAttackUsed = false;
+            if (p.heroState) {
+              p.heroState.dashCd = Math.max(0, (p.heroState.dashCd || 0) - 1);
+              p.heroState.arcCd = Math.max(0, (p.heroState.arcCd || 0) - 1);
+            }
           }
           triggerPerkEvent("adjacent", { turnCounter });
           inputLocked = false;
@@ -3381,7 +3451,7 @@
               const mode = targetingUnitId ? (targetingMode || "attack") : (attacker?.weaponType === "staff" ? "heal" : "attack");
               if (attacker && attacker.faction === "player") {
                 const targetFaction = getCommandTargetFaction(attacker, mode);
-                if (target.faction === targetFaction && isInAttackRange(attacker, target.x, target.y)) {
+                if (target.faction === targetFaction && isInAttackRange(attacker, target.x, target.y, mode)) {
                   const preview = buildCombatPreview(attacker, target, mode);
                   extraLine = `<div class="small">${escapeHtml(preview.primaryLine)}</div><div class="small">${escapeHtml(preview.triangleGuide)}</div>`;
                 }
@@ -3563,15 +3633,71 @@
           return false;
         }
 
-        function isInAttackRange(attacker, tx, ty) {
-          const minR = attacker.minRange ?? 1;
-          const maxR = attacker.maxRange ?? (attacker.atkRange || 1);
-          const d = Math.abs(attacker.x - tx) + Math.abs(attacker.y - ty);
-          return d >= minR && d <= maxR;
+        function isHeroUnit(unit) {
+          return unit?.classId === "CL_HERO_HYBRID";
         }
 
-        function getAttackTargets(attacker, targetFaction) {
-          return units.filter((u) => u.faction === targetFaction && isInAttackRange(attacker, u.x, u.y));
+        function commandRangeForMode(attacker, mode = "attack") {
+          if (mode === "hero_bolt") return { min: 2, max: 2 };
+          if (mode === "hero_dash") return { min: 1, max: 2 };
+          if (mode === "hero_arc") return { min: 1, max: HERO_ARC_RANGE };
+          const minR = attacker.minRange ?? 1;
+          const maxR = attacker.maxRange ?? (attacker.atkRange || 1);
+          return { min: minR, max: maxR };
+        }
+
+        function isInAttackRange(attacker, tx, ty, mode = "attack") {
+          const range = commandRangeForMode(attacker, mode);
+          const d = Math.abs(attacker.x - tx) + Math.abs(attacker.y - ty);
+          return d >= range.min && d <= range.max;
+        }
+
+        function heroDashLandingTile(attacker, target) {
+          if (!attacker || !target) return null;
+          const dx = target.x - attacker.x;
+          const dy = target.y - attacker.y;
+          if (dx !== 0 && dy !== 0) return null;
+          const dist = Math.abs(dx) + Math.abs(dy);
+          if (dist < 1 || dist > 2) return null;
+          if (dist === 1) return { x: attacker.x, y: attacker.y };
+          const stepX = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
+          const stepY = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
+          const lx = attacker.x + stepX;
+          const ly = attacker.y + stepY;
+          if (!inBounds(lx, ly)) return null;
+          if (isOccupied(lx, ly, attacker.id)) return null;
+          return { x: lx, y: ly };
+        }
+
+        function hasWallOnLine(attacker, target) {
+          if (!attacker || !target) return true;
+          const dx = target.x - attacker.x;
+          const dy = target.y - attacker.y;
+          if (dx !== 0 && dy !== 0) return false;
+          const stepX = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
+          const stepY = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
+          let cx = attacker.x + stepX;
+          let cy = attacker.y + stepY;
+          while (cx !== target.x || cy !== target.y) {
+            if (!inBounds(cx, cy)) return true;
+            const code = (MAP_ROWS[cy][cx] || "g").toLowerCase();
+            if (code === "w") return true;
+            cx += stepX;
+            cy += stepY;
+          }
+          return false;
+        }
+
+        function isTargetValidForMode(attacker, target, mode = "attack") {
+          if (!attacker || !target) return false;
+          if (!isInAttackRange(attacker, target.x, target.y, mode)) return false;
+          if (mode === "hero_dash") return !!heroDashLandingTile(attacker, target) && !hasWallOnLine(attacker, target);
+          if (mode === "hero_arc") return !hasWallOnLine(attacker, target);
+          return true;
+        }
+
+        function getAttackTargets(attacker, targetFaction, mode = "attack") {
+          return units.filter((u) => u.faction === targetFaction && isTargetValidForMode(attacker, u, mode));
         }
 
         function getCommandTargetFaction(unit, mode = "attack") {
@@ -3607,7 +3733,7 @@
           const cells = [];
           for (let y = 0; y < MAP_H; y++) {
             for (let x = 0; x < MAP_W; x++) {
-              if (!isInAttackRange(unit, x, y)) continue;
+              if (!isInAttackRange(unit, x, y, mode)) continue;
               cells.push({ x, y });
             }
           }
@@ -3619,7 +3745,7 @@
             tint: cfg.tint,
             stroke: cfg.stroke,
             cells,
-            targets: getAttackTargets(unit, cfg.targetFaction).map((u) => ({ x: u.x, y: u.y }))
+            targets: getAttackTargets(unit, cfg.targetFaction, mode).map((u) => ({ x: u.x, y: u.y }))
           };
         }
 
@@ -4174,8 +4300,8 @@
 
         function mbtiAxisSummary(mbti) {
           const axes = computeHeroMbtiAxes(mbti);
-          const axis1 = axes.attackVsSupport >= 0 ? `공격+${axes.attackVsSupport}` : `지원+${Math.abs(axes.attackVsSupport)}`;
-          const axis2 = axes.stabilityVsBurst >= 0 ? `안정+${axes.stabilityVsBurst}` : `폭발+${Math.abs(axes.stabilityVsBurst)}`;
+          const axis1 = axes.axisOffenseSupport >= 0 ? `공격+${axes.axisOffenseSupport}` : `지원+${Math.abs(axes.axisOffenseSupport)}`;
+          const axis2 = axes.axisStableBurst >= 0 ? `안정+${axes.axisStableBurst}` : `폭발+${Math.abs(axes.axisStableBurst)}`;
           return `용사 성향: ${axis1} / ${axis2}`;
         }
 
@@ -4703,8 +4829,10 @@
           const atk = (chars[0] === "E" ? 1 : -1) + (chars[2] === "T" ? 1 : -1);
           const stable = (chars[1] === "S" ? 1 : -1) + (chars[3] === "J" ? 1 : -1);
           return {
-            attackVsSupport: atk,     // + 공격, - 지원
-            stabilityVsBurst: stable  // + 안정, - 폭발
+            attackVsSupport: atk,      // legacy alias
+            stabilityVsBurst: stable,  // legacy alias
+            axisOffenseSupport: atk,
+            axisStableBurst: stable
           };
         }
 
@@ -4724,7 +4852,9 @@
           const needsRebuild = !targetCampaign.leaderBuild ||
             targetCampaign.leaderBuild.seed !== expectedSeed ||
             !targetCampaign.leaderBuild.classId ||
-            !Array.isArray(targetCampaign.leaderBuild.perkIdsRaw);
+            !Array.isArray(targetCampaign.leaderBuild.perkIdsRaw) ||
+            typeof targetCampaign.leaderBuild.mbtiAxes?.axisOffenseSupport !== "number" ||
+            typeof targetCampaign.leaderBuild.mbtiAxes?.axisStableBurst !== "number";
           if (needsRebuild) targetCampaign.leaderBuild = buildLeaderBuild(currentName, currentMbti);
           if (!Array.isArray(targetCampaign.leaderBuild.perkIds) || !targetCampaign.leaderBuild.perkIds.length) {
             targetCampaign.leaderBuild.perkIds = resolveLeaderPerks(targetCampaign.leaderBuild.perkIdsRaw);
@@ -4996,6 +5126,9 @@
           unit.portraitUrl = unit.portraitUrl || (CHARACTER_META[unit.charId]?.portraitUrl ?? null);
           unit.portraitAlt = unit.portraitAlt || unit.name || (CHARACTER_META[unit.charId]?.portraitAlt || "portrait");
           if (unit.faction === "player" && unit.controllable == null) unit.controllable = true;
+          if (unit.classId === "CL_HERO_HYBRID") {
+            unit.heroState = unit.heroState || { dashCd: 0, arcCd: 0, passiveTriggered: false, instinctGuardActive: false };
+          }
           unit.movedThisTurn = !!unit.movedThisTurn;
           unit.preMove = unit.preMove || null;
           unit.actionState = unit.actionState || "idle";
@@ -5066,8 +5199,13 @@
           const hitChance = Math.max(0, Math.min(100, Math.round(
             statWithEffects(attacker, "hit") + tri.hit + (attacker.nextAttackBonus.hit || 0)
           )));
+          const dmgMult = mode === "hero_bolt"
+            ? HERO_BOLT_DMG_MULT
+            : (mode === "hero_dash"
+                ? HERO_DASH_DMG_MULT
+                : (mode === "hero_arc" ? HERO_ARC_DMG_MULT : HERO_MELEE_DMG_BASE));
           const estDmg = Math.max(0, Math.round(
-            (statWithEffects(attacker, "atk") + tri.atk + (attacker.nextAttackBonus.atk || 0)) - statWithEffects(target, "def")
+            ((statWithEffects(attacker, "atk") + tri.atk + (attacker.nextAttackBonus.atk || 0)) - statWithEffects(target, "def")) * dmgMult
           ));
           return {
             primaryLine: `예상: 명중 ${hitChance}% / 피해 ${estDmg} | 상성 ${triText}`,
@@ -5076,7 +5214,7 @@
         }
 
         function showTriangleTutorialHintOnce() {
-          if (currentStageId !== "STG1_FOREST") return;
+          if (currentStageId !== "STG1") return;
           if (getFlag("FLG_TUTOR_TRIANGLE")) return;
           setFlag("FLG_TUTOR_TRIANGLE", true);
           showToast("상성: 검>도끼>창>검  (▲유리 ▼불리)");
@@ -5219,7 +5357,16 @@
           return d >= minR && d <= maxR;
         }
 
-        async function resolveAttack(attacker, target, { actionMode = "attack", contextTag = "normal", logPrefix = "" } = {}) {
+        function triggerHeroPassiveIfNeeded(unit) {
+          if (!unit || !unit.heroState || unit.heroState.passiveTriggered) return;
+          if (unit.hp > unit.maxHp * HERO_PASSIVE_HP_THRESHOLD) return;
+          unit.heroState.passiveTriggered = true;
+          unit.heroState.instinctGuardActive = true;
+          addLog("용사의 본능 발동!");
+          showToast("용사의 본능 발동!", 1100);
+        }
+
+        async function resolveAttack(attacker, target, { actionMode = "attack", contextTag = "normal", logPrefix = "", damageMult = 1, onHitEffect = null } = {}) {
           if (!attacker || !target || battleOver) return { resolved: false };
           const dist = Math.abs(attacker.x - target.x) + Math.abs(attacker.y - target.y);
           const payload = { unit: attacker, attacker, target, dist, mods: { hit: 0, atk: 0, crit: 0 }, heal: 0, purify: false };
@@ -5259,8 +5406,14 @@
           const critChance = statWithEffects(attacker, "crit") + payload.mods.crit + (attacker.nextAttackBonus.crit || 0);
           const crit = Math.floor(rng() * 100) < critChance;
           let dmg = Math.max(0, (statWithEffects(attacker, "atk") + payload.mods.atk + tri.atk + (attacker.nextAttackBonus.atk || 0)) -
-            statWithEffects(target, "def"));
+            statWithEffects(target, "def")) * Math.max(0, Number(damageMult) || 0);
+          if (target.heroState?.instinctGuardActive) {
+            dmg *= HERO_PASSIVE_DR_MULT;
+            target.heroState.instinctGuardActive = false;
+            addLog(`${target.name}: 본능 방어로 피해 감소`);
+          }
           if (crit) dmg *= 2;
+          dmg = Math.max(0, Math.round(dmg));
           target.hp = Math.max(0, target.hp - dmg);
           spawnFloatingText(target.x, target.y, `HIT -${dmg}`, crit ? "#ffd38f" : "#ffadad");
           if (crit) {
@@ -5272,6 +5425,8 @@
           addLog(`${logPrefix}${attacker.name} -> ${target.name}: HIT -${dmg} (${triText})`);
           triggerPerkEvent("hit", { unit: attacker, attacker, target, dmg, dist, contextTag });
           emitBubble(attacker, "hit");
+          if (onHitEffect) onHitEffect(attacker, target);
+          triggerHeroPassiveIfNeeded(target);
           if (isStg1TutorialStage() && attacker.faction === "player") queueStg1TutorialLine("attackSuccess", "TUT_STG1_04");
           let targetDefeated = false;
           if (target.hp === 0) {
@@ -5291,10 +5446,52 @@
         async function executeCombat(attacker, target, actionMode = "attack") {
           if (!attacker || !target || battleOver) return;
           if (attacker.faction === "player") showTriangleTutorialHintOnce();
+          if ((actionMode === "hero_dash" || actionMode === "hero_arc" || actionMode === "hero_bolt") && !isHeroUnit(attacker)) return;
+          if (actionMode === "hero_dash" && (attacker.heroState?.dashCd || 0) > 0) {
+            addLog(`돌진베기 쿨다운 ${attacker.heroState.dashCd}턴`);
+            return;
+          }
+          if (actionMode === "hero_arc" && (attacker.heroState?.arcCd || 0) > 0) {
+            addLog(`마력견제탄 쿨다운 ${attacker.heroState.arcCd}턴`);
+            return;
+          }
+          if (!isTargetValidForMode(attacker, target, actionMode)) {
+            addLog("스킬 대상 조건 불충족");
+            return;
+          }
           inputLocked = true;
+          if (actionMode === "hero_dash") {
+            const landing = heroDashLandingTile(attacker, target);
+            if (!landing) {
+              addLog("돌진 경로가 막혀 있음");
+              inputLocked = false;
+              return;
+            }
+            if (landing.x !== attacker.x || landing.y !== attacker.y) {
+              const path = [{ x: attacker.x, y: attacker.y }, { x: landing.x, y: landing.y }];
+              await animateUnitAlongPath(attacker, path);
+              emitUnitEnterTile(attacker);
+            }
+          }
           hitFlash = { x: target.x, y: target.y, life: 220, maxLife: 220, kind: "hit", accent: tier1PointColor(attacker) };
           await wait(140);
-          const first = await resolveAttack(attacker, target, { actionMode, contextTag: "initial", logPrefix: "" });
+          const firstDamageMult = actionMode === "hero_bolt"
+            ? HERO_BOLT_DMG_MULT
+            : (actionMode === "hero_dash"
+                ? HERO_DASH_DMG_MULT
+                : (actionMode === "hero_arc" ? HERO_ARC_DMG_MULT : HERO_MELEE_DMG_BASE));
+          const first = await resolveAttack(attacker, target, {
+            actionMode,
+            contextTag: "initial",
+            logPrefix: "",
+            damageMult: firstDamageMult,
+            onHitEffect: actionMode === "hero_arc" ? ((_, tgt) => {
+              addEffect(tgt, { stat: "mov", delta: -1, expiresTurn: turnCounter + 2, key: "hero_marked" });
+              addLog(`${tgt.name}: 표식(이동 -1)`);
+            }) : null
+          });
+          if (actionMode === "hero_dash" && attacker.heroState) attacker.heroState.dashCd = HERO_DASH_CD;
+          if (actionMode === "hero_arc" && attacker.heroState) attacker.heroState.arcCd = HERO_ARC_CD;
           if (first.support) {
             await wait(180);
             if (!battleOver) inputLocked = false;
