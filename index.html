@@ -1520,7 +1520,8 @@
           casterId: null,
           targetId: null,
           candidates: [],
-          candidateSet: new Set()
+          candidateSet: new Set(),
+          rangeTiles: []
         };
         let stg1MarkerBlinkUntil = 0;
         let stg1TutorialQueue = [];
@@ -1799,7 +1800,7 @@
             type: "TACTIC",
             targetRange: 2,
             moveRange: 2,
-            cooldown: 0
+            cooldown: 2
           }
         };
         const missingSkillUiNameWarned = new Set();
@@ -2773,6 +2774,11 @@
           drawTutorialHintOverlays(ctx);
           if (repositionState.active) {
             ctx.save();
+            for (const rt of repositionState.rangeTiles || []) {
+              ctx.strokeStyle = "rgba(170, 210, 255, 0.35)";
+              ctx.lineWidth = 1;
+              ctx.strokeRect(rt.x * TILE + 0.5, rt.y * TILE + 0.5, TILE - 1, TILE - 1);
+            }
             if (repositionState.targetId) {
               const tgt = unitById(repositionState.targetId);
               if (tgt) {
@@ -3745,7 +3751,11 @@
             cmdAttackBtn.style.display = "none";
             cmdAttackBtn.disabled = true;
           } else {
-            const label = getActiveSkillUiName(unit) || "공격";
+            let label = getActiveSkillUiName(unit) || "공격";
+            if (sid === "SK_REPOSITION_2") {
+              const cd = unit.skillCooldowns?.[sid] || 0;
+              if (cd > 0) label = `${label} CD:${cd}`;
+            }
             cmdAttackBtn.style.display = "inline-block";
             cmdAttackBtn.textContent = label;
           }
@@ -3767,7 +3777,8 @@
           if (sid) {
             if (sid === "SK_REPOSITION_2") {
               const hasTarget = units.some((t) => t.faction === "player" && t.id !== unit.id && Math.abs(t.x - unit.x) + Math.abs(t.y - unit.y) <= 2);
-              cmdAttackBtn.disabled = !hasTarget;
+              const cd = unit.skillCooldowns?.[sid] || 0;
+              cmdAttackBtn.disabled = cd > 0 || !hasTarget;
             } else {
               const activeMode = unit.activeSkill?.type === "STRIKE" ? "strike" : "attack";
               cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, activeMode), activeMode).length === 0;
@@ -3944,6 +3955,7 @@
           repositionState.targetId = null;
           repositionState.candidates = [];
           repositionState.candidateSet = new Set();
+          repositionState.rangeTiles = [];
         }
 
         function isStg2RepositionBlockedTile(x, y) {
@@ -4004,14 +4016,29 @@
 
         function startRepositionMode(caster) {
           if (!caster || !isJung2Unit(caster)) return;
+          const sid = "SK_REPOSITION_2";
+          const cd = caster.skillCooldowns?.[sid] || 0;
+          if (cd > 0) {
+            showToast(`전술 명령 CD:${cd}`, 900);
+            return;
+          }
           repositionState.active = true;
           repositionState.casterId = caster.id;
           repositionState.targetId = null;
           repositionState.candidates = [];
           repositionState.candidateSet = new Set();
+          repositionState.rangeTiles = [];
+          for (let y = 0; y < MAP_H; y++) {
+            for (let x = 0; x < MAP_W; x++) {
+              if (Math.abs(caster.x - x) + Math.abs(caster.y - y) <= 2) {
+                repositionState.rangeTiles.push({ x, y });
+              }
+            }
+          }
           closeCommandMenu();
           showToast("아군 대상 선택(2칸 이내)", 1200);
           console.log("[VERIFY_REPOS] mode=ON caster=jung2");
+          console.log("[VERIFY_REPOS] rangeShown=2");
         }
 
         function trySelectRepositionTarget(target) {
@@ -4046,6 +4073,11 @@
           target.y = y;
           target.px = null;
           target.py = null;
+          const sid = "SK_REPOSITION_2";
+          const cd = Number(SkillCatalog[sid]?.cooldown || 0);
+          caster.skillCooldowns = caster.skillCooldowns || {};
+          caster.skillCooldowns[sid] = cd;
+          console.log("[VERIFY_REPOS] cooldownSet=2");
           emitUnitEnterTile(target);
           console.log("[VERIFY_REPOS] moved target=", target.id, "to", { x, y });
           resetRepositionMode();
@@ -4332,6 +4364,12 @@
             p.actionState = "idle";
             p.preMove = null;
             p.turnFlags.firstAttackUsed = false;
+            p.skillCooldowns = p.skillCooldowns || {};
+            const reposCd = p.skillCooldowns.SK_REPOSITION_2 || 0;
+            if (reposCd > 0) p.skillCooldowns.SK_REPOSITION_2 = Math.max(0, reposCd - 1);
+            if (isJung2Unit(p)) {
+              console.log("[VERIFY_REPOS] cooldownNow=", p.skillCooldowns.SK_REPOSITION_2 || 0);
+            }
             if (p.heroState) {
               p.heroState.dashCd = Math.max(0, (p.heroState.dashCd || 0) - 1);
               p.heroState.arcCd = Math.max(0, (p.heroState.arcCd || 0) - 1);
@@ -4675,6 +4713,7 @@
           } else if (isJung2Unit(unit)) {
             unit.activeSkillId = "SK_REPOSITION_2";
             unit.activeSkill = { id: "SK_REPOSITION_2", type: "TACTIC", name: "전술 명령", dmgMult: 0 };
+            unit.skillCooldowns = unit.skillCooldowns || {};
           } else if (!unit.passivePerk) {
             unit.passivePerk = null;
           }
