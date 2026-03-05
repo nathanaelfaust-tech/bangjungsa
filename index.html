@@ -1407,6 +1407,7 @@
           <button id="cmdHeal" class="btnSmall" type="button">치유</button>
           <button id="cmdPurify" class="btnSmall" type="button">정화</button>
           <button id="cmdInteract" class="btnSmall" type="button">상호작용</button>
+          <button id="cmdNyang" class="btnSmall" type="button">비켜</button>
           <button id="cmdTalk" class="btnSmall" type="button">대화</button>
           <button id="cmdWait" class="btnSmall" type="button">대기</button>`;
         canvasWrap.appendChild(cmdMenu);
@@ -1417,6 +1418,7 @@
         const cmdHealBtn = cmdMenu.querySelector("#cmdHeal");
         const cmdPurifyBtn = cmdMenu.querySelector("#cmdPurify");
         const cmdInteractBtn = cmdMenu.querySelector("#cmdInteract");
+        const cmdNyangBtn = cmdMenu.querySelector("#cmdNyang");
         const cmdTalkBtn = cmdMenu.querySelector("#cmdTalk");
         const cmdWaitBtn = cmdMenu.querySelector("#cmdWait");
         const dialogOverlay = document.createElement("div");
@@ -1845,7 +1847,10 @@
               reinforcementSeq: 0,
               exitTilesLogged: false,
               defeatAllBlockedLogged: false,
-              interactAvailableLogged: false
+              interactAvailableLogged: false,
+              nyangGone: false,
+              nyangAwake: false,
+              nyangInteractTurn: -1
             };
           }
           return currentStageRuntimeState.stg2;
@@ -1906,6 +1911,133 @@
             console.log("[VERIFY_STG2] interactAvailable=true at R adjacent to K");
           }
           return true;
+        }
+
+        function isNyangsanUnit(unit) {
+          return !!unit && (unit.id === "nyangsan" || unit.unitId === "nyangsan");
+        }
+
+        function isStg2NyangsanTileBlockedByPoi(x, y) {
+          const poi = stg2Poi();
+          if (!poi) return false;
+          const checkSingle = (p) => Array.isArray(p) && p[0] === x && p[1] === y;
+          if (checkSingle(poi.K) || checkSingle(poi.R) || checkSingle(poi.G1) || checkSingle(poi.G2)) return true;
+          for (const e of stg2ExitTiles()) {
+            if (e.x === x && e.y === y) return true;
+          }
+          return false;
+        }
+
+        function stg2DistToAnyExitTile(x, y) {
+          const exits = stg2ExitTiles();
+          if (!exits.length) return Infinity;
+          let best = Infinity;
+          for (const e of exits) {
+            const d = Math.abs(x - e.x) + Math.abs(y - e.y);
+            if (d < best) best = d;
+          }
+          return best;
+        }
+
+        function stg2FloorNeighborCount(x, y) {
+          let count = 0;
+          for (const n of neighbors(x, y)) {
+            if (!inBounds(n.x, n.y)) continue;
+            if (terrainAt(n.x, n.y)?.key === "floor") count++;
+          }
+          return count;
+        }
+
+        function stg2CanPlaceOrMoveNyangsanTo(x, y, ignoreId = null) {
+          if (!isStg2Stage()) return false;
+          if (!inBounds(x, y)) return false;
+          if (terrainAt(x, y)?.key !== "floor") return false;
+          if (isOccupied(x, y, ignoreId)) return false;
+          if (isStg2NyangsanTileBlockedByPoi(x, y)) return false;
+          if (stg2DistToAnyExitTile(x, y) <= 2) return false;
+          if (stg2FloorNeighborCount(x, y) < 2) return false;
+          return true;
+        }
+
+        function spawnStg2NyangsanIfNeeded() {
+          if (!isStg2Stage()) return;
+          const st = ensureStg2RuntimeState();
+          const existing = units.find((u) => isNyangsanUnit(u));
+          if (existing || st.nyangGone) {
+            const pos = existing ? { x: existing.x, y: existing.y } : null;
+            console.log("[VERIFY_NY] spawned=", !!existing, "pos=", pos, "gone=", !!st.nyangGone);
+            return;
+          }
+          const candidates = [];
+          for (let y = 0; y < MAP_H; y++) {
+            for (let x = 0; x < MAP_W; x++) {
+              if (!stg2CanPlaceOrMoveNyangsanTo(x, y)) continue;
+              candidates.push({ x, y, score: stg2FloorNeighborCount(x, y) });
+            }
+          }
+          if (!candidates.length) {
+            console.log("[VERIFY_NY] spawned=", false, "pos=", null, "gone=", !!st.nyangGone);
+            return;
+          }
+          let bestScore = -Infinity;
+          for (const c of candidates) if (c.score > bestScore) bestScore = c.score;
+          const best = candidates.filter((c) => c.score >= bestScore - 1);
+          const pick = best[Math.floor(rng() * best.length)];
+          spawnStageUnit({
+            id: "nyangsan",
+            unitId: "nyangsan",
+            name: "냥산",
+            faction: "neutral",
+            controllable: false,
+            x: pick.x,
+            y: pick.y,
+            spriteType: "cat",
+            paletteKey: "neutral",
+            classId: "CL_NONE_JESTER",
+            weaponType: "none",
+            perks: [],
+            aiHint: "holdLine",
+            maxHp: 99,
+            hp: 99
+          });
+          const spawned = units.find((u) => isNyangsanUnit(u));
+          const pos = spawned ? { x: spawned.x, y: spawned.y } : null;
+          console.log("[VERIFY_NY] spawned=", !!spawned, "pos=", pos, "gone=", !!st.nyangGone);
+        }
+
+        async function stg2TryMoveNyangsanOnTurnEnd() {
+          if (!isStg2Stage() || battleOver) return;
+          const st = ensureStg2RuntimeState();
+          if (!st.alarm || !st.nyangAwake || st.nyangGone) return;
+          const ny = units.find((u) => isNyangsanUnit(u));
+          if (!ny) return;
+          if (rng() >= 0.25) return;
+          const from = { x: ny.x, y: ny.y };
+          const maxSteps = rng() < 0.5 ? 1 : 2;
+          const range = computeMoveRange(ny);
+          const candidates = [];
+          for (const [k, c] of range.reachable.entries()) {
+            if (c <= 0 || c > maxSteps) continue;
+            const [x, y] = parseKey(k);
+            if (!stg2CanPlaceOrMoveNyangsanTo(x, y, ny.id)) continue;
+            candidates.push({ x, y, c });
+          }
+          let ok = false;
+          let to = { x: ny.x, y: ny.y };
+          if (candidates.length) {
+            candidates.sort((a, b) => (b.c - a.c) || (stg2FloorNeighborCount(b.x, b.y) - stg2FloorNeighborCount(a.x, a.y)));
+            const bestCost = candidates[0].c;
+            const best = candidates.filter((v) => v.c === bestCost);
+            const pick = best[Math.floor(rng() * best.length)];
+            const path = reconstructPath(range.cameFrom, { x: ny.x, y: ny.y }, { x: pick.x, y: pick.y }, range.pathEndStateByPos);
+            if (path && path.length > 1) {
+              await animateUnitAlongPath(ny, path);
+              emitUnitEnterTile(ny);
+              ok = true;
+              to = { x: ny.x, y: ny.y };
+            }
+          }
+          console.log("[VERIFY_NY] moveAttempt", "from", from, "to", to, "ok", ok);
         }
 
         function stg2DistanceToNearestExit(unit) {
@@ -2406,6 +2538,7 @@
         cmdHealBtn.addEventListener("click", onCommandHeal);
         cmdPurifyBtn.addEventListener("click", onCommandPurify);
         cmdInteractBtn.addEventListener("click", onCommandInteract);
+        cmdNyangBtn.addEventListener("click", onCommandNyangInteract);
         cmdTalkBtn.addEventListener("click", onCommandTalk);
         cmdWaitBtn.addEventListener("click", onCommandWait);
         dialogNextBtn.addEventListener("click", onDialogNext);
@@ -3318,7 +3451,7 @@
             return;
           }
 
-          const path = reconstructPath(moveRange.cameFrom, { x: su.x, y: su.y }, { x: t.x, y: t.y });
+          const path = reconstructPath(moveRange.cameFrom, { x: su.x, y: su.y }, { x: t.x, y: t.y }, moveRange.pathEndStateByPos);
           if (!path) {
             invalidFeedback();
             return;
@@ -3570,6 +3703,12 @@
           const canInteract = stg2CanInteractRescue(unit);
           cmdInteractBtn.style.display = canInteract ? "inline-block" : "none";
           cmdInteractBtn.disabled = !canInteract;
+          const stg2 = isStg2Stage() ? ensureStg2RuntimeState() : null;
+          const ny = units.find((u) => isNyangsanUnit(u));
+          const canNyangInteract = !!(isStg2Stage() && unit.faction === "player" && ny && stg2 && !stg2.nyangGone &&
+            stg2.nyangInteractTurn !== turnCounter && (Math.abs(unit.x - ny.x) + Math.abs(unit.y - ny.y) === 1));
+          cmdNyangBtn.style.display = canNyangInteract ? "inline-block" : "none";
+          cmdNyangBtn.disabled = !canNyangInteract;
           cmdTalkBtn.style.display = canTalk ? "inline-block" : "none";
           if (sid) {
             const activeMode = unit.activeSkill?.type === "STRIKE" ? "strike" : "attack";
@@ -3710,6 +3849,12 @@
             st.rescuedKimwear = true;
             st.alarm = true;
             st.alarmTurn = turnCounter;
+            if (!st.nyangAwake) {
+              st.nyangAwake = true;
+              addLog("냥산이 소란에 잠에서 깼다!");
+              showToast("냥산이 소란에 잠에서 깼다!", 1400);
+              console.log("[VERIFY_NY] awake=true");
+            }
             const captive = unitById("kimwear");
             if (captive) {
               captive.faction = "player";
@@ -3723,6 +3868,33 @@
             showToast("김웨어를 구출했다!", 1500);
           }
           console.log("[VERIFY_STG2] interactClicked; rescuedKimwear now", !!st.rescuedKimwear);
+          closeCommandMenu();
+          finalizePlayerAction(speaker);
+        }
+
+        function onCommandNyangInteract() {
+          const speaker = unitById(commandMenuUnitId);
+          if (!speaker || !isStg2Stage()) return;
+          const st = ensureStg2RuntimeState();
+          const ny = units.find((u) => isNyangsanUnit(u));
+          if (!ny || st.nyangGone || st.nyangInteractTurn === turnCounter || Math.abs(speaker.x - ny.x) + Math.abs(speaker.y - ny.y) !== 1) {
+            addLog("지금은 비켜를 쓸 수 없음");
+            return;
+          }
+          st.nyangInteractTurn = turnCounter;
+          console.log("[VERIFY_NY] interactOpened by", speaker.id);
+          const chooseSnack = window.confirm("비켜 선택:\n확인=간식 던지기(츄르)\n취소=훈계하기(비켜!)");
+          if (chooseSnack) {
+            removeUnit(ny.id);
+            st.nyangGone = true;
+            addLog("냥산이 간식 따라 사라졌다.");
+            showToast("냥산이 간식 따라 사라졌다.", 1400);
+            console.log("[VERIFY_NY] choice=A result=gone");
+          } else {
+            addLog("냥산: (하품) ...");
+            showToast("냥산: (하품) ...", 1200);
+            console.log("[VERIFY_NY] choice=B result=stay");
+          }
           closeCommandMenu();
           finalizePlayerAction(speaker);
         }
@@ -3799,6 +3971,7 @@
           turnBusy = true;
           inputLocked = true;
           dispatchStageTrigger("onTurnEnd", { side: PHASE.PLAYER, turn: turnCounter });
+          await stg2TryMoveNyangsanOnTurnEnd();
           clearSelection();
           closeCommandMenu();
           pendingActionUnitId = null;
@@ -3850,7 +4023,7 @@
             }
           }
 
-          const path = reconstructPath(range.cameFrom, { x: enemy.x, y: enemy.y }, best) || [{ x: enemy.x, y:
+          const path = reconstructPath(range.cameFrom, { x: enemy.x, y: enemy.y }, best, range.pathEndStateByPos) || [{ x: enemy.x, y:
   enemy.y }];
           if (path.length > 1) {
             await animateUnitAlongPath(enemy, path);
@@ -3896,7 +4069,7 @@
               bestCost = cost;
             }
           }
-          const path = reconstructPath(range.cameFrom, { x: guest.x, y: guest.y }, best) || [{ x: guest.x, y: guest.y }];
+          const path = reconstructPath(range.cameFrom, { x: guest.x, y: guest.y }, best, range.pathEndStateByPos) || [{ x: guest.x, y: guest.y }];
           if (path.length > 1) {
             await animateUnitAlongPath(guest, path);
             addLog(`${guest.name} (게스트) 이동: (${best.x},${best.y})`);
@@ -4095,48 +4268,88 @@
         function computeMoveRange(unit) {
           const start = { x: unit.x, y: unit.y };
           const startK = key(start.x, start.y);
-          const dist = new Map([[startK, 0]]);
+          const usesZocPenalty = unit.faction === "player";
+          const ZOC_PENALTY_CAP = 2;
+          const dist = new Map();
           const cameFrom = new Map();
-          const open = [{ x: start.x, y: start.y, cost: 0 }];
+          const open = [];
+          const bestByPos = new Map();
+          const endStateByPos = new Map();
+
+          function stateKey(x, y, zocUsed) {
+            return `${x},${y}|${zocUsed}`;
+          }
+
+          function isZocSourceUnit(source) {
+            return !!source && source.hp > 0 && (source.faction === "enemy" || isNyangsanUnit(source));
+          }
+
+          function tileHasZocPenalty(tx, ty, moverId) {
+            for (const src of units) {
+              if (!isZocSourceUnit(src)) continue;
+              if (src.id === moverId) continue;
+              const d = Math.abs(src.x - tx) + Math.abs(src.y - ty);
+              if (d === 1) return true;
+            }
+            return false;
+          }
+
+          const startState = stateKey(start.x, start.y, 0);
+          dist.set(startState, 0);
+          open.push({ x: start.x, y: start.y, cost: 0, zocUsed: 0, sk: startState });
+          bestByPos.set(startK, 0);
+          endStateByPos.set(startK, startState);
 
           while (open.length) {
             open.sort((a, b) => a.cost - b.cost);
             const cur = open.shift();
-            const curK = key(cur.x, cur.y);
-            if (cur.cost > (dist.get(curK) ?? Infinity)) continue;
+            if (cur.cost > (dist.get(cur.sk) ?? Infinity)) continue;
 
             for (const n of neighbors(cur.x, cur.y)) {
               if (!inBounds(n.x, n.y)) continue;
-
               if (isOccupied(n.x, n.y, unit.id)) continue;
 
-              const step = terrainAt(n.x, n.y).moveCost;
+              const stepBase = terrainAt(n.x, n.y).moveCost;
+              let zocAdd = 0;
+              let nextZocUsed = cur.zocUsed;
+              if (usesZocPenalty && tileHasZocPenalty(n.x, n.y, unit.id) && nextZocUsed < ZOC_PENALTY_CAP) {
+                zocAdd = 1;
+                nextZocUsed++;
+              }
+              const step = stepBase + zocAdd;
               const nextCost = cur.cost + step;
               if (nextCost > unit.mov) continue;
 
               const nk = key(n.x, n.y);
-              if (nextCost < (dist.get(nk) ?? Infinity)) {
-                dist.set(nk, nextCost);
-                cameFrom.set(nk, curK);
-                open.push({ x: n.x, y: n.y, cost: nextCost });
+              const nsk = stateKey(n.x, n.y, nextZocUsed);
+              if (nextCost < (dist.get(nsk) ?? Infinity)) {
+                dist.set(nsk, nextCost);
+                cameFrom.set(nsk, cur.sk);
+                open.push({ x: n.x, y: n.y, cost: nextCost, zocUsed: nextZocUsed, sk: nsk });
+                if (nextCost < (bestByPos.get(nk) ?? Infinity)) {
+                  bestByPos.set(nk, nextCost);
+                  endStateByPos.set(nk, nsk);
+                }
               }
             }
           }
 
           const reachable = new Map();
-          for (const [k, c] of dist.entries()) {
-            const [x, y] = parseKey(k);
+          for (const [pk, c] of bestByPos.entries()) {
+            const [x, y] = parseKey(pk);
             if ((x === start.x && y === start.y) || !isOccupied(x, y, unit.id)) {
-              reachable.set(k, c);
+              reachable.set(pk, c);
             }
           }
 
-          return { dist, cameFrom, reachable };
+          return { dist: bestByPos, cameFrom, reachable, pathEndStateByPos: endStateByPos };
         }
 
-        function reconstructPath(cameFrom, start, end) {
-          const s = key(start.x, start.y);
-          const e = key(end.x, end.y);
+        function reconstructPath(cameFrom, start, end, endStateByPos = null) {
+          const sPos = key(start.x, start.y);
+          const s = endStateByPos ? (endStateByPos.get(sPos) || `${sPos}|0`) : sPos;
+          const ePos = key(end.x, end.y);
+          const e = endStateByPos ? (endStateByPos.get(ePos) || ePos) : ePos;
           if (s === e) return [{ x: start.x, y: start.y }];
           if (!cameFrom.has(e)) return null;
 
@@ -4149,7 +4362,7 @@
             rev.push(cur);
           }
           rev.reverse();
-          return rev.map(parseKeyToObj);
+          return rev.map((nodeKey) => parseKeyToObj(String(nodeKey).split("|")[0]));
         }
 
         function selectedUnit() {
@@ -5277,6 +5490,7 @@
             console.log("[VERIFY_STG2] exitVisible=", !!stg2.exitVisible);
             console.log("[VERIFY_STG2] rescuedKimwear=", !!stg2.rescuedKimwear);
             setupStg2Captive();
+            spawnStg2NyangsanIfNeeded();
           }
           applyStageRecruitmentScaffoldOnLoad();
           stageObjectives = (stage.objectives || []).map((obj) => ({ ...cloneSimple(obj), status: "ongoing" }));
