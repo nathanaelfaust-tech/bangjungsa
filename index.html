@@ -1153,8 +1153,8 @@
               E: [[21, 13], [22, 13], [21, 14], [22, 14]]
             },
             spawns: [
-              { id: "STG2_GUARD_A", name: "경비 A", faction: "enemy", x: 15, y: 8, spriteType: "enemy", paletteKey: "enemy", classId: "CL_SWD_GUARD", weaponType: "sword", perks: [], aiHint: "CHASE_PLAYER", maxHp: 18, hp: 18, atk: 7, def: 3, hit: 78, crit: 0 },
-              { id: "STG2_GUARD_B", name: "경비 B", faction: "enemy", x: 17, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_BOW_RANGER", weaponType: "bow", perks: [], aiHint: "CHASE_PLAYER", maxHp: 16, hp: 16, atk: 6, def: 2, hit: 80, crit: 0 }
+              { id: "guardP1", name: "순찰 간수1", faction: "enemy", x: 10, y: 8, spriteType: "enemy", paletteKey: "enemy", classId: "CL_SWD_GUARD", weaponType: "sword", perks: [], aiHint: "PATROL", maxHp: 18, hp: 18, atk: 7, def: 3, hit: 78, crit: 0 },
+              { id: "guardP2", name: "순찰 간수2", faction: "enemy", x: 18, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_BOW_RANGER", weaponType: "bow", perks: [], aiHint: "PATROL", maxHp: 16, hp: 16, atk: 6, def: 2, hit: 80, crit: 0 }
             ],
             objectives: [
               { id: "OBJ_STG2_RESCUE", type: "CUSTOM", params: { hint: "김웨어를 구출하고 출구 집결" }, status: "ongoing" }
@@ -1866,19 +1866,66 @@
             currentStageRuntimeState.stg2 = {
               rescuedKimwear: false,
               alarm: false,
-              alarmTurn: 0,
+              alarmTurn: null,
               exitVisible: true,
               reinforcementsSpawned: 0,
               reinforcementSeq: 0,
+              reinforcementsActiveLogged: false,
               exitTilesLogged: false,
               defeatAllBlockedLogged: false,
               interactAvailableLogged: false,
               nyangGone: false,
               nyangAwake: false,
-              nyangInteractTurn: -1
+              nyangInteractTurn: null,
+              patrolIndexByGuard: {}
             };
           }
           return currentStageRuntimeState.stg2;
+        }
+
+        function stg2PatrolPoints(guardId) {
+          if (guardId === "guardP1") return [{ x: 7, y: 8 }, { x: 12, y: 8 }, { x: 9, y: 11 }];
+          if (guardId === "guardP2") return [{ x: 18, y: 2 }, { x: 15, y: 5 }, { x: 20, y: 8 }];
+          return [{ x: 14, y: 8 }, { x: 18, y: 6 }];
+        }
+
+        function triggerAlarm(reason = "UNKNOWN", byGuardId = null) {
+          if (!isStg2Stage()) return false;
+          const st = ensureStg2RuntimeState();
+          if (st.alarm) return false;
+          st.alarm = true;
+          st.alarmTurn = turnCounter;
+          addLog("소란 발생! 경비가 몰려온다!");
+          showToast("소란 발생! 경비가 몰려온다!", 1500);
+          console.log("[VERIFY_ALARM] TRIGGERED reason=", reason, "by", byGuardId, "turn", turnCounter);
+          for (const u of units) {
+            if (u.faction === "enemy" && (u.id === "guardP1" || u.id === "guardP2")) {
+              u.aiHint = "CHASE_PLAYER";
+            }
+          }
+          if (!st.nyangAwake && !st.nyangGone) {
+            st.nyangAwake = true;
+            addLog("냥산이 소란에 잠에서 깼다!");
+            showToast("냥산이 소란에 잠에서 깼다!", 1400);
+            console.log("[VERIFY_NY] awake=true via alarm");
+          }
+          return true;
+        }
+
+        function stg2DetectPatrolGuards() {
+          if (!isStg2Stage() || battleOver) return false;
+          const st = ensureStg2RuntimeState();
+          if (DEV_BUILD) console.log("[VERIFY_ALARM] detectCheck");
+          if (st.alarm) return false;
+          const players = units.filter((u) => u.faction === "player");
+          for (const g of units) {
+            if (g.faction !== "enemy" || g.aiHint !== "PATROL") continue;
+            for (const p of players) {
+              const d = Math.abs(g.x - p.x) + Math.abs(g.y - p.y);
+              if (d <= 3) return triggerAlarm("DETECTED", g.id);
+            }
+          }
+          return false;
         }
 
         function setupStg2Captive() {
@@ -1990,7 +2037,7 @@
           const existing = units.find((u) => isNyangsanUnit(u));
           if (existing || st.nyangGone) {
             const pos = existing ? { x: existing.x, y: existing.y } : null;
-            console.log("[VERIFY_NY] spawned=", !!existing, "pos=", pos, "gone=", !!st.nyangGone);
+            console.log("[VERIFY_NY] spawned=", !!existing, "pos=", pos, "awake=", !!st.nyangAwake, "gone=", !!st.nyangGone);
             return;
           }
           const candidates = [];
@@ -2001,7 +2048,7 @@
             }
           }
           if (!candidates.length) {
-            console.log("[VERIFY_NY] spawned=", false, "pos=", null, "gone=", !!st.nyangGone);
+            console.log("[VERIFY_NY] spawned=", false, "pos=", null, "awake=", !!st.nyangAwake, "gone=", !!st.nyangGone);
             return;
           }
           let bestScore = -Infinity;
@@ -2027,7 +2074,7 @@
           });
           const spawned = units.find((u) => isNyangsanUnit(u));
           const pos = spawned ? { x: spawned.x, y: spawned.y } : null;
-          console.log("[VERIFY_NY] spawned=", !!spawned, "pos=", pos, "gone=", !!st.nyangGone);
+          console.log("[VERIFY_NY] spawned=", !!spawned, "pos=", pos, "awake=", !!st.nyangAwake, "gone=", !!st.nyangGone);
         }
 
         async function stg2TryMoveNyangsanOnTurnEnd() {
@@ -2134,6 +2181,10 @@
             if (ok) spawned++;
           }
           if (spawned > 0) {
+            if (!st.reinforcementsActiveLogged) {
+              st.reinforcementsActiveLogged = true;
+              console.log("[VERIFY_ALARM] reinforcementsActive=true");
+            }
             st.reinforcementsSpawned = (st.reinforcementsSpawned || 0) + spawned;
             addLog(`적 증원 ${spawned}명 도착`);
             showToast(`적 증원 ${spawned}명`, 1100);
@@ -3937,14 +3988,6 @@
           const st = ensureStg2RuntimeState();
           if (!st.rescuedKimwear) {
             st.rescuedKimwear = true;
-            st.alarm = true;
-            st.alarmTurn = turnCounter;
-            if (!st.nyangAwake) {
-              st.nyangAwake = true;
-              addLog("냥산이 소란에 잠에서 깼다!");
-              showToast("냥산이 소란에 잠에서 깼다!", 1400);
-              console.log("[VERIFY_NY] awake=true");
-            }
             const captive = unitById("kimwear");
             if (captive) {
               captive.faction = "player";
@@ -3956,6 +3999,7 @@
             saveCampaign();
             addLog("김웨어를 구출했다!");
             showToast("김웨어를 구출했다!", 1500);
+            console.log("[VERIFY_ALARM] rescuedKimwear=true (alarm unchanged)", !!st.alarm);
           }
           console.log("[VERIFY_STG2] interactClicked; rescuedKimwear now", !!st.rescuedKimwear);
           closeCommandMenu();
@@ -4232,6 +4276,45 @@
           const players = units.filter(u => u.faction === "player");
           if (players.length === 0) return;
 
+          if (isStg2Stage()) {
+            const st = ensureStg2RuntimeState();
+            if (!st.alarm && enemy.aiHint === "PATROL") {
+              const points = stg2PatrolPoints(enemy.id);
+              const idx0 = Number(st.patrolIndexByGuard?.[enemy.id] || 0);
+              let idx = Math.max(0, Math.min(points.length - 1, idx0));
+              let goal = points[idx];
+              if (enemy.x === goal.x && enemy.y === goal.y) {
+                idx = (idx + 1) % points.length;
+                goal = points[idx];
+                st.patrolIndexByGuard[enemy.id] = idx;
+              }
+              let best = { x: enemy.x, y: enemy.y };
+              let bestDist = Infinity;
+              let bestCost = range.dist.get(key(enemy.x, enemy.y)) || 0;
+              for (const k of range.reachable.keys()) {
+                const [x, y] = parseKey(k);
+                const d = Math.abs(goal.x - x) + Math.abs(goal.y - y);
+                const cost = range.dist.get(k) || 0;
+                const better = d < bestDist || (d === bestDist && cost > bestCost);
+                if (better) {
+                  bestDist = d;
+                  best = { x, y };
+                  bestCost = cost;
+                }
+              }
+              const path = reconstructPath(range.cameFrom, { x: enemy.x, y: enemy.y }, best, range.pathEndStateByPos) || [{ x: enemy.x, y: enemy.y }];
+              if (path.length > 1) {
+                await animateUnitAlongPath(enemy, path);
+                addLog(`${enemy.name} 순찰 이동: (${best.x},${best.y})`);
+                emitUnitEnterTile(enemy);
+              }
+              if (Math.abs(enemy.x - goal.x) + Math.abs(enemy.y - goal.y) === 0) {
+                st.patrolIndexByGuard[enemy.id] = (idx + 1) % points.length;
+              }
+              return;
+            }
+          }
+
           let target = pickAttackTarget(enemy, "player");
           if (target) {
             await executeCombat(enemy, target);
@@ -4414,6 +4497,7 @@
           addLog("PLAYER PHASE 시작");
           dispatchStageTrigger("onTurnStart", { side: PHASE.PLAYER, turn: turnCounter });
           runTriggeredEvents("turnStart", { phase: PHASE.PLAYER, turn: turnCounter });
+          stg2DetectPatrolGuards();
           spawnStg2ReinforcementsIfNeeded();
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
@@ -5762,9 +5846,7 @@
           enforceStg1SingleUyangsan();
           if (stage.stageId === "STG2" || currentCampaignStageId === "STG2") {
             const stg2 = ensureStg2RuntimeState();
-            console.log("[VERIFY_STG2] rescueMode=INTERACT_ONLY");
-            console.log("[VERIFY_STG2] exitVisible=", !!stg2.exitVisible);
-            console.log("[VERIFY_STG2] rescuedKimwear=", !!stg2.rescuedKimwear);
+            console.log("[VERIFY_ALARM] alarm=", !!stg2.alarm);
             setupStg2Captive();
             spawnStg2NyangsanIfNeeded();
           }
@@ -6164,6 +6246,7 @@
               const st = ensureStg2RuntimeState();
               console.log("[VERIFY_STG2] entered R tile; rescuedKimwear still", !!st.rescuedKimwear);
             }
+            stg2DetectPatrolGuards();
           }
           stg2CheckClearCondition();
           evaluateObjectives({ type: "unitEnter", unit });
