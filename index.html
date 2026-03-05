@@ -1155,7 +1155,8 @@
             },
             spawns: [
               { id: "guardP1", name: "순찰 간수1", faction: "enemy", x: 10, y: 8, spriteType: "enemy", paletteKey: "enemy", classId: "CL_SWD_GUARD", weaponType: "sword", perks: [], aiHint: "PATROL", maxHp: 18, hp: 18, atk: 7, def: 3, hit: 78, crit: 0 },
-              { id: "guardP2", name: "순찰 간수2", faction: "enemy", x: 18, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_BOW_RANGER", weaponType: "bow", perks: [], aiHint: "PATROL", maxHp: 16, hp: 16, atk: 6, def: 2, hit: 80, crit: 0 }
+              { id: "guardP2", name: "순찰 간수2", faction: "enemy", x: 18, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_BOW_RANGER", weaponType: "bow", perks: [], aiHint: "PATROL", maxHp: 16, hp: 16, atk: 6, def: 2, hit: 80, crit: 0 },
+              { id: "guardP3", name: "순찰 간수3", faction: "enemy", x: 5, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_LNC_PIKER", weaponType: "lance", perks: [], aiHint: "PATROL", maxHp: 17, hp: 17, atk: 7, def: 3, hit: 79, crit: 0 }
             ],
             objectives: [
               { id: "OBJ_STG2_RESCUE", type: "CUSTOM", params: { hint: "김웨어 구출 후 레버/문 상호작용, 출구 집결" }, status: "ongoing" }
@@ -1869,6 +1870,7 @@
             currentStageRuntimeState.stg2 = {
               rescuedKimwear: false,
               suspicious: false,
+              suspiciousTurn: null,
               alarm: false,
               alarmTurn: null,
               exitUnlocked: false,
@@ -1882,7 +1884,10 @@
               nyangGone: false,
               nyangAwake: false,
               nyangInteractTurn: null,
-              patrolIndexByGuard: {}
+              patrolIndexByGuard: {},
+              detectRangeLogged: false,
+              patrolGuardsLogged: false,
+              reinforceTuningLogged: false
             };
           }
           return currentStageRuntimeState.stg2;
@@ -1891,6 +1896,7 @@
         function stg2PatrolPoints(guardId) {
           if (guardId === "guardP1") return [{ x: 7, y: 8 }, { x: 12, y: 8 }, { x: 9, y: 11 }];
           if (guardId === "guardP2") return [{ x: 18, y: 2 }, { x: 15, y: 5 }, { x: 20, y: 8 }];
+          if (guardId === "guardP3") return [{ x: 3, y: 2 }, { x: 5, y: 2 }, { x: 4, y: 1 }];
           return [{ x: 14, y: 8 }, { x: 18, y: 6 }];
         }
 
@@ -1904,7 +1910,7 @@
           showToast("소란 발생! 경비가 몰려온다!", 1500);
           console.log(`[VERIFY_ALARM] TRIGGERED reason=${reason} source=${byGuardId || "unknown"} turn=${turnCounter}`);
           for (const u of units) {
-            if (u.faction === "enemy" && (u.id === "guardP1" || u.id === "guardP2")) {
+            if (u.faction === "enemy" && (u.id === "guardP1" || u.id === "guardP2" || u.id === "guardP3")) {
               u.aiHint = "CHASE_PLAYER";
             }
           }
@@ -1920,16 +1926,32 @@
         function stg2DetectPatrolGuards() {
           if (!isStg2Stage() || battleOver) return false;
           const st = ensureStg2RuntimeState();
-          if (DEV_BUILD) console.log("[VERIFY_ALARM] detectCheck");
+          if (!st.detectRangeLogged) {
+            st.detectRangeLogged = true;
+            console.log("[VERIFY_ALARM] detectRange=4");
+          }
           if (st.alarm) return false;
+          if (!st.patrolGuardsLogged) {
+            st.patrolGuardsLogged = true;
+            const patrolCount = units.filter((u) => u.faction === "enemy" && u.aiHint === "PATROL").length;
+            console.log(`[VERIFY_ALARM] patrolGuards=${patrolCount}`);
+          }
           const players = units.filter((u) => u.faction === "player");
           for (const g of units) {
             if (g.faction !== "enemy" || g.hp <= 0) continue;
             for (const p of players) {
               const d = Math.abs(g.x - p.x) + Math.abs(g.y - p.y);
-              if (d > 3) continue;
+              if (d > 4) continue;
               if (!st.suspicious) {
                 st.suspicious = true;
+                st.suspiciousTurn = turnCounter;
+                showToast("수상한 인기척!", 1300);
+                console.log("[VERIFY_ALARM] suspicious=true");
+                return true;
+              }
+              const suspiciousTurn = Number(st.suspiciousTurn || turnCounter);
+              if (turnCounter > (suspiciousTurn + 1)) {
+                st.suspiciousTurn = turnCounter;
                 showToast("수상한 인기척!", 1300);
                 console.log("[VERIFY_ALARM] suspicious=true");
                 return true;
@@ -2019,7 +2041,7 @@
           const poi = stg2Poi();
           if (!poi) return false;
           const checkSingle = (p) => Array.isArray(p) && p[0] === x && p[1] === y;
-          if (checkSingle(poi.K) || checkSingle(poi.R) || checkSingle(poi.G1) || checkSingle(poi.G2)) return true;
+          if (checkSingle(poi.K) || checkSingle(poi.R) || checkSingle(poi.L) || checkSingle(poi.G1) || checkSingle(poi.G2)) return true;
           for (const e of stg2ExitTiles()) {
             if (e.x === x && e.y === y) return true;
           }
@@ -2066,20 +2088,27 @@
             console.log("[VERIFY_NY] spawned=", !!existing, "pos=", pos, "awake=", !!st.nyangAwake, "gone=", !!st.nyangGone);
             return;
           }
-          const candidates = [];
+          const preferred = [];
+          const fallback = [];
           for (let y = 0; y < MAP_H; y++) {
             for (let x = 0; x < MAP_W; x++) {
               if (!stg2CanPlaceOrMoveNyangsanTo(x, y)) continue;
-              candidates.push({ x, y, score: stg2FloorNeighborCount(x, y) });
+              const exitDist = stg2DistToAnyExitTile(x, y);
+              const floorNeighbors = stg2FloorNeighborCount(x, y);
+              const entry = { x, y, score: floorNeighbors, exitDist };
+              if (exitDist >= 4 && exitDist <= 6 && floorNeighbors >= 3) preferred.push(entry);
+              else fallback.push(entry);
             }
           }
+          const candidates = preferred.length ? preferred : fallback;
           if (!candidates.length) {
             console.log("[VERIFY_NY] spawned=", false, "pos=", null, "awake=", !!st.nyangAwake, "gone=", !!st.nyangGone);
             return;
           }
           let bestScore = -Infinity;
           for (const c of candidates) if (c.score > bestScore) bestScore = c.score;
-          const best = candidates.filter((c) => c.score >= bestScore - 1);
+          const best = candidates.filter((c) => c.score >= bestScore - 1)
+            .sort((a, b) => Math.abs(a.exitDist - 5) - Math.abs(b.exitDist - 5));
           const pick = best[Math.floor(rng() * best.length)];
           spawnStageUnit({
             id: "nyangsan",
@@ -2100,6 +2129,7 @@
           });
           const spawned = units.find((u) => isNyangsanUnit(u));
           const pos = spawned ? { x: spawned.x, y: spawned.y } : null;
+          console.log("[VERIFY_NY] spawnStrategy=nearExitDist4to6 pos=", pos);
           console.log("[VERIFY_NY] spawned=", !!spawned, "pos=", pos, "awake=", !!st.nyangAwake, "gone=", !!st.nyangGone);
         }
 
@@ -2169,16 +2199,20 @@
         function spawnStg2ReinforcementsIfNeeded() {
           if (!isStg2Stage() || battleOver) return;
           const st = ensureStg2RuntimeState();
+          if (!st.reinforceTuningLogged) {
+            st.reinforceTuningLogged = true;
+            console.log("[VERIFY_ALARM] reinforcePerWave=2 maxTotal=8");
+          }
           if (!st.alarm || !st.alarmTurn) return;
           const elapsed = turnCounter - st.alarmTurn;
           if (elapsed <= 0 || elapsed % 2 !== 0) return;
-          if ((st.reinforcementsSpawned || 0) >= 6) return;
+          if ((st.reinforcementsSpawned || 0) >= 8) return;
           const poi = stg2Poi();
           const gates = [poi?.G1, poi?.G2].filter((g) => Array.isArray(g) && g.length >= 2);
           if (!gates.length) return;
 
-          let requested = rng() < 0.5 ? 1 : 2;
-          requested = Math.min(requested, 6 - (st.reinforcementsSpawned || 0));
+          let requested = 2;
+          requested = Math.min(requested, 8 - (st.reinforcementsSpawned || 0));
           let spawned = 0;
           for (let i = 0; i < requested; i++) {
             const gate = gates[Math.floor(rng() * gates.length)];
