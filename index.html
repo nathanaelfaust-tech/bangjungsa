@@ -1746,9 +1746,31 @@
           TUT_STG1_07: "끝났네여. 이제 캠프로 쉬러 가면 돼요.",
           TUT_STG1_08: "언제 가요?? 캠프 버튼 안 누르면 여기서 평생 저랑 말만 해요."
         };
+        const SkillCatalog = {
+          SK_STRIKE_BASIC: { uiName: "공격" },
+          SK_STRIKE: { uiName: "공격" },
+          SK_ATTACK: { uiName: "공격" }
+        };
+        const missingSkillUiNameWarned = new Set();
 
         function isStg1TutorialStage() {
           return currentCampaignStageId === "STG1" && currentStageId === "STG1";
+        }
+
+        function getUnitActiveSkillId(unit) {
+          return unit?.activeSkillId || unit?.activeSkill?.id || null;
+        }
+
+        function getActiveSkillUiName(unit) {
+          const sid = getUnitActiveSkillId(unit);
+          if (!sid) return null;
+          const meta = SkillCatalog[sid] || {};
+          if (meta.uiName) return meta.uiName;
+          if (DEV_BUILD && !missingSkillUiNameWarned.has(sid)) {
+            missingSkillUiNameWarned.add(sid);
+            console.warn("[SkillCatalog] uiName missing for", sid);
+          }
+          return "공격";
         }
 
         function isTutorialDisabledRuntime() {
@@ -3304,17 +3326,25 @@
           targetingMode = null;
           const canTalk = !!getAvailableTalkEvent(unit);
           normalizeUnitSkillContract(unit);
-          const activeName = isStg1TutorialStage() ? "공격" : (unit.activeSkill?.name || "공격");
-          cmdAttackBtn.style.display = "inline-block";
-          cmdAttackBtn.textContent = activeName;
+          const sid = getUnitActiveSkillId(unit);
+          if (!sid) {
+            cmdAttackBtn.style.display = "none";
+            cmdAttackBtn.disabled = true;
+          } else {
+            const label = getActiveSkillUiName(unit) || "공격";
+            cmdAttackBtn.style.display = "inline-block";
+            cmdAttackBtn.textContent = label;
+          }
           cmdHeroBoltBtn.style.display = "none";
           cmdHeroDashBtn.style.display = "none";
           cmdHeroArcBtn.style.display = "none";
           cmdHealBtn.style.display = "none";
           cmdPurifyBtn.style.display = "none";
           cmdTalkBtn.style.display = canTalk ? "inline-block" : "none";
-          const activeMode = unit.activeSkill?.type === "STRIKE" ? "strike" : "attack";
-          cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, activeMode), activeMode).length === 0;
+          if (sid) {
+            const activeMode = unit.activeSkill?.type === "STRIKE" ? "strike" : "attack";
+            cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, activeMode), activeMode).length === 0;
+          }
           cmdMenu.classList.add("show");
           positionCommandMenu();
         }
@@ -3765,7 +3795,7 @@
             const classLabel = target.classId || "CL_NONE";
             const role = ClassRoleNames[classLabel] ? `(${ClassRoleNames[classLabel]})` : "";
             normalizeUnitSkillContract(target);
-            const activeText = target.activeSkill?.name || "없음";
+            const activeText = getActiveSkillUiName(target) || "없음";
             const passiveText = target.passivePerk?.name || "빈 슬롯";
             let extraLine = "";
             if (hoverTile && target.x === hoverTile.x && target.y === hoverTile.y) {
@@ -3978,8 +4008,10 @@
           if (!unit.activeSkill || typeof unit.activeSkill !== "object") {
             unit.activeSkill = buildDefaultActiveSkill(unit);
           }
+          if (!unit.activeSkillId && unit.activeSkill?.id) unit.activeSkillId = unit.activeSkill.id;
           if (isHeroUnit(unit)) {
             unit.activeSkill = { id: "SK_STRIKE", type: "STRIKE", name: "Strike", dmgMult: 1.2 };
+            unit.activeSkillId = "SK_STRIKE";
             unit.passivePerk = { id: "SURVIVOR_TEMP", name: "용사의 본능(임시)" };
           } else if (!unit.passivePerk) {
             unit.passivePerk = null;
