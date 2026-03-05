@@ -1779,26 +1779,11 @@
         function pickRecommendedMoveTileForTutorial(enemyTarget) {
           const leader = stg1LeaderUnit();
           if (!leader) return null;
-          const range = computeMoveRange(leader);
-          const candidates = [];
-          for (const k of range.reachable.keys()) {
-            const [x, y] = parseKey(k);
-            if (x === leader.x && y === leader.y) continue;
-            if (isOccupied(x, y, leader.id)) continue;
-            const terrain = terrainAt(x, y);
-            const forestBonus = terrain?.key === "forest" ? 100 : 0;
-            let attackPositionBonus = 0;
-            if (enemyTarget) {
-              const d = Math.abs(enemyTarget.x - x) + Math.abs(enemyTarget.y - y);
-              if (d >= 1 && d <= 2) attackPositionBonus = 30;
-              else attackPositionBonus = -Math.min(20, Math.abs(d - 2) * 3);
-            }
-            const distFromLeader = Math.abs(leader.x - x) + Math.abs(leader.y - y);
-            candidates.push({ x, y, score: forestBonus + attackPositionBonus - distFromLeader });
-          }
-          if (!candidates.length) return null;
-          candidates.sort((a, b) => b.score - a.score);
-          return { x: candidates[0].x, y: candidates[0].y };
+          const adjacent = neighbors(leader.x, leader.y).filter((p) => canMoveToTile(leader, p.x, p.y));
+          if (!adjacent.length) return { x: leader.x, y: leader.y };
+          const forestAdj = adjacent.filter((p) => terrainAt(p.x, p.y)?.key === "forest");
+          if (forestAdj.length) return { x: forestAdj[0].x, y: forestAdj[0].y };
+          return { x: adjacent[0].x, y: adjacent[0].y };
         }
 
         function refreshStg1TutorialTargets(force = false) {
@@ -3259,7 +3244,7 @@
           targetingMode = null;
           const canTalk = !!getAvailableTalkEvent(unit);
           normalizeUnitSkillContract(unit);
-          const activeName = unit.activeSkill?.name || "공격";
+          const activeName = isStg1TutorialStage() ? "공격" : (unit.activeSkill?.name || "공격");
           cmdAttackBtn.style.display = "inline-block";
           cmdAttackBtn.textContent = activeName;
           cmdHeroBoltBtn.style.display = "none";
