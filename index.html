@@ -719,8 +719,10 @@
           <option value="ESTP">ESTP</option>
           <option value="ESFP">ESFP</option>
         </select>
+        <div id="mbtiAxisInfo" class="small"></div>
         <div class="small">
-          안내: MBTI에 따라 직업/특성이 ‘가중치 랜덤’으로 정해집니다.<br />
+          안내: 리더 직업은 항상 용사(HERO_HYBRID)로 고정됩니다.<br />
+          안내: MBTI는 용사 스킬 성향(공격↔지원, 안정↔폭발) 가중치만 결정합니다.<br />
           안내: 기존 회원(단톡 멤버)은 스토리의 등장인물로 나올 가능성이 높습니다.<br />
           같은 이름+MBTI면 결과는 동일합니다(재현 가능).
         </div>
@@ -947,6 +949,7 @@
 
         const PHASE = { PLAYER: "PLAYER", ENEMY: "ENEMY", NEUTRAL: "NEUTRAL" };
         const ClassRoleNames = {
+          CL_HERO_HYBRID: "용사",
           CL_SWD_GUARD: "가드",
           CL_AXE_BRUISER: "브루저",
           CL_LNC_PIKER: "파이크",
@@ -958,6 +961,7 @@
         };
         const Tier1CharIds = new Set(["Player_Cute", "jeong2", "able", "kim_ware"]);
         const ClassTemplates = {
+          CL_HERO_HYBRID: { weaponType: "sword", range: [1, 2], mov: 5, base: { hp: 32, atk: 9, def: 8, hit: 88, crit: 6 } },
           CL_SWD_GUARD:   { weaponType: "sword", range: [1, 1], mov: 5, base: { hp: 30, atk: 10, def: 8, hit: 85, crit: 5 } },
           CL_AXE_BRUISER: { weaponType: "axe", range: [1, 1], mov: 4, base: { hp: 34, atk: 12, def: 7, hit: 75, crit: 5 } },
           CL_LNC_PIKER:   { weaponType: "lance", range: [1, 1], mov: 5, base: { hp: 28, atk: 10, def: 7, hit: 88, crit: 5 } },
@@ -1059,7 +1063,9 @@
             ],
             spawns: [
               { id: "STG1_ENEMY_SCARECROW_A", name: "허수아비 A", faction: "enemy", x: 5, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_AXE_BRUISER", weaponType: "axe", perks: [], aiHint: "holdLine", maxHp: 12, hp: 12, atk: 5, def: 1, hit: 70, crit: 0 },
-              { id: "STG1_ENEMY_SCARECROW_B", name: "허수아비 B", faction: "enemy", x: 5, y: 3, spriteType: "enemy", paletteKey: "enemy", classId: "CL_AXE_BRUISER", weaponType: "axe", perks: [], aiHint: "holdLine", maxHp: 12, hp: 12, atk: 5, def: 1, hit: 70, crit: 0 }
+              { id: "STG1_ENEMY_SCARECROW_B", name: "허수아비 B", faction: "enemy", x: 5, y: 3, spriteType: "enemy", paletteKey: "enemy", classId: "CL_AXE_BRUISER", weaponType: "axe", perks: [], aiHint: "holdLine", maxHp: 12, hp: 12, atk: 5, def: 1, hit: 70, crit: 0 },
+              { id: "STG1_UY_BLOCK_1", name: "우냥산", faction: "neutral", x: 4, y: 2, spriteType: "cat", paletteKey: "neutral", classId: "CL_NONE_JESTER", weaponType: "none", perks: [], aiHint: "holdLine", maxHp: 99, hp: 99 },
+              { id: "STG1_UY_BLOCK_2", name: "우냥산", faction: "neutral", x: 4, y: 3, spriteType: "cat", paletteKey: "neutral", classId: "CL_NONE_JESTER", weaponType: "none", perks: [], aiHint: "holdLine", maxHp: 99, hp: 99 }
             ],
             objectives: [],
             triggers: [],
@@ -1300,6 +1306,7 @@
         const menuNewBtn = document.getElementById("menuNewBtn");
         const menuLeaderName = document.getElementById("menuLeaderName");
         const menuMbti = document.getElementById("menuMbti");
+        const mbtiAxisInfo = document.getElementById("mbtiAxisInfo");
         const menuStageSelect = document.getElementById("menuStageSelect");
         const menuStartBtn = document.getElementById("menuStartBtn");
         const campOverlay = document.getElementById("campOverlay");
@@ -1409,6 +1416,21 @@
         let currentCampaignStageId = "STG1";
         let currentStageTileTags = {};
         let currentStageMarkers = { start: [], enemy: [] };
+        let stg1MarkerBlinkUntil = 0;
+        let stg1TutorialQueue = [];
+        let stg1TutorialTimer = null;
+        let stg1IdleTimer = null;
+        let stg1TutorialFlags = {
+          enter: false,
+          moveIntent: false,
+          uy: false,
+          moveCommit: false,
+          attackSuccess: false,
+          idle: false,
+          firstKill: false,
+          clear: false,
+          camp: false
+        };
         let safetyRouteSteps = [];
         let firedSafetyRouteSteps = new Set();
         let turnGuidanceText = "";
@@ -1635,6 +1657,85 @@
           return ["도망가면 되죠ㅋㅋㅋㅋㅋ", "글쿤여"];
         }
 
+        const STG1_TUTORIAL_LINES = {
+          TUT_STG1_01: "누구세여… 전 먼지예요. 일단 저 파란 칸으로 한 번 움직여보실래여?",
+          TUT_STG1_02: "숲 타일 보이시져… 거기 숨으면 덜 아파요. 완전 무적은 아니구여.",
+          TUT_STG1_UY: "아, 길 막는 우냥산 보이시져… 말 안 듣고 낮잠 자거나 돌아다니는 고양이라서 비켜달라 해도 안 비켜요.",
+          TUT_STG1_03: "오 됐다네여. 이제 옆 허수아비 한 대만 쳐보세여. 쟤가 계속 쳐다봐요.",
+          TUT_STG1_04: "와… 잘 맞췄네요. 지푸라기라 미안해할 필요 없구요. HP 보고 마무리해여.",
+          TUT_STG1_05: "할 거 없으면 턴 종료 눌러여… 저도 칼퇴해야 해서여.",
+          TUT_STG1_06: "하나 정리됐구요. 남은 한 놈만 치우고 캠프 가자구여.",
+          TUT_STG1_07: "끝났네여. 이제 캠프로 쉬러 가면 돼요.",
+          TUT_STG1_08: "언제 가요?? 캠프 버튼 안 누르면 여기서 평생 저랑 말만 해요."
+        };
+
+        function isStg1TutorialStage() {
+          return currentCampaignStageId === "STG1" && currentStageId === "STG1";
+        }
+
+        function resetStg1TutorialState() {
+          stg1TutorialFlags = {
+            enter: false,
+            moveIntent: false,
+            uy: false,
+            moveCommit: false,
+            attackSuccess: false,
+            idle: false,
+            firstKill: false,
+            clear: false,
+            camp: false
+          };
+          stg1TutorialQueue = [];
+          if (stg1TutorialTimer) {
+            clearTimeout(stg1TutorialTimer);
+            stg1TutorialTimer = null;
+          }
+          if (stg1IdleTimer) {
+            clearTimeout(stg1IdleTimer);
+            stg1IdleTimer = null;
+          }
+        }
+
+        function flushStg1TutorialQueue() {
+          if (!isStg1TutorialStage() || stg1TutorialTimer || !stg1TutorialQueue.length) return;
+          const text = stg1TutorialQueue.shift();
+          showToast(text, 2100);
+          addLog(`먼지: ${text}`);
+          stg1TutorialTimer = setTimeout(() => {
+            stg1TutorialTimer = null;
+            flushStg1TutorialQueue();
+          }, 2150);
+        }
+
+        function queueStg1TutorialLine(flagKey, textKey) {
+          if (!isStg1TutorialStage()) return;
+          if (stg1TutorialFlags[flagKey]) return;
+          stg1TutorialFlags[flagKey] = true;
+          stg1TutorialQueue.push(STG1_TUTORIAL_LINES[textKey]);
+          flushStg1TutorialQueue();
+        }
+
+        function queueStg1IdleTutorial() {
+          if (!isStg1TutorialStage() || stg1TutorialFlags.idle) return;
+          if (stg1IdleTimer) clearTimeout(stg1IdleTimer);
+          stg1IdleTimer = setTimeout(() => {
+            stg1IdleTimer = null;
+            if (!isStg1TutorialStage()) return;
+            if (phase !== PHASE.PLAYER || battleOver || inputLocked || targetingUnitId || commandMenuUnitId || pendingActionUnitId || selectedUnitId) return;
+            queueStg1TutorialLine("idle", "TUT_STG1_05");
+          }, 3000);
+        }
+
+        function applyStageUiRestrictions() {
+          const blockSelectors = ["#autoBtn", "#speedBtn", "#skipBtn", "[data-ui='auto']", "[data-ui='speed']", "[data-ui='skip']"];
+          const hide = isStg1TutorialStage();
+          for (const sel of blockSelectors) {
+            for (const el of document.querySelectorAll(sel)) {
+              el.style.display = hide ? "none" : "";
+            }
+          }
+        }
+
         function closeCampModal() {
           if (!campOverlay) return;
           campOverlay.classList.remove("show");
@@ -1652,6 +1753,7 @@
             setCampDialogueLines(intro ? meonjiCampLines("intro") : ["먼지가 기다리고 있어여.", "말 걸어서 확인해보세여."]);
           }
           updateCampNextStageButton();
+          if (hasPending && currentCampaignStageId === "STG1") queueStg1TutorialLine("camp", "TUT_STG1_08");
         }
 
         function onCampNextStage() {
@@ -1748,6 +1850,9 @@
         menuContinueBtn.addEventListener("click", onMenuContinue);
         menuNewBtn.addEventListener("click", onMenuNew);
         menuStartBtn.addEventListener("click", onMenuStartSelected);
+        if (menuMbti) menuMbti.addEventListener("change", () => {
+          if (mbtiAxisInfo) mbtiAxisInfo.textContent = mbtiAxisSummary(menuMbti.value || "INTJ");
+        });
         canvas.addEventListener("contextmenu", (e) => {
           e.preventDefault();
           cancelPlayerInteraction();
@@ -2600,6 +2705,11 @@
             return;
           }
 
+          if (isStg1TutorialStage() && path.length > 1 && !stg1TutorialFlags.moveIntent) {
+            queueStg1TutorialLine("moveIntent", "TUT_STG1_02");
+            queueStg1TutorialLine("uy", "TUT_STG1_UY");
+          }
+
           executePlayerMove(su, path);
         }
 
@@ -2916,6 +3026,7 @@
           unit.preMove = null;
           evaluateObjectives({ type: "turnEnd", side: PHASE.PLAYER, unit });
           clearSelection();
+          queueStg1IdleTutorial();
           if (!checkBattleEnd() && allPlayersActed()) {
             startEnemyPhase();
           }
@@ -2932,6 +3043,7 @@
             await animateUnitAlongPath(unit, path);
             addLog(`${unit.name} 이동: (${path[path.length - 1].x},${path[path.length - 1].y})`);
             emitUnitEnterTile(unit);
+            if (isStg1TutorialStage()) queueStg1TutorialLine("moveCommit", "TUT_STG1_03");
           } else {
             addLog(`${unit.name} 이동 후 명령 대기`);
           }
@@ -3180,6 +3292,7 @@
           updateDevStatusLabel();
           updateCampButtonVisibility();
           updateMenuCampButtonVisibility();
+          applyStageUiRestrictions();
         }
 
         function updateInfoPanel() {
@@ -3320,6 +3433,10 @@
 
         function unitById(id) {
           return units.find(u => u.id === id);
+        }
+
+        function getLeaderUnit() {
+          return unitById("뉴비리더") || unitById("리더") || unitById("leader") || units.find((u) => u.faction === "player" && u.charId === "Player_Cute");
         }
 
         function getUnitAt(x, y) {
@@ -3994,6 +4111,13 @@
           return Object.keys(STAGES)[0];
         }
 
+        function mbtiAxisSummary(mbti) {
+          const axes = computeHeroMbtiAxes(mbti);
+          const axis1 = axes.attackVsSupport >= 0 ? `공격+${axes.attackVsSupport}` : `지원+${Math.abs(axes.attackVsSupport)}`;
+          const axis2 = axes.stabilityVsBurst >= 0 ? `안정+${axes.stabilityVsBurst}` : `폭발+${Math.abs(axes.stabilityVsBurst)}`;
+          return `용사 성향: ${axis1} / ${axis2}`;
+        }
+
         function initializeStageSelect() {
           if (!campaign) return;
           ensureCampaignRecruitmentScaffold(campaign);
@@ -4005,6 +4129,7 @@
           }).join("");
           if (menuLeaderName) menuLeaderName.value = campaign?.playerProfile?.leaderName || "리더";
           if (menuMbti) menuMbti.value = MBTI_OPTIONS.includes(campaign?.playerProfile?.mbti) ? campaign.playerProfile.mbti : "INTJ";
+          if (mbtiAxisInfo) mbtiAxisInfo.textContent = mbtiAxisSummary(menuMbti?.value || "INTJ");
           menuStageSelect.innerHTML = unlocked.map((id) => `<option value="${escapeHtml(id)}">${escapeHtml(stageLabelByCampaignId(id))}</option>`).join("");
           const wantedCampaignId = campaign.currentStageId;
           const topOption = [...stageSelect.options].find((o) => o.dataset.campaignId === wantedCampaignId) || stageSelect.options[0];
@@ -4063,6 +4188,7 @@
           if (!campaign) return;
           ensureCampaignRecruitmentScaffold(campaign);
           if (stageId === "STG1") {
+            queueStg1TutorialLine("clear", "TUT_STG1_07");
             campaign.campUnlocked = true;
             campaign.pendingNextStageId = "STG2";
             campaign.currentStageId = "STG1";
@@ -4139,7 +4265,7 @@
           const x = 2 + (idx % 3);
           const y = 10 + Math.floor(idx / 3);
           if (rosterId === "leader") {
-            return applyLeaderProfileToSpawn({ id: "리더", name: "리더", faction: "player", x, y, spriteType: "soldier", paletteKey: "player", classId: "CL_SWD_GUARD", weaponType: "sword", perks: ["PRK_SHIELD_WALL"] });
+            return applyLeaderProfileToSpawn({ id: "뉴비리더", name: "뉴비리더", faction: "player", x, y, spriteType: "soldier", paletteKey: "player", classId: "CL_HERO_HYBRID", weaponType: "sword", perks: [] });
           }
           if (rosterId === "jeong2") {
             return { ...RECRUITMENT_UNIT_DEFS.jeong2, x, y, controllable: true };
@@ -4326,6 +4452,15 @@
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
           updateTopGuide();
+          applyStageUiRestrictions();
+          if (isStg1TutorialStage()) {
+            resetStg1TutorialState();
+            stg1MarkerBlinkUntil = performance.now() + 2000;
+            queueStg1TutorialLine("enter", "TUT_STG1_01");
+          } else {
+            resetStg1TutorialState();
+            stg1MarkerBlinkUntil = 0;
+          }
         }
 
         function runSafetyRouteGuidance() {
@@ -4480,36 +4615,22 @@
           return resolved.slice(0, 2);
         }
 
+        function computeHeroMbtiAxes(mbti) {
+          const fixed = normalizeMbti(mbti);
+          const chars = fixed.split("");
+          const atk = (chars[0] === "E" ? 1 : -1) + (chars[2] === "T" ? 1 : -1);
+          const stable = (chars[1] === "S" ? 1 : -1) + (chars[3] === "J" ? 1 : -1);
+          return {
+            attackVsSupport: atk,     // + 공격, - 지원
+            stabilityVsBurst: stable  // + 안정, - 폭발
+          };
+        }
+
         function buildLeaderBuild(leaderName, mbti) {
           const fixedMbti = normalizeMbti(mbti);
           const seed = hashString32(`${leaderName}|${fixedMbti}|S0`);
-          const rr = mulberry32(seed);
-
-          const classWeights = {};
-          for (const [classId, base] of Object.entries(BaseWeights_Class)) {
-            const delta = MBTIWeight_Class[fixedMbti]?.[classId] || 0;
-            classWeights[classId] = Math.max(0, base + delta);
-          }
-          const classId = weightedPick(classWeights, rr) || "CL_SWD_GUARD";
-
-          const perkWeights = {};
-          for (const [perkId, base] of Object.entries(BaseWeights_Perk)) {
-            const delta = MBTIWeight_Perk[fixedMbti]?.[perkId] || 0;
-            perkWeights[perkId] = Math.max(0, base + delta);
-          }
-
-          const perk1 = weightedPick(perkWeights, rr) || "PRK_SAFE_ADVANCE";
-          let perk2 = weightedPick(perkWeights, rr, new Set([perk1])) || "PRK_FIRST_IMPRESSION";
-          const bucket1 = PERK_BUCKETS[perk1] || perk1;
-          for (let i = 0; i < 2; i++) {
-            if ((PERK_BUCKETS[perk2] || perk2) !== bucket1) break;
-            const rerolled = weightedPick(perkWeights, rr, new Set([perk1, perk2]));
-            if (!rerolled) break;
-            perk2 = rerolled;
-          }
-          const perkIdsRaw = [perk1, perk2];
-          const perkIds = resolveLeaderPerks(perkIdsRaw);
-          return { classId, perkIdsRaw, perkIds, seed };
+          const mbtiAxes = computeHeroMbtiAxes(fixedMbti);
+          return { classId: "CL_HERO_HYBRID", perkIdsRaw: [], perkIds: [], mbtiAxes, seed };
         }
 
         function ensureLeaderProfileAndBuild(targetCampaign) {
@@ -4529,14 +4650,15 @@
         }
 
         function applyLeaderProfileToSpawn(spawnDef) {
-          if (!spawnDef || spawnDef.id !== "리더" || spawnDef.faction !== "player") return spawnDef;
+          if (!spawnDef || (spawnDef.id !== "리더" && spawnDef.id !== "뉴비리더" && spawnDef.id !== "leader") || spawnDef.faction !== "player") return spawnDef;
           ensureLeaderProfileAndBuild(campaign);
           const leaderName = campaign?.playerProfile?.leaderName || spawnDef.name || "리더";
           const build = campaign?.leaderBuild || buildLeaderBuild(leaderName, campaign?.playerProfile?.mbti || "INTJ");
-          const classId = build.classId || spawnDef.classId || "CL_SWD_GUARD";
-          const tpl = ClassTemplates[classId] || ClassTemplates.CL_SWD_GUARD;
+          const classId = "CL_HERO_HYBRID";
+          const tpl = ClassTemplates[classId] || ClassTemplates.CL_HERO_HYBRID;
           return {
             ...spawnDef,
+            id: "뉴비리더",
             name: leaderName,
             classId,
             weaponType: tpl.weaponType,
@@ -4710,7 +4832,7 @@
 
         function devTeleportLeaderToClearing() {
           if (currentStageId !== "STG1_FOREST") return;
-          const leader = unitById("리더");
+          const leader = getLeaderUnit();
           const clearingTiles = getTagTiles("STG1_CLEARING");
           if (!leader || !clearingTiles.length) return;
           const pivot = clearingTiles[0];
@@ -4744,7 +4866,7 @@
         function resolveUnitCharId(unit) {
           const id = String(unit?.id || "").toLowerCase();
           const name = String(unit?.name || "");
-          if (id === "리더" || id === "leader" || name === "리더") return "Player_Cute";
+          if (id === "리더" || id === "leader" || id === "뉴비리더" || name === "리더" || name === "뉴비리더") return "Player_Cute";
           if (id.includes("정2") || name === "정2" || id === "jeong2") return "jeong2";
           if (id.includes("애블") || name === "애블" || id === "able") return "able";
           if (id.includes("김웨어") || name === "김웨어" || id === "kimware" || id === "p1") return "kim_ware";
@@ -4759,7 +4881,7 @@
               return CHARACTER_META[u.charId] || { portraitUrl: u.portraitUrl || null, portraitAlt: u.portraitAlt || u.name || "portrait" };
             }
           }
-          if (src === "리더" || src === "leader") return CHARACTER_META.Player_Cute;
+          if (src === "리더" || src === "leader" || src === "뉴비리더") return CHARACTER_META.Player_Cute;
           if (src === "정2" || src === "jeong2") return CHARACTER_META.jeong2;
           if (src === "애블" || src === "able") return CHARACTER_META.able;
           if (src === "김웨어" || src === "kimware") return CHARACTER_META.kim_ware;
@@ -4971,7 +5093,7 @@
         }
 
         function checkBattleEnd() {
-          const leader = unitById("리더");
+          const leader = getLeaderUnit();
           if (!leader || leader.hp <= 0) {
             setBattleResult("DEFEAT");
             return true;
@@ -5068,10 +5190,12 @@
           addLog(`${logPrefix}${attacker.name} -> ${target.name}: HIT -${dmg} (${triText})`);
           triggerPerkEvent("hit", { unit: attacker, attacker, target, dmg, dist, contextTag });
           emitBubble(attacker, "hit");
+          if (isStg1TutorialStage() && attacker.faction === "player") queueStg1TutorialLine("attackSuccess", "TUT_STG1_04");
           let targetDefeated = false;
           if (target.hp === 0) {
             targetDefeated = true;
             addLog(`${target.name} 격파`);
+            if (isStg1TutorialStage() && target.faction === "enemy" && attacker.faction === "player") queueStg1TutorialLine("firstKill", "TUT_STG1_06");
             triggerPerkEvent("defeat", { unit: attacker, killer: attacker, defeated: target, contextTag });
             emitBubble(attacker, "defeat");
             dispatchStageTrigger("onUnitDefeat", { unit: target, killer: attacker });
@@ -5290,21 +5414,24 @@
 
         function drawStageMarkers(ctx) {
           if (!currentStageMarkers) return;
+          const now = performance.now();
+          const blinkActive = isStg1TutorialStage() && stg1MarkerBlinkUntil > now;
+          const blinkPhaseOn = !blinkActive || (Math.floor(now / 250) % 2 === 0);
           ctx.save();
           for (const t of currentStageMarkers.start || []) {
             const tx = t.x * TILE;
             const ty = t.y * TILE;
-            ctx.fillStyle = "rgba(65, 130, 255, 0.35)";
+            ctx.fillStyle = blinkPhaseOn ? "rgba(65, 130, 255, 0.35)" : "rgba(65, 130, 255, 0.12)";
             ctx.fillRect(tx, ty, TILE, TILE);
-            ctx.strokeStyle = "rgba(170,220,255,0.95)";
+            ctx.strokeStyle = blinkPhaseOn ? "rgba(170,220,255,0.95)" : "rgba(170,220,255,0.45)";
             ctx.strokeRect(tx + 1.5, ty + 1.5, TILE - 3, TILE - 3);
           }
           for (const t of currentStageMarkers.enemy || []) {
             const tx = t.x * TILE;
             const ty = t.y * TILE;
-            ctx.fillStyle = "rgba(255, 80, 80, 0.30)";
+            ctx.fillStyle = blinkPhaseOn ? "rgba(255, 80, 80, 0.30)" : "rgba(255, 80, 80, 0.12)";
             ctx.fillRect(tx, ty, TILE, TILE);
-            ctx.strokeStyle = "rgba(255,180,180,0.95)";
+            ctx.strokeStyle = blinkPhaseOn ? "rgba(255,180,180,0.95)" : "rgba(255,180,180,0.45)";
             ctx.strokeRect(tx + 1.5, ty + 1.5, TILE - 3, TILE - 3);
           }
           ctx.restore();
