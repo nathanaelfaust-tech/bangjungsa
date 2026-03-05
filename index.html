@@ -1406,6 +1406,7 @@
           <button id="cmdHeroArc" class="btnSmall" type="button">마력견제탄</button>
           <button id="cmdHeal" class="btnSmall" type="button">치유</button>
           <button id="cmdPurify" class="btnSmall" type="button">정화</button>
+          <button id="cmdInteract" class="btnSmall" type="button">상호작용</button>
           <button id="cmdTalk" class="btnSmall" type="button">대화</button>
           <button id="cmdWait" class="btnSmall" type="button">대기</button>`;
         canvasWrap.appendChild(cmdMenu);
@@ -1415,6 +1416,7 @@
         const cmdHeroArcBtn = cmdMenu.querySelector("#cmdHeroArc");
         const cmdHealBtn = cmdMenu.querySelector("#cmdHeal");
         const cmdPurifyBtn = cmdMenu.querySelector("#cmdPurify");
+        const cmdInteractBtn = cmdMenu.querySelector("#cmdInteract");
         const cmdTalkBtn = cmdMenu.querySelector("#cmdTalk");
         const cmdWaitBtn = cmdMenu.querySelector("#cmdWait");
         const dialogOverlay = document.createElement("div");
@@ -1842,7 +1844,8 @@
               reinforcementsSpawned: 0,
               reinforcementSeq: 0,
               exitTilesLogged: false,
-              defeatAllBlockedLogged: false
+              defeatAllBlockedLogged: false,
+              interactAvailableLogged: false
             };
           }
           return currentStageRuntimeState.stg2;
@@ -1885,25 +1888,23 @@
         }
 
         function stg2TryRescueKimwear(unit) {
+          return false;
+        }
+
+        function stg2CanInteractRescue(unit) {
           if (!isStg2Stage() || !unit || unit.faction !== "player") return false;
           const st = ensureStg2RuntimeState();
           if (st.rescuedKimwear) return false;
           const poi = stg2Poi();
-          if (!poi?.R || (unit.x !== poi.R[0] || unit.y !== poi.R[1])) return false;
-          if (!poi?.K || (Math.abs(unit.x - poi.K[0]) + Math.abs(unit.y - poi.K[1]) !== 1)) return false;
+          if (!poi?.R || !poi?.K) return false;
+          if (unit.x !== poi.R[0] || unit.y !== poi.R[1]) return false;
           const captive = unitById("kimwear");
-          if (!captive) return false;
-          st.rescuedKimwear = true;
-          st.alarm = true;
-          st.alarmTurn = turnCounter;
-          captive.faction = "player";
-          captive.paletteKey = "player";
-          captive.controllable = true;
-          captive.aiTeam = null;
-          addToRosterOnce("kimware");
-          saveCampaign();
-          addLog("발각됐다! 하수구로!");
-          showToast("발각됐다! 하수구로!", 1500);
+          if (!captive || (captive.x !== poi.K[0] || captive.y !== poi.K[1])) return false;
+          if (Math.abs(unit.x - poi.K[0]) + Math.abs(unit.y - poi.K[1]) !== 1) return false;
+          if (!st.interactAvailableLogged) {
+            st.interactAvailableLogged = true;
+            console.log("[VERIFY_STG2] interactAvailable=true at R adjacent to K");
+          }
           return true;
         }
 
@@ -2404,6 +2405,7 @@
         cmdHeroArcBtn.addEventListener("click", onCommandHeroArc);
         cmdHealBtn.addEventListener("click", onCommandHeal);
         cmdPurifyBtn.addEventListener("click", onCommandPurify);
+        cmdInteractBtn.addEventListener("click", onCommandInteract);
         cmdTalkBtn.addEventListener("click", onCommandTalk);
         cmdWaitBtn.addEventListener("click", onCommandWait);
         dialogNextBtn.addEventListener("click", onDialogNext);
@@ -3565,6 +3567,9 @@
           cmdHeroArcBtn.style.display = "none";
           cmdHealBtn.style.display = "none";
           cmdPurifyBtn.style.display = "none";
+          const canInteract = stg2CanInteractRescue(unit);
+          cmdInteractBtn.style.display = canInteract ? "inline-block" : "none";
+          cmdInteractBtn.disabled = !canInteract;
           cmdTalkBtn.style.display = canTalk ? "inline-block" : "none";
           if (sid) {
             const activeMode = unit.activeSkill?.type === "STRIKE" ? "strike" : "attack";
@@ -3691,6 +3696,35 @@
           }
           triggerPerkEvent("wait", { unit: u });
           finalizePlayerAction(u);
+        }
+
+        function onCommandInteract() {
+          const speaker = unitById(commandMenuUnitId);
+          if (!speaker) return;
+          if (!stg2CanInteractRescue(speaker)) {
+            addLog("지금은 상호작용할 수 없음");
+            return;
+          }
+          const st = ensureStg2RuntimeState();
+          if (!st.rescuedKimwear) {
+            st.rescuedKimwear = true;
+            st.alarm = true;
+            st.alarmTurn = turnCounter;
+            const captive = unitById("kimwear");
+            if (captive) {
+              captive.faction = "player";
+              captive.paletteKey = "player";
+              captive.controllable = true;
+              captive.aiTeam = null;
+            }
+            addToRosterOnce("kimware");
+            saveCampaign();
+            addLog("김웨어를 구출했다!");
+            showToast("김웨어를 구출했다!", 1500);
+          }
+          console.log("[VERIFY_STG2] interactClicked; rescuedKimwear now", !!st.rescuedKimwear);
+          closeCommandMenu();
+          finalizePlayerAction(speaker);
         }
 
         async function onCommandTalk() {
@@ -5239,6 +5273,7 @@
           enforceStg1SingleUyangsan();
           if (stage.stageId === "STG2" || currentCampaignStageId === "STG2") {
             const stg2 = ensureStg2RuntimeState();
+            console.log("[VERIFY_STG2] rescueMode=INTERACT_ONLY");
             console.log("[VERIFY_STG2] exitVisible=", !!stg2.exitVisible);
             console.log("[VERIFY_STG2] rescuedKimwear=", !!stg2.rescuedKimwear);
             setupStg2Captive();
@@ -5632,7 +5667,13 @@
         function emitUnitEnterTile(unit) {
           if (!unit) return;
           dispatchStageTrigger("onUnitEnterTile", { unit, x: unit.x, y: unit.y });
-          stg2TryRescueKimwear(unit);
+          if (isStg2Stage() && unit.faction === "player") {
+            const poi = stg2Poi();
+            if (poi?.R && unit.x === poi.R[0] && unit.y === poi.R[1]) {
+              const st = ensureStg2RuntimeState();
+              console.log("[VERIFY_STG2] entered R tile; rescuedKimwear still", !!st.rescuedKimwear);
+            }
+          }
           stg2CheckClearCondition();
           evaluateObjectives({ type: "unitEnter", unit });
         }
