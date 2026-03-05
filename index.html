@@ -1840,7 +1840,9 @@
               alarmTurn: 0,
               exitVisible: true,
               reinforcementsSpawned: 0,
-              reinforcementSeq: 0
+              reinforcementSeq: 0,
+              exitTilesLogged: false,
+              defeatAllBlockedLogged: false
             };
           }
           return currentStageRuntimeState.stg2;
@@ -1922,7 +1924,10 @@
           if (!st.rescuedKimwear) return false;
           const players = units.filter((u) => u.faction === "player");
           if (!players.length) return false;
-          if (players.every((u) => stg2DistanceToNearestExit(u) <= 2)) {
+          const allNearExit = players.every((u) => stg2DistanceToNearestExit(u) <= 2);
+          const canClear = !!(st.rescuedKimwear && allNearExit);
+          console.log("[VERIFY_STG2] canClear=", canClear, "rescued=", !!st.rescuedKimwear, "allNearExit=", allNearExit);
+          if (canClear) {
             setBattleResult("VICTORY");
             return true;
           }
@@ -5233,7 +5238,9 @@
           spawnPlayersFromCampaignRoster(stage);
           enforceStg1SingleUyangsan();
           if (stage.stageId === "STG2" || currentCampaignStageId === "STG2") {
-            ensureStg2RuntimeState();
+            const stg2 = ensureStg2RuntimeState();
+            console.log("[VERIFY_STG2] exitVisible=", !!stg2.exitVisible);
+            console.log("[VERIFY_STG2] rescuedKimwear=", !!stg2.rescuedKimwear);
             setupStg2Captive();
           }
           applyStageRecruitmentScaffoldOnLoad();
@@ -5964,6 +5971,13 @@
             setBattleResult("VICTORY");
             return true;
           }
+          if (isStg2Stage() && units.filter((u) => u.faction === "enemy").length === 0) {
+            const st = ensureStg2RuntimeState();
+            if (!st.defeatAllBlockedLogged) {
+              st.defeatAllBlockedLogged = true;
+              console.log("[VERIFY_STG2] defeatAllClearBlocked=true");
+            }
+          }
           if (isStg2Stage() && stg2CheckClearCondition()) {
             return true;
           }
@@ -6383,6 +6397,10 @@
             }
             const st = currentStageRuntimeState?.stg2;
             if (st?.exitVisible) {
+              if (DEV_BUILD && !st.exitTilesLogged) {
+                st.exitTilesLogged = true;
+                console.log("[VERIFY_STG2] exitTiles=", stg2ExitTiles().length);
+              }
               for (const e of stg2ExitTiles()) {
                 const tx = e.x * TILE;
                 const ty = e.y * TILE;
