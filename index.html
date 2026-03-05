@@ -1150,6 +1150,7 @@
               R: [2, 1],
               G1: [1, 14],
               G2: [22, 1],
+              L: [20, 13],
               E: [[21, 13], [22, 13], [21, 14], [22, 14]]
             },
             spawns: [
@@ -1157,7 +1158,7 @@
               { id: "guardP2", name: "순찰 간수2", faction: "enemy", x: 18, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_BOW_RANGER", weaponType: "bow", perks: [], aiHint: "PATROL", maxHp: 16, hp: 16, atk: 6, def: 2, hit: 80, crit: 0 }
             ],
             objectives: [
-              { id: "OBJ_STG2_RESCUE", type: "CUSTOM", params: { hint: "김웨어를 구출하고 출구 집결" }, status: "ongoing" }
+              { id: "OBJ_STG2_RESCUE", type: "CUSTOM", params: { hint: "김웨어 구출 후 레버/문 상호작용, 출구 집결" }, status: "ongoing" }
             ],
             triggers: [],
             safetyRoute: [],
@@ -1401,6 +1402,7 @@
         const cmdMenu = document.createElement("div");
         cmdMenu.className = "cmd-menu";
         cmdMenu.innerHTML = `<button id="cmdAttack" class="btnSmall" type="button">공격</button>
+          <button id="cmdSkill" class="btnSmall" type="button">스킬</button>
           <button id="cmdHeroBolt" class="btnSmall" type="button">마법탄</button>
           <button id="cmdHeroDash" class="btnSmall" type="button">돌진베기</button>
           <button id="cmdHeroArc" class="btnSmall" type="button">마력견제탄</button>
@@ -1412,6 +1414,7 @@
           <button id="cmdWait" class="btnSmall" type="button">대기</button>`;
         canvasWrap.appendChild(cmdMenu);
         const cmdAttackBtn = cmdMenu.querySelector("#cmdAttack");
+        const cmdSkillBtn = cmdMenu.querySelector("#cmdSkill");
         const cmdHeroBoltBtn = cmdMenu.querySelector("#cmdHeroBolt");
         const cmdHeroDashBtn = cmdMenu.querySelector("#cmdHeroDash");
         const cmdHeroArcBtn = cmdMenu.querySelector("#cmdHeroArc");
@@ -1865,8 +1868,10 @@
           if (!currentStageRuntimeState.stg2) {
             currentStageRuntimeState.stg2 = {
               rescuedKimwear: false,
+              suspicious: false,
               alarm: false,
               alarmTurn: null,
+              exitUnlocked: false,
               exitVisible: true,
               reinforcementsSpawned: 0,
               reinforcementSeq: 0,
@@ -1897,7 +1902,7 @@
           st.alarmTurn = turnCounter;
           addLog("소란 발생! 경비가 몰려온다!");
           showToast("소란 발생! 경비가 몰려온다!", 1500);
-          console.log("[VERIFY_ALARM] TRIGGERED reason=", reason, "by", byGuardId, "turn", turnCounter);
+          console.log(`[VERIFY_ALARM] TRIGGERED reason=${reason} source=${byGuardId || "unknown"} turn=${turnCounter}`);
           for (const u of units) {
             if (u.faction === "enemy" && (u.id === "guardP1" || u.id === "guardP2")) {
               u.aiHint = "CHASE_PLAYER";
@@ -1919,10 +1924,17 @@
           if (st.alarm) return false;
           const players = units.filter((u) => u.faction === "player");
           for (const g of units) {
-            if (g.faction !== "enemy" || g.aiHint !== "PATROL") continue;
+            if (g.faction !== "enemy" || g.hp <= 0) continue;
             for (const p of players) {
               const d = Math.abs(g.x - p.x) + Math.abs(g.y - p.y);
-              if (d <= 3) return triggerAlarm("DETECTED", g.id);
+              if (d > 3) continue;
+              if (!st.suspicious) {
+                st.suspicious = true;
+                showToast("수상한 인기척!", 1300);
+                console.log("[VERIFY_ALARM] suspicious=true");
+                return true;
+              }
+              return triggerAlarm("DETECTED_2X", g.id);
             }
           }
           return false;
@@ -1985,8 +1997,22 @@
           return true;
         }
 
+        function stg2CanInteractExitGate(unit) {
+          if (!isStg2Stage() || !unit || unit.faction !== "player") return false;
+          const st = ensureStg2RuntimeState();
+          if (!st.rescuedKimwear || st.exitUnlocked) return false;
+          const poi = stg2Poi();
+          const onLever = Array.isArray(poi?.L) && unit.x === poi.L[0] && unit.y === poi.L[1];
+          const onExit = stg2ExitTiles().some((e) => unit.x === e.x && unit.y === e.y);
+          return onLever || onExit;
+        }
+
         function isNyangsanUnit(unit) {
-          return !!unit && (unit.id === "nyangsan" || unit.unitId === "nyangsan");
+          if (!unit) return false;
+          const id = String(unit.id || "").toLowerCase();
+          const unitId = String(unit.unitId || "").toLowerCase();
+          const name = String(unit.name || "");
+          return id === "nyangsan" || unitId === "nyangsan" || id === "n1" || id.includes("우냥산") || name === "우냥산";
         }
 
         function isStg2NyangsanTileBlockedByPoi(x, y) {
@@ -2127,11 +2153,12 @@
           if (!isStg2Stage() || battleOver) return false;
           const st = ensureStg2RuntimeState();
           if (!st.rescuedKimwear) return false;
+          if (!st.exitUnlocked) return false;
           const players = units.filter((u) => u.faction === "player");
           if (!players.length) return false;
           const allNearExit = players.every((u) => stg2DistanceToNearestExit(u) <= 2);
-          const canClear = !!(st.rescuedKimwear && allNearExit);
-          console.log("[VERIFY_STG2] canClear=", canClear, "rescued=", !!st.rescuedKimwear, "allNearExit=", allNearExit);
+          const canClear = !!(st.rescuedKimwear && st.exitUnlocked && allNearExit);
+          console.log("[VERIFY_STG2] canClear=", canClear, "rescued=", !!st.rescuedKimwear, "exitUnlocked=", !!st.exitUnlocked, "allNearExit=", allNearExit);
           if (canClear) {
             setBattleResult("VICTORY");
             return true;
@@ -2193,6 +2220,15 @@
 
         function getUnitActiveSkillId(unit) {
           return unit?.activeSkillId || unit?.activeSkill?.id || null;
+        }
+
+        function isBasicAttackSkillId(sid) {
+          return sid === "SK_STRIKE_BASIC" || sid === "SK_STRIKE" || sid === "SK_ATTACK";
+        }
+
+        function hasSeparateActiveSkill(unit) {
+          const sid = getUnitActiveSkillId(unit);
+          return !!(sid && !isBasicAttackSkillId(sid));
         }
 
         function getActiveSkillUiName(unit) {
@@ -2608,6 +2644,7 @@
           setVisualSkin(next, true);
         });
         cmdAttackBtn.addEventListener("click", onCommandAttack);
+        cmdSkillBtn.addEventListener("click", onCommandSkill);
         cmdHeroBoltBtn.addEventListener("click", onCommandHeroBolt);
         cmdHeroDashBtn.addEventListener("click", onCommandHeroDash);
         cmdHeroArcBtn.addEventListener("click", onCommandHeroArc);
@@ -3552,6 +3589,7 @@
             refreshRangePreview(true);
             triggerPerkEvent("select", { unit: u });
             emitBubble(u, "select");
+            console.log(`[VERIFY_UI] hasAttack=true hasSkillBtn=${hasSeparateActiveSkill(u)}`);
             return;
           }
 
@@ -3807,24 +3845,35 @@
           const canTalk = !!getAvailableTalkEvent(unit);
           normalizeUnitSkillContract(unit);
           const sid = getUnitActiveSkillId(unit);
-          if (!sid) {
-            cmdAttackBtn.style.display = "none";
-            cmdAttackBtn.disabled = true;
-          } else {
-            let label = getActiveSkillUiName(unit) || "공격";
+          cmdAttackBtn.style.display = "inline-block";
+          cmdAttackBtn.textContent = "공격";
+          cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, "attack"), "attack").length === 0;
+          const hasSkillBtn = hasSeparateActiveSkill(unit);
+          cmdSkillBtn.style.display = hasSkillBtn ? "inline-block" : "none";
+          cmdSkillBtn.disabled = false;
+          if (hasSkillBtn) {
+            let label = getActiveSkillUiName(unit) || "스킬";
             if (sid === "SK_REPOSITION_2") {
               const cd = unit.skillCooldowns?.[sid] || 0;
               if (cd > 0) label = `${label} CD:${cd}`;
+              const hasTarget = units.some((t) => t.faction === "player" && t.id !== unit.id && Math.abs(t.x - unit.x) + Math.abs(t.y - unit.y) <= 2);
+              cmdSkillBtn.disabled = cd > 0 || !hasTarget;
+            } else if (sid === "SK_SNIPER_LONG") {
+              cmdSkillBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, "sniper_long"), "sniper_long").length === 0;
+            } else {
+              const skillMode = unit.activeSkill?.type === "STRIKE" ? "strike" : "attack";
+              cmdSkillBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, skillMode), skillMode).length === 0;
             }
-            cmdAttackBtn.style.display = "inline-block";
-            cmdAttackBtn.textContent = label;
+            cmdSkillBtn.textContent = label;
+          } else {
+            cmdSkillBtn.textContent = "스킬";
           }
           cmdHeroBoltBtn.style.display = "none";
           cmdHeroDashBtn.style.display = "none";
           cmdHeroArcBtn.style.display = "none";
           cmdHealBtn.style.display = "none";
           cmdPurifyBtn.style.display = "none";
-          const canInteract = stg2CanInteractRescue(unit);
+          const canInteract = stg2CanInteractRescue(unit) || stg2CanInteractExitGate(unit);
           cmdInteractBtn.style.display = canInteract ? "inline-block" : "none";
           cmdInteractBtn.disabled = !canInteract;
           const stg2 = isStg2Stage() ? ensureStg2RuntimeState() : null;
@@ -3834,22 +3883,6 @@
           cmdNyangBtn.style.display = canNyangInteract ? "inline-block" : "none";
           cmdNyangBtn.disabled = !canNyangInteract;
           cmdTalkBtn.style.display = canTalk ? "inline-block" : "none";
-          if (isKimwearUnit(unit)) {
-            console.log("[VERIFY_KW] reposAvailable=true");
-            console.log("[VERIFY_KW] attackButtonHidden=true");
-          }
-          if (sid) {
-            if (sid === "SK_REPOSITION_2") {
-              const hasTarget = units.some((t) => t.faction === "player" && t.id !== unit.id && Math.abs(t.x - unit.x) + Math.abs(t.y - unit.y) <= 2);
-              const cd = unit.skillCooldowns?.[sid] || 0;
-              cmdAttackBtn.disabled = cd > 0 || !hasTarget;
-            } else if (sid === "SK_SNIPER_LONG") {
-              cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, "sniper_long"), "sniper_long").length === 0;
-            } else {
-              const activeMode = unit.activeSkill?.type === "STRIKE" ? "strike" : "attack";
-              cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, activeMode), activeMode).length === 0;
-            }
-          }
           cmdMenu.classList.add("show");
           positionCommandMenu();
         }
@@ -3864,15 +3897,35 @@
         function onCommandAttack() {
           const u = unitById(commandMenuUnitId);
           if (!u) return;
+          const mode = "attack";
+          if (!canUseAttackNow(mode)) {
+            nudgeTutorial("지금은 공격할 단계가 아니구여");
+            return;
+          }
+          targetingUnitId = u.id;
+          targetingMode = mode;
+          showTriangleTutorialHintOnce();
+          cmdMenu.classList.remove("show");
+          const targetFaction = getCommandTargetFaction(u, mode);
+          if (getAttackTargets(u, targetFaction, mode).length === 0) {
+            addLog(targetFaction === u.faction ? "사거리 내 아군이 없음" : "사거리 내 적이 없음");
+          }
+          emitBubble(u, "attack");
+        }
+
+        function onCommandSkill() {
+          const u = unitById(commandMenuUnitId);
+          if (!u) return;
           normalizeUnitSkillContract(u);
           const sid = getUnitActiveSkillId(u);
+          if (!sid || isBasicAttackSkillId(sid)) return;
           if (sid === "SK_REPOSITION_2") {
             startRepositionMode(u);
             return;
           }
           const mode = sid === "SK_SNIPER_LONG" ? "sniper_long" : (u.activeSkill?.type === "STRIKE" ? "strike" : "attack");
           if (!canUseAttackNow(mode)) {
-            nudgeTutorial("지금은 공격할 단계가 아니구여");
+            nudgeTutorial("지금은 스킬을 쓸 수 없어여");
             return;
           }
           targetingUnitId = u.id;
@@ -3981,13 +4034,16 @@
         function onCommandInteract() {
           const speaker = unitById(commandMenuUnitId);
           if (!speaker) return;
-          if (!stg2CanInteractRescue(speaker)) {
+          const canRescue = stg2CanInteractRescue(speaker);
+          const canUnlockExit = stg2CanInteractExitGate(speaker);
+          if (!canRescue && !canUnlockExit) {
             addLog("지금은 상호작용할 수 없음");
             return;
           }
           const st = ensureStg2RuntimeState();
-          if (!st.rescuedKimwear) {
+          if (canRescue && !st.rescuedKimwear) {
             st.rescuedKimwear = true;
+            st.exitUnlocked = false;
             const captive = unitById("kimwear");
             if (captive) {
               captive.faction = "player";
@@ -4001,7 +4057,14 @@
             showToast("김웨어를 구출했다!", 1500);
             console.log("[VERIFY_ALARM] rescuedKimwear=true (alarm unchanged)", !!st.alarm);
           }
-          console.log("[VERIFY_STG2] interactClicked; rescuedKimwear now", !!st.rescuedKimwear);
+          if (canUnlockExit && !st.exitUnlocked) {
+            st.exitUnlocked = true;
+            addLog("탈출문이 열렸다!");
+            showToast("탈출로가 열렸다!", 1500);
+            console.log("[VERIFY_EXIT] unlocked=true");
+            saveCampaign();
+          }
+          console.log("[VERIFY_STG2] interactClicked; rescuedKimwear now", !!st.rescuedKimwear, "exitUnlocked", !!st.exitUnlocked);
           closeCommandMenu();
           finalizePlayerAction(speaker);
         }
@@ -4605,12 +4668,12 @@
           const start = { x: unit.x, y: unit.y };
           const startK = key(start.x, start.y);
           const usesZocPenalty = unit.faction === "player";
-          const ZOC_PENALTY_CAP = 2;
           const dist = new Map();
           const cameFrom = new Map();
           const open = [];
           const bestByPos = new Map();
           const endStateByPos = new Map();
+          const zocTypesSeen = new Set();
 
           function stateKey(x, y, zocUsed) {
             return `${x},${y}|${zocUsed}`;
@@ -4620,14 +4683,17 @@
             return !!source && source.hp > 0 && (source.faction === "enemy" || isNyangsanUnit(source));
           }
 
-          function tileHasZocPenalty(tx, ty, moverId) {
+          function zocPressureTypesAt(tx, ty, moverId) {
+            const out = new Set();
             for (const src of units) {
               if (!isZocSourceUnit(src)) continue;
               if (src.id === moverId) continue;
               const d = Math.abs(src.x - tx) + Math.abs(src.y - ty);
-              if (d === 1) return true;
+              if (d !== 1) continue;
+              if (src.faction === "enemy") out.add("enemy");
+              else if (isNyangsanUnit(src)) out.add("nyangsan");
             }
-            return false;
+            return out;
           }
 
           const startState = stateKey(start.x, start.y, 0);
@@ -4648,9 +4714,11 @@
               const stepBase = terrainAt(n.x, n.y).moveCost;
               let zocAdd = 0;
               let nextZocUsed = cur.zocUsed;
-              if (usesZocPenalty && tileHasZocPenalty(n.x, n.y, unit.id) && nextZocUsed < ZOC_PENALTY_CAP) {
+              const zocTypes = usesZocPenalty ? zocPressureTypesAt(n.x, n.y, unit.id) : null;
+              if (usesZocPenalty && zocTypes && zocTypes.size > 0) {
                 zocAdd = 1;
                 nextZocUsed++;
+                for (const zt of zocTypes) zocTypesSeen.add(zt);
               }
               const step = stepBase + zocAdd;
               const nextCost = cur.cost + step;
@@ -4676,6 +4744,10 @@
             if ((x === start.x && y === start.y) || !isOccupied(x, y, unit.id)) {
               reachable.set(pk, c);
             }
+          }
+          if (DEV_BUILD && unit.faction === "player" && zocTypesSeen.size > 0) {
+            const seen = ["enemy", "nyangsan"].filter((k) => zocTypesSeen.has(k)).join("/");
+            console.log(`[VERIFY_ZOC] appliedFrom=enemy/nyangsan only (${seen})`);
           }
 
           return { dist: bestByPos, cameFrom, reachable, pathEndStateByPos: endStateByPos };
@@ -6685,6 +6757,9 @@
           if (crit) dmg *= 2;
           dmg = Math.max(0, Math.round(dmg));
           target.hp = Math.max(0, target.hp - dmg);
+          if (isStg2Stage() && dmg > 0 && attacker.faction === "enemy" && target.faction === "player") {
+            triggerAlarm("COMBAT", attacker.id || attacker.name || null);
+          }
           spawnFloatingText(target.x, target.y, `HIT -${dmg}`, crit ? "#ffd38f" : "#ffadad");
           if (crit) {
             hitFlash = { x: target.x, y: target.y, life: 360, maxLife: 360, kind: "crit", accent: tier1PointColor(attacker) };
@@ -6719,6 +6794,11 @@
 
         async function executeCombat(attacker, target, actionMode = "attack") {
           if (!attacker || !target || battleOver) return;
+          if (isStg2Stage()) {
+            const hostile = (attacker.faction === "player" && target.faction === "enemy") ||
+              (attacker.faction === "enemy" && target.faction === "player");
+            if (hostile) triggerAlarm("COMBAT", attacker.id || attacker.name || null);
+          }
           if (attacker.faction === "player") showTriangleTutorialHintOnce();
           if ((actionMode === "hero_dash" || actionMode === "hero_arc" || actionMode === "hero_bolt") && !isHeroUnit(attacker)) return;
           if (actionMode === "hero_dash" && (attacker.heroState?.dashCd || 0) > 0) {
@@ -7037,6 +7117,15 @@
               if (DEV_BUILD && !st.exitTilesLogged) {
                 st.exitTilesLogged = true;
                 console.log("[VERIFY_STG2] exitTiles=", stg2ExitTiles().length);
+              }
+              if (Array.isArray(poi.L) && poi.L.length >= 2) {
+                const lx = poi.L[0] * TILE;
+                const ly = poi.L[1] * TILE;
+                ctx.strokeStyle = "rgba(255, 219, 143, 0.92)";
+                ctx.strokeRect(lx + 2, ly + 2, TILE - 4, TILE - 4);
+                ctx.fillStyle = "rgba(255, 247, 220, 0.95)";
+                ctx.font = "6px monospace";
+                ctx.fillText("LEVER", lx + 1, ly + 7);
               }
               for (const e of stg2ExitTiles()) {
                 const tx = e.x * TILE;
