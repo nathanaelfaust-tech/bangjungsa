@@ -1760,7 +1760,7 @@
 
         function canUseAttackNow(mode = "attack") {
           if (!isStg1TutorialStage() || !stg1TutorialState.active) return true;
-          if (stg1TutorialState.step === STG1_TUTOR_STEP.ATTACK) return mode === "attack" || mode === "hero_bolt";
+          if (stg1TutorialState.step === STG1_TUTOR_STEP.ATTACK) return mode === "attack" || mode === "strike";
           return stg1TutorialState.step >= STG1_TUTOR_STEP.KILL1;
         }
 
@@ -3103,22 +3103,18 @@
           targetingUnitId = null;
           targetingMode = null;
           const canTalk = !!getAvailableTalkEvent(unit);
-          const isStaff = unit.weaponType === "staff";
-          const isHero = isHeroUnit(unit);
-          const dashCd = unit.heroState?.dashCd || 0;
-          const arcCd = unit.heroState?.arcCd || 0;
-          cmdAttackBtn.style.display = isStaff ? "none" : "inline-block";
-          cmdHeroBoltBtn.style.display = isHero ? "inline-block" : "none";
-          cmdHeroDashBtn.style.display = isHero ? "inline-block" : "none";
-          cmdHeroArcBtn.style.display = isHero ? "inline-block" : "none";
-          cmdHealBtn.style.display = isStaff ? "inline-block" : "none";
-          cmdPurifyBtn.style.display = isStaff ? "inline-block" : "none";
+          normalizeUnitSkillContract(unit);
+          const activeName = unit.activeSkill?.name || "공격";
+          cmdAttackBtn.style.display = "inline-block";
+          cmdAttackBtn.textContent = activeName;
+          cmdHeroBoltBtn.style.display = "none";
+          cmdHeroDashBtn.style.display = "none";
+          cmdHeroArcBtn.style.display = "none";
+          cmdHealBtn.style.display = "none";
+          cmdPurifyBtn.style.display = "none";
           cmdTalkBtn.style.display = canTalk ? "inline-block" : "none";
-          cmdHeroBoltBtn.disabled = !isHero || getAttackTargets(unit, getCommandTargetFaction(unit, "hero_bolt"), "hero_bolt").length === 0;
-          cmdHeroDashBtn.disabled = !isHero || dashCd > 0 || getAttackTargets(unit, getCommandTargetFaction(unit, "hero_dash"), "hero_dash").length === 0;
-          cmdHeroArcBtn.disabled = !isHero || arcCd > 0 || getAttackTargets(unit, getCommandTargetFaction(unit, "hero_arc"), "hero_arc").length === 0;
-          cmdHeroDashBtn.textContent = dashCd > 0 ? `돌진베기(${dashCd})` : "돌진베기";
-          cmdHeroArcBtn.textContent = arcCd > 0 ? `마력견제탄(${arcCd})` : "마력견제탄";
+          const activeMode = unit.activeSkill?.type === "STRIKE" ? "strike" : "attack";
+          cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, activeMode), activeMode).length === 0;
           cmdMenu.classList.add("show");
           positionCommandMenu();
         }
@@ -3133,16 +3129,18 @@
         function onCommandAttack() {
           const u = unitById(commandMenuUnitId);
           if (!u) return;
-          if (!canUseAttackNow("attack")) {
+          normalizeUnitSkillContract(u);
+          const mode = u.activeSkill?.type === "STRIKE" ? "strike" : "attack";
+          if (!canUseAttackNow(mode)) {
             nudgeTutorial("지금은 공격할 단계가 아니구여");
             return;
           }
           targetingUnitId = u.id;
-          targetingMode = "attack";
+          targetingMode = mode;
           showTriangleTutorialHintOnce();
           cmdMenu.classList.remove("show");
-          const targetFaction = getCommandTargetFaction(u, "attack");
-          if (getAttackTargets(u, targetFaction, "attack").length === 0) {
+          const targetFaction = getCommandTargetFaction(u, mode);
+          if (getAttackTargets(u, targetFaction, mode).length === 0) {
             addLog(targetFaction === u.faction ? "사거리 내 아군이 없음" : "사거리 내 적이 없음");
           }
           emitBubble(u, "attack");
@@ -3165,7 +3163,7 @@
           const u = unitById(commandMenuUnitId);
           if (!u || !isHeroUnit(u)) return;
           if (!canUseAttackNow("hero_dash")) {
-            nudgeTutorial("지금은 기본공격/마법탄만 써보세여");
+            nudgeTutorial("지금은 Active 스킬만 써보세여");
             return;
           }
           if ((u.heroState?.dashCd || 0) > 0) {
@@ -3182,7 +3180,7 @@
           const u = unitById(commandMenuUnitId);
           if (!u || !isHeroUnit(u)) return;
           if (!canUseAttackNow("hero_arc")) {
-            nudgeTutorial("지금은 기본공격/마법탄만 써보세여");
+            nudgeTutorial("지금은 Active 스킬만 써보세여");
             return;
           }
           if ((u.heroState?.arcCd || 0) > 0) {
@@ -3568,7 +3566,9 @@
             const actedText = target.faction === "player" ? (target.acted ? "행동완료" : "대기") : "행동중";
             const classLabel = target.classId || "CL_NONE";
             const role = ClassRoleNames[classLabel] ? `(${ClassRoleNames[classLabel]})` : "";
-            const perkText = (target.perks && target.perks.length) ? target.perks.slice(0, 2).join(", ") : "-";
+            normalizeUnitSkillContract(target);
+            const activeText = target.activeSkill?.name || "없음";
+            const passiveText = target.passivePerk?.name || "빈 슬롯";
             let extraLine = "";
             if (hoverTile && target.x === hoverTile.x && target.y === hoverTile.y) {
               const attacker = unitById(targetingUnitId) || selectedUnit();
@@ -3585,7 +3585,8 @@
               `<div><b>${target.name}</b> [${target.faction}]</div>` +
               `<div class="small">직업: ${escapeHtml(classLabel)}${escapeHtml(role)} | 무기: ${escapeHtml(target.weaponType || "-")}</div>` +
               `<div class="small">HP ${target.hp}/${target.maxHp} | MOV ${target.mov} | ${actedText}</div>` +
-              `<div class="small">Perk: ${escapeHtml(perkText)}</div>` +
+              `<div class="small">Active: ${escapeHtml(activeText)}</div>` +
+              `<div class="small" title="${escapeHtml(passiveText)}">Passive: ${escapeHtml(passiveText)}</div>` +
               extraLine;
             hpFill.style.width = `${(target.hp / target.maxHp) * 100}%`;
             if (visualSkin === "flat_v1") {
@@ -3761,7 +3762,36 @@
           return unit?.classId === "CL_HERO_HYBRID";
         }
 
+        function buildDefaultActiveSkill(unit) {
+          if (isHeroUnit(unit)) {
+            return { id: "SK_STRIKE", type: "STRIKE", name: "Strike", dmgMult: 1.2 };
+          }
+          return { id: "SK_ATTACK", type: "ATTACK", name: "공격", dmgMult: 1.0 };
+        }
+
+        function normalizeUnitSkillContract(unit) {
+          if (!unit) return;
+          if (!unit.activeSkill && Array.isArray(unit.activeSkills) && unit.activeSkills.length) {
+            unit.activeSkill = unit.activeSkills[0];
+          }
+          if (!unit.passivePerk && Array.isArray(unit.passivePerks) && unit.passivePerks.length) {
+            unit.passivePerk = unit.passivePerks[0];
+          }
+          if (!unit.activeSkill || typeof unit.activeSkill !== "object") {
+            unit.activeSkill = buildDefaultActiveSkill(unit);
+          }
+          if (isHeroUnit(unit)) {
+            unit.activeSkill = { id: "SK_STRIKE", type: "STRIKE", name: "Strike", dmgMult: 1.2 };
+            unit.passivePerk = { id: "SURVIVOR_TEMP", name: "용사의 본능(임시)" };
+          } else if (!unit.passivePerk) {
+            unit.passivePerk = null;
+          }
+          delete unit.activeSkills;
+          delete unit.passivePerks;
+        }
+
         function commandRangeForMode(attacker, mode = "attack") {
+          if (mode === "strike") return { min: 1, max: 1 };
           if (mode === "hero_bolt") return { min: 2, max: 2 };
           if (mode === "hero_dash") return { min: 1, max: 2 };
           if (mode === "hero_arc") return { min: 1, max: HERO_ARC_RANGE };
@@ -5000,6 +5030,8 @@
             name: leaderName,
             classId,
             weaponType: tpl.weaponType,
+            activeSkill: { id: "SK_STRIKE", type: "STRIKE", name: "Strike", dmgMult: 1.2 },
+            passivePerk: { id: "SURVIVOR_TEMP", name: "용사의 본능(임시)" },
             perks: (build.perkIds && build.perkIds.length ? build.perkIds : resolveLeaderPerks(build.perkIdsRaw))
           };
         }
@@ -5255,6 +5287,7 @@
           if (unit.classId === "CL_HERO_HYBRID") {
             unit.heroState = unit.heroState || { dashCd: 0, arcCd: 0, passiveTriggered: false, instinctGuardActive: false };
           }
+          normalizeUnitSkillContract(unit);
           unit.movedThisTurn = !!unit.movedThisTurn;
           unit.preMove = unit.preMove || null;
           unit.actionState = unit.actionState || "idle";
@@ -5329,7 +5362,7 @@
             ? HERO_BOLT_DMG_MULT
             : (mode === "hero_dash"
                 ? HERO_DASH_DMG_MULT
-                : (mode === "hero_arc" ? HERO_ARC_DMG_MULT : HERO_MELEE_DMG_BASE));
+                : (mode === "hero_arc" ? HERO_ARC_DMG_MULT : (mode === "strike" ? 1.2 : HERO_MELEE_DMG_BASE)));
           const estDmg = Math.max(0, Math.round(
             ((statWithEffects(attacker, "atk") + tri.atk + (attacker.nextAttackBonus.atk || 0)) - statWithEffects(target, "def")) * dmgMult
           ));
@@ -5485,6 +5518,7 @@
 
         function triggerHeroPassiveIfNeeded(unit) {
           if (!unit || !unit.heroState || unit.heroState.passiveTriggered) return;
+          if (unit.passivePerk?.id !== "SURVIVOR_TEMP") return;
           if (unit.hp > unit.maxHp * HERO_PASSIVE_HP_THRESHOLD) return;
           unit.heroState.passiveTriggered = true;
           unit.heroState.instinctGuardActive = true;
@@ -5609,7 +5643,7 @@
             ? HERO_BOLT_DMG_MULT
             : (actionMode === "hero_dash"
                 ? HERO_DASH_DMG_MULT
-                : (actionMode === "hero_arc" ? HERO_ARC_DMG_MULT : HERO_MELEE_DMG_BASE));
+                : (actionMode === "hero_arc" ? HERO_ARC_DMG_MULT : (actionMode === "strike" ? 1.2 : HERO_MELEE_DMG_BASE)));
           const first = await resolveAttack(attacker, target, {
             actionMode,
             contextTag: "initial",
