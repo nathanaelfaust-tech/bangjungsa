@@ -473,19 +473,6 @@
         margin-right: 8px;
       }
 
-      #btnAuto {
-        position: fixed;
-        right: 12px;
-        bottom: 72px;
-        z-index: 99999;
-        padding: 10px 14px;
-        border: 1px solid #356089;
-        background: linear-gradient(180deg, #2d7cc2, #24679f);
-        color: #eef7ff;
-        border-radius: 10px;
-        font-weight: 800;
-      }
-
       body[data-skin="flat_v1"] {
         background: #f8fafc;
         color: #0f172a;
@@ -542,12 +529,6 @@
         }
         .side {
           min-height: auto;
-        }
-        #btnAuto {
-          right: 10px;
-          bottom: 86px;
-          padding: 12px 16px;
-          font-size: 14px;
         }
       }
 
@@ -659,7 +640,6 @@
         <div class="btnRow">
           <select id="stageSelect" class="btnSmall"></select>
           <button id="campBtn" class="btnSmall" style="display:none;" type="button">캠프</button>
-          <button id="victoryCampBtn" class="btnSmall" style="display:none;" type="button">캠프</button>
           <button id="devToggleBtn" class="btnSmall" type="button">DEV</button>
           <button id="devMenuBtn" class="btnSmall" style="display:none;" type="button">DEV 메뉴</button>
           <button id="skinToggleBtn" class="btnSmall" type="button">스킨: 레거시</button>
@@ -755,8 +735,8 @@
         <div id="campDialogue" class="camp-dialogue">먼지가 여기 있어여. 말 걸어보세여…네여.</div>
         <div class="btnRow">
           <button id="campTalkBtn" class="btnSmall" type="button">먼지에게 말걸기</button>
-          <button id="campNextBtn" class="btnSmall" style="display:none;" type="button">다음 스테이지</button>
-          <button id="campCloseBtn" class="btn" type="button">나가기</button>
+          <button id="campNextStageBtn" class="btnSmall" style="display:none;" type="button">Next Stage</button>
+          <button id="campCloseBtn" class="btn" type="button">닫기</button>
         </div>
       </div>
     </div>
@@ -774,18 +754,16 @@
         </div>
       </div>
     </div>
-    <button id="btnAuto" type="button">AUTO: OFF</button>
 
     <script>
       (() => {
         const TILE = 16;
-        const MAP_W = 30;
-        const MAP_H = 20;
+        let MAP_W = 30;
+        let MAP_H = 20;
         const VIEW_W = 15;
         const VIEW_H = 10;
         const SCALE = 4;
         const SEED = 77103;
-        const defaultMove = 5;
         const MOVE_MS_PER_TILE = 140;
         const PHASE_BANNER_MS = 800;
         const CAMERA_PAN_PX_PER_SEC = 120;
@@ -801,15 +779,7 @@
         const CAMPAIGN_STORAGE_KEY = "srpg_campaign";
         const VISUAL_SKIN_KEY = "srpg_visual_skin";
         const DEV_BUILD = true; // set false for release
-        const STAGE_ORDER = ["STG1", "STG2", "STG3", "STG4", "STG5", "STG6"];
-        const CAMPAIGN_STAGE_TO_PLAYABLE = {
-          STG1: "STG1_FOREST",
-          STG2: "STG2_PRISON",
-          STG3: "stage1",
-          STG4: "stage1",
-          STG5: "stage1",
-          STG6: "stage1"
-        };
+        const CAMPAIGN_STAGE_ORDER = ["STG1", "STG2", "STG3", "STG4", "STG5"];
         const FLAT_PALETTE = {
           ink900: "#0F172A",
           ink700: "#334155",
@@ -964,29 +934,10 @@
           f: { key: "forest", name: "숲", moveCost: 2, avoid: 20, color: "#2f6334" },
           t: { key: "fort", name: "요새", moveCost: 1, avoid: 10, color: "#8f7d4e" },
           r: { key: "road", name: "도로", moveCost: 1, avoid: 0, color: "#7f6a4d" },
-          x: { key: "void", name: "경계", moveCost: 999, avoid: 0, color: "#1b222c" },
-          P: { key: "prison_floor", name: "PRISON_FLOOR", moveCost: 1, avoid: 0, color: "#5b6670" },
-          W: { key: "prison_wall", name: "PRISON_WALL", moveCost: 999, avoid: 0, color: "#242a31" },
-          D: { key: "prison_door", name: "PRISON_DOOR", moveCost: 1, avoid: 0, color: "#8a6a42" },
-          C: { key: "prison_cell", name: "PRISON_CELL", moveCost: 1, avoid: 0, color: "#4a5761" },
-          G: { key: "prison_gate", name: "PRISON_GATE", moveCost: 1, avoid: 0, color: "#8f5b5b" },
-          E: { key: "prison_exit", name: "PRISON_EXIT", moveCost: 1, avoid: 0, color: "#5b8f6a" }
+          h: { key: "highlight", name: "강조", moveCost: 1, avoid: 0, color: "#5a9159" }
         };
 
         let MAP_ROWS = buildMapRows(SEED);
-        function mapWidth() {
-          return MAP_ROWS?.[0]?.length || 0;
-        }
-        function mapHeight() {
-          return MAP_ROWS?.length || 0;
-        }
-        function getTile(x, y) {
-          if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-          if (x < 0 || y < 0 || y >= mapHeight() || x >= mapWidth()) return null;
-          const row = MAP_ROWS[y];
-          if (!row) return null;
-          return row[x] ?? null;
-        }
 
         const palette = {
           player: { body: "#63b5ff", edge: "#d7edff" },
@@ -1080,66 +1031,54 @@
           { id: "n1", name: "우냥산", faction: "neutral", x: 13, y: 1, acted: false, spriteType: "cat", paletteKey:
   "neutral", px: null, py: null, classId: "CL_NONE_JESTER", perks: [] }
         ];
-
-        function buildStage2PrisonBlueprint() {
-          const W = 18;
-          const H = 12;
-          const rows = Array.from({ length: H }, () => Array.from({ length: W }, () => "W"));
-          const carve = (x, y, code = "P") => {
-            if (x < 0 || y < 0 || x >= W || y >= H) return;
-            rows[y][x] = code;
-          };
-          const carvePath = (x1, y1, x2, y2, code = "P") => {
-            const dx = Math.sign(x2 - x1);
-            const dy = Math.sign(y2 - y1);
-            let x = x1;
-            let y = y1;
-            carve(x, y, code);
-            while (x !== x2 || y !== y2) {
-              if (x !== x2) x += dx;
-              else if (y !== y2) y += dy;
-              carve(x, y, code);
-            }
-          };
-
-          carvePath(2, 9, 2, 6, "P");
-          carvePath(2, 6, 6, 6, "P");
-          carvePath(6, 6, 6, 4, "P");
-          carvePath(6, 4, 11, 4, "P");
-          carvePath(11, 4, 11, 2, "P");
-          carvePath(11, 2, 15, 2, "P");
-          carvePath(11, 2, 11, 1, "P");
-
-          for (let y = 3; y <= 6; y++) {
-            for (let x = 7; x <= 10; x++) carve(x, y, "C");
-          }
-          carve(6, 4, "D");
-          carve(6, 5, "P");
-          carve(12, 2, "G");
-          carve(13, 2, "G");
-          carve(12, 3, "t");
-
-          const mapRows = rows.map((r) => r.join(""));
-          const tileTags = {
-            PLAYER_START: [{ x: 2, y: 9 }, { x: 2, y: 10 }, { x: 3, y: 9 }],
-            STG2_RESCUE: [{ x: 6, y: 4 }],
-            STG2_GATE: [{ x: 12, y: 2 }],
-            STG2_GUARD_GATE: [{ x: 12, y: 2 }, { x: 13, y: 2 }],
-            STG2_ALARM: [{ x: 12, y: 3 }],
-            STG2_EXIT: [{ x: 15, y: 1 }, { x: 16, y: 1 }]
-          };
-          const prisonerAnchor = { x: 8, y: 4 };
-          const spawns = [
-            { id: "감시병1", name: "감시병1", faction: "enemy", x: 11, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_SWD_GUARD", perks: [], aiHint: "holdLine" },
-            { id: "감시병2", name: "감시병2", faction: "enemy", x: 10, y: 4, spriteType: "enemy", paletteKey: "enemy", classId: "CL_LNC_PIKER", perks: [], aiHint: "holdLine" },
-            { id: "감시병3", name: "감시병3", faction: "enemy", x: 8, y: 6, spriteType: "enemy", paletteKey: "enemy", classId: "CL_AXE_BRUISER", perks: [], aiHint: "holdCenter" },
-            { id: "n1", name: "우냥산", faction: "neutral", x: 4, y: 9, spriteType: "cat", paletteKey: "neutral", classId: "CL_NONE_JESTER", perks: [] }
-          ];
-          return { mapRows, tileTags, spawns, prisonerAnchor, size: { w: W, h: H } };
-        }
-
-        const CURRENT_STAGE = "STG1_FOREST";
+        const CURRENT_STAGE = "STG1";
         const STAGES = {
+          STG1: {
+            stageId: "STG1",
+            title: "첫 번째 발걸음",
+            name: "첫 번째 발걸음",
+            mapSize: { w: 8, h: 6 },
+            palette: {
+              G: "GRASS",
+              F: "FOREST",
+              H: "HIGHLIGHT"
+            },
+            layout: [
+              "GGGGGGGG",
+              "GFFGGGFG",
+              "GSGGGEGG",
+              "GSGGGEGG",
+              "GSGGGGGG",
+              "GGGGGGGG"
+            ],
+            fixedPlayerRosterIds: ["leader", "jeong2", "able"],
+            playerPlacement: [
+              { rosterId: "leader", x: 1, y: 2 },
+              { rosterId: "jeong2", x: 1, y: 3 },
+              { rosterId: "able", x: 1, y: 4 }
+            ],
+            spawns: [
+              { id: "STG1_ENEMY_SCARECROW_A", name: "허수아비 A", faction: "enemy", x: 5, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_AXE_BRUISER", weaponType: "axe", perks: [], aiHint: "holdLine", maxHp: 12, hp: 12, atk: 5, def: 1, hit: 70, crit: 0 },
+              { id: "STG1_ENEMY_SCARECROW_B", name: "허수아비 B", faction: "enemy", x: 5, y: 3, spriteType: "enemy", paletteKey: "enemy", classId: "CL_AXE_BRUISER", weaponType: "axe", perks: [], aiHint: "holdLine", maxHp: 12, hp: 12, atk: 5, def: 1, hit: 70, crit: 0 }
+            ],
+            objectives: [],
+            triggers: [],
+            safetyRoute: [],
+            talkEvents: []
+          },
+          STG2: {
+            stageId: "STG2",
+            title: "STG2",
+            name: "STG2",
+            mapGen: () => buildMapRows(SEED),
+            spawns: BASE_STAGE_SPAWNS,
+            objectives: [
+              { id: "OBJ_STG2_SURVIVE", type: "SURVIVE", params: { turns: 3 }, status: "ongoing" }
+            ],
+            triggers: [],
+            safetyRoute: [],
+            talkEvents: []
+          },
           STG1_FOREST: {
             name: "시작의 숲",
             mapGen: () => buildMapRows(SEED),
@@ -1154,7 +1093,8 @@
               { id: "적궁1", name: "적궁1", faction: "enemy", x: 13, y: 8, spriteType: "enemy", paletteKey: "enemy", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_EAGLE_EYE"], aiHint: "holdLine" },
               { id: "적법사", name: "적법사", faction: "enemy", x: 12, y: 9, spriteType: "enemy", paletteKey: "enemy", classId: "CL_STF_HEXER", weaponType: "staff", perks: ["PRK_HEX_MARK"], aiHint: "holdCenter", hit: 78 },
               { id: "적대장", name: "적대장", faction: "enemy", x: 11, y: 10, spriteType: "enemy", paletteKey: "enemy", classId: "CL_SWD_GUARD", weaponType: "sword", perks: [], aiHint: "holdCenter", maxHp: 34, hp: 34 },
-              { id: "우냥산", name: "우냥산", faction: "neutral", x: 4, y: 10, spriteType: "cat", paletteKey: "neutral", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_SNACK_BREAK"], aiHint: "wanderSleep" }
+              { id: "우냥산", name: "우냥산", faction: "neutral", x: 4, y: 10, spriteType: "cat", paletteKey: "neutral", classId: "CL_BOW_RANGER", weaponType: "bow", perks: ["PRK_SNACK_BREAK"], aiHint: "wanderSleep" },
+              { id: "너부리", name: "너부리", faction: "neutral", x: 5, y: 11, spriteType: "cat", paletteKey: "neutral", classId: "CL_STF_HEXER", weaponType: "staff", perks: ["PRK_FRIENDLY_HECKLE"], aiHint: "fleeOnHit" }
             ],
             tuning: {
               playerBonus: { hp: 4, atk: 1, def: 1, hit: 5, crit: 0 },
@@ -1169,6 +1109,7 @@
               FLG_STG1_BOSS_DOWN: false,
               FLG_STG1_VICTORY: false,
               FLG_STG1_JESTER: false,
+              FLG_STG1_RACCOON: false,
               FLG_TUTOR_TRIANGLE: false
             },
             tileTags: {
@@ -1183,8 +1124,10 @@
               { id: "SR1", target: "STG1_CLEARING", guidanceText: "공터로 이동", expectedTurnMin: 1, expectedTurnMax: 1 },
               { id: "SR2", target: "TE_STG1_TALK_JESTER", guidanceText: "지나가와 대화", expectedTurnMin: 1, expectedTurnMax: 2 },
               { id: "SR3", target: "TE_STG1_TALK_CATNAP", guidanceText: "우냥산과 대화", expectedTurnMin: 2, expectedTurnMax: 2 },
-              { id: "SR4", target: "combat", guidanceText: "대장부터 정리", expectedTurnMin: 4, expectedTurnMax: 6 },
-              { id: "SR5", target: "STG1_EXIT", guidanceText: "출구로 집결", expectedTurnMin: 6, expectedTurnMax: 7 }
+              { id: "SR4", target: "TE_STG1_TALK_RACCOON", guidanceText: "너부리와 대화", expectedTurnMin: 2, expectedTurnMax: 2 },
+              { id: "SR5", target: "combat", guidanceText: "증원 온다 대비", expectedTurnMin: 4, expectedTurnMax: 4 },
+              { id: "SR6", target: "combat", guidanceText: "대장부터 정리", expectedTurnMin: 4, expectedTurnMax: 6 },
+              { id: "SR7", target: "STG1_EXIT", guidanceText: "출구로 집결", expectedTurnMin: 6, expectedTurnMax: 7 }
             ],
             talkEvents: [
               {
@@ -1208,6 +1151,18 @@
                 ],
                 once: true
               },
+              {
+                eventId: "TE_STG1_TALK_RACCOON",
+                trigger: "adjacent+talk",
+                condition: "talk(리더→너부리) && !FLG_STG1_RACCOON",
+                speakers: ["리더", "너부리"],
+                lines: ["여기 위험해", "난 모른 척함", "저쪽 길은 막힘"],
+                effects: [
+                  { type: "setFlag", flagId: "FLG_STG1_RACCOON", value: true },
+                  { type: "item", itemId: "SMALL_TONIC" }
+                ],
+                once: true
+              }
             ],
             triggers: [
               {
@@ -1275,14 +1230,6 @@
               }
             ]
           },
-          STG2_PRISON: {
-            name: "감옥 탈출",
-            mapGen: () => buildStage2PrisonBlueprint().mapRows,
-            spawns: buildStage2PrisonBlueprint().spawns,
-            tileTags: buildStage2PrisonBlueprint().tileTags,
-            objectives: [{ id: "OBJ_STG2_RESCUE", type: "STG2_RESCUE", params: {}, status: "ongoing" }],
-            triggers: []
-          },
           stage1: {
             name: "샘플 전장",
             mapGen: () => buildMapRows(SEED),
@@ -1318,8 +1265,8 @@
         const octx = offscreen.getContext("2d");
 
         const mapCache = document.createElement("canvas");
-        mapCache.width = mapWidth() * TILE;
-        mapCache.height = mapHeight() * TILE;
+        mapCache.width = MAP_W * TILE;
+        mapCache.height = MAP_H * TILE;
         const mctx = mapCache.getContext("2d");
 
         const phasePill = document.getElementById("phasePill");
@@ -1343,8 +1290,6 @@
         const followBtn = document.getElementById("followBtn");
         const stageSelect = document.getElementById("stageSelect");
         const campBtn = document.getElementById("campBtn");
-        const victoryCampBtn = document.getElementById("victoryCampBtn");
-        const btnAuto = document.getElementById("btnAuto");
         const devToggleBtn = document.getElementById("devToggleBtn");
         const devMenuBtn = document.getElementById("devMenuBtn");
         const skinToggleBtn = document.getElementById("skinToggleBtn");
@@ -1360,7 +1305,7 @@
         const campOverlay = document.getElementById("campOverlay");
         const campDialogue = document.getElementById("campDialogue");
         const campTalkBtn = document.getElementById("campTalkBtn");
-        const campNextBtn = document.getElementById("campNextBtn");
+        const campNextStageBtn = document.getElementById("campNextStageBtn");
         const campCloseBtn = document.getElementById("campCloseBtn");
         const meonjiOverlay = document.getElementById("meonjiOverlay");
         const meonjiDialogue = document.getElementById("meonjiDialogue");
@@ -1459,17 +1404,15 @@
         let activeDialog = null;
         let stageObjectives = [];
         let stageTriggers = [];
-        let stageTurnHooks = [];
-        let reinforceQueue = [];
         let firedStageTriggers = new Set();
         let currentStageId = CURRENT_STAGE;
         let currentCampaignStageId = "STG1";
         let currentStageTileTags = {};
+        let currentStageMarkers = { start: [], enemy: [] };
         let safetyRouteSteps = [];
         let firedSafetyRouteSteps = new Set();
         let turnGuidanceText = "";
         let toastTimer = null;
-        let stg2KimwareActive = false;
 
         let rng = mulberry32(SEED);
         let phase = PHASE.PLAYER;
@@ -1509,9 +1452,6 @@
         let devFlagPanelEl = null;
         let devFlagListEl = null;
         let campAutoOpenPending = false;
-        let autoDelegateEnabled = false;
-        let autoDelegateRunning = false;
-        let currentStageRuntime = {};
         const mousePan = { active: false, button: -1, lastX: 0, lastY: 0 };
         const pointerGesture = {
           active: false,
@@ -1666,6 +1606,13 @@
           return !!(campaign && campaign.campUnlocked === true);
         }
 
+        function updateCampNextStageButton() {
+          if (!campNextStageBtn) return;
+          const nextId = campaign?.pendingNextStageId || "";
+          campNextStageBtn.style.display = nextId ? "inline-block" : "none";
+          campNextStageBtn.textContent = nextId ? `Next Stage (${nextId})` : "Next Stage";
+        }
+
         function updateCampButtonVisibility() {
           if (!campBtn) return;
           campBtn.style.display = isCampAvailable() ? "inline-block" : "none";
@@ -1682,10 +1629,10 @@
         }
 
         function meonjiCampLines(topic) {
-          if (topic === "intro") return ["먼지: …네여! 먼지라구여 ㅋㅋㅋㅋㅋ (placeholder)"];
-          if (topic === "recap") return ["먼지: …네여 (placeholder)"];
-          if (topic === "hint") return ["먼지: …어용 (placeholder)"];
-          return ["먼지: 글쿤여…어용"];
+          if (topic === "intro") return ["먼지: 튜토리얼 끝났네여.", "먼지: 캠프에서 잠깐 정리하고 가세여…어용."];
+          if (topic === "recap") return ["언제 가요?? …네여", "다음은 스테이지 2…어용"];
+          if (topic === "hint") return ["부상자랑 보호자… 구여", "체력 좀 떨어지면…네여"];
+          return ["도망가면 되죠ㅋㅋㅋㅋㅋ", "글쿤여"];
         }
 
         function closeCampModal() {
@@ -1694,66 +1641,29 @@
           inputLocked = false;
         }
 
-        function returnToMenu() {
-          closeCampModal();
-          closeMeonjiModal();
-          showMenu();
-        }
-
-        function onCampExit() {
-          if (!campaign) {
-            closeCampModal();
-            return;
-          }
-          returnToMenu();
-        }
-
-        function onCampNextStage() {
-          if (!campaign) return;
-          const pendingId = campaign.pendingNextStageId || null;
-          if (!pendingId) return;
-          campaign.pendingNextStageId = null;
-          campaign.currentStageId = pendingId;
-          saveCampaign();
-          closeCampModal();
-          closeMeonjiModal();
-          loadCampaignStage(pendingId, { save: false });
-        }
-
-        function refreshCampButtons() {
-          const pendingId = campaign?.pendingNextStageId || null;
-          if (campNextBtn) campNextBtn.style.display = pendingId ? "inline-block" : "none";
-          if (campCloseBtn) campCloseBtn.textContent = "메인메뉴";
-        }
-
-        function maybeShowMeonjiGreetingOnce() {
-          if (!campaign) return;
-          ensureCampaignRecruitmentScaffold(campaign);
-          if (campaign.flags.metMeonji) return;
-          setCampDialogueLines(meonjiCampLines("intro"));
-          showToast("먼지: …네여! 먼지라구여 ㅋㅋㅋㅋㅋ", 1800);
-          campaign.flags.metMeonji = true;
-          saveCampaign();
-        }
-
         function openCampModal({ intro = false } = {}) {
           if (!isCampAvailable() || !campOverlay) return;
           campOverlay.classList.add("show");
           inputLocked = true;
-          refreshCampButtons();
-          const pendingId = campaign?.pendingNextStageId || null;
-          if (pendingId) {
-            setCampDialogueLines(["먼지: 다음 스테이지 준비됐어여."]);
-          } else if (intro) {
-            setCampDialogueLines(meonjiCampLines("intro"));
+          const hasPending = !!campaign?.pendingNextStageId;
+          if (hasPending) {
+            setCampDialogueLines(["먼지: 튜토리얼 클리어 확인.", `먼지: 다음 스테이지(${campaign.pendingNextStageId})는 여기서만 출발해여.`]);
           } else {
-            setCampDialogueLines(["먼지: …네여 (placeholder)"]);
+            setCampDialogueLines(intro ? meonjiCampLines("intro") : ["먼지가 기다리고 있어여.", "말 걸어서 확인해보세여."]);
           }
-          maybeShowMeonjiGreetingOnce();
+          updateCampNextStageButton();
         }
 
-        function openCampScene() {
-          openCampModal({ intro: true });
+        function onCampNextStage() {
+          if (!campaign || !campaign.pendingNextStageId) return;
+          const nextId = campaign.pendingNextStageId;
+          campaign.pendingNextStageId = null;
+          campaign.currentStageId = nextId;
+          saveCampaign();
+          initializeStageSelect();
+          updateCampNextStageButton();
+          closeCampModal();
+          loadCampaignStage(nextId, { save: false });
         }
 
         function closeMeonjiModal() {
@@ -1764,7 +1674,7 @@
         function openMeonjiModal() {
           if (!meonjiOverlay) return;
           meonjiOverlay.classList.add("show");
-          if (meonjiDialogue) meonjiDialogue.textContent = meonjiCampLines("joke").join("\n");
+          if (meonjiDialogue) meonjiDialogue.textContent = meonjiCampLines("recap").join("\n");
         }
 
         function openMeonjiTopic(topic) {
@@ -1778,6 +1688,7 @@
         updateDevStatusLabel();
         updateCampButtonVisibility();
         updateMenuCampButtonVisibility();
+        updateCampNextStageButton();
 
         canvas.addEventListener("mousemove", onMouseMove);
         canvas.addEventListener("mouseleave", () => {
@@ -1801,15 +1712,10 @@
         centerCamBtn.addEventListener("click", onCenterCamera);
         followBtn.addEventListener("click", onToggleFollow);
         if (campBtn) campBtn.addEventListener("click", () => openCampModal({ intro: false }));
-        if (victoryCampBtn) victoryCampBtn.addEventListener("click", () => {
-          if (!battleOver || !campaign) return;
-          openCampScene();
-        });
         if (menuCampBtn) menuCampBtn.addEventListener("click", () => openCampModal({ intro: false }));
-        if (campCloseBtn) campCloseBtn.addEventListener("click", () => onCampExit());
-        if (campNextBtn) campNextBtn.addEventListener("click", () => onCampNextStage());
-        if (btnAuto) btnAuto.addEventListener("click", () => toggleAutoDelegate());
+        if (campCloseBtn) campCloseBtn.addEventListener("click", () => closeCampModal());
         if (campTalkBtn) campTalkBtn.addEventListener("click", () => openMeonjiModal());
+        if (campNextStageBtn) campNextStageBtn.addEventListener("click", () => onCampNextStage());
         if (meonjiTopicRecapBtn) meonjiTopicRecapBtn.addEventListener("click", () => openMeonjiTopic("recap"));
         if (meonjiTopicHintBtn) meonjiTopicHintBtn.addEventListener("click", () => openMeonjiTopic("hint"));
         if (meonjiTopicJokeBtn) meonjiTopicJokeBtn.addEventListener("click", () => openMeonjiTopic("joke"));
@@ -1991,19 +1897,12 @@
             ? Math.round(Math.sin(renderClock * 0.2) * 2)
             : 0;
           octx.clearRect(0, 0, offscreen.width, offscreen.height);
-          octx.fillStyle = "#0f141b";
-          octx.fillRect(0, 0, offscreen.width, offscreen.height);
-          const sx = Math.floor(camera.xPx);
-          const sy = Math.floor(camera.yPx);
-          const sw = Math.max(0, Math.min(offscreen.width, mapCache.width - sx));
-          const sh = Math.max(0, Math.min(offscreen.height, mapCache.height - sy));
-          if (sw > 0 && sh > 0) {
-            octx.drawImage(
-              mapCache,
-              sx, sy, sw, sh,
-              0, 0, sw, sh
-            );
-          }
+
+          octx.drawImage(
+            mapCache,
+            Math.floor(camera.xPx), Math.floor(camera.yPx), offscreen.width, offscreen.height,
+            0, 0, offscreen.width, offscreen.height
+          );
           octx.save();
           octx.translate(-Math.floor(camera.xPx), -Math.floor(camera.yPx));
           drawOverlays(octx);
@@ -2022,27 +1921,7 @@
         }
 
         function drawOverlays(ctx) {
-          if (currentCampaignStageId === "STG2") {
-            const exitTiles = getTagTiles("STG2_EXIT");
-            const rescued = !!getCampaignStageState("STG2")?.rescuedKimwear;
-            if (rescued && exitTiles.length) {
-              ctx.save();
-              ctx.textAlign = "center";
-              ctx.textBaseline = "middle";
-              ctx.font = "6px monospace";
-              for (const t of exitTiles) {
-                if (!inBounds(t.x, t.y)) continue;
-                const tx = t.x * TILE;
-                const ty = t.y * TILE;
-                ctx.strokeStyle = "rgba(155, 238, 255, 0.86)";
-                ctx.lineWidth = 1;
-                ctx.strokeRect(tx + 0.5, ty + 0.5, TILE - 1, TILE - 1);
-                ctx.fillStyle = "rgba(235, 250, 255, 0.9)";
-                ctx.fillText("EXIT", tx + TILE / 2, ty + TILE / 2);
-              }
-              ctx.restore();
-            }
-          }
+          drawStageMarkers(ctx);
 
           if (moveRange && selectedUnitId) {
             ctx.save();
@@ -2078,10 +1957,8 @@
               const cfg = targetingConfig(attacker, targetingMode || "attack");
               const targetFaction = cfg.targetFaction;
               ctx.save();
-              const h = mapHeight();
-              const w = mapWidth();
-              for (let y = 0; y < h; y++) {
-                for (let x = 0; x < w; x++) {
+              for (let y = 0; y < MAP_H; y++) {
+                for (let x = 0; x < MAP_W; x++) {
                   if (!isInAttackRange(attacker, x, y)) continue;
                   ctx.fillStyle = cfg.tint;
                   ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
@@ -2157,10 +2034,8 @@
             ctx.save();
             ctx.fillStyle = "rgba(7, 11, 16, 0.55)";
             ctx.font = "7px monospace";
-            const h = mapHeight();
-            const w = mapWidth();
-            for (let y = 0; y < h; y++) {
-              for (let x = 0; x < w; x++) {
+            for (let y = 0; y < MAP_H; y++) {
+              for (let x = 0; x < MAP_W; x++) {
                 ctx.fillText(`${x},${y}`, x * TILE + 1, y * TILE + TILE - 2);
               }
             }
@@ -2490,15 +2365,10 @@
         }
 
         function prerenderMap() {
-          const w = mapWidth();
-          const h = mapHeight();
-          mapCache.width = w * TILE;
-          mapCache.height = h * TILE;
           mctx.clearRect(0, 0, mapCache.width, mapCache.height);
-          for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
+          for (let y = 0; y < MAP_H; y++) {
+            for (let x = 0; x < MAP_W; x++) {
               const t = terrainAt(x, y);
-              if (!t) continue;
               const tx = x * TILE;
               const ty = y * TILE;
               if (visualSkin === "flat_v1") {
@@ -2527,36 +2397,6 @@
                   mctx.strokeStyle = FLAT_PALETTE.fort700;
                   mctx.fillStyle = "rgba(71,85,105,0.35)";
                   mctx.fillRect(tx + 2, ty + 2, TILE - 4, TILE - 4);
-                } else if (t.key === "prison_wall") {
-                  mctx.fillStyle = "#20262e";
-                  mctx.fillRect(tx, ty, TILE, TILE);
-                  mctx.strokeStyle = "#3a434e";
-                  mctx.fillStyle = "rgba(75,85,96,0.25)";
-                  mctx.fillRect(tx + 1, ty + 1, TILE - 2, 2);
-                } else if (t.key === "prison_cell") {
-                  mctx.fillStyle = "#4c5a65";
-                  mctx.fillRect(tx, ty, TILE, TILE);
-                  mctx.strokeStyle = "#6a7a88";
-                  mctx.fillStyle = "rgba(210,220,230,0.22)";
-                  mctx.fillRect(tx + 2, ty + 2, TILE - 4, 1);
-                  mctx.fillRect(tx + 2, ty + 6, TILE - 4, 1);
-                  mctx.fillRect(tx + 2, ty + 10, TILE - 4, 1);
-                } else if (t.key === "prison_door") {
-                  mctx.fillStyle = "#8b6b46";
-                  mctx.fillRect(tx, ty, TILE, TILE);
-                  mctx.strokeStyle = "#a1845f";
-                } else if (t.key === "prison_gate") {
-                  mctx.fillStyle = "#8f5f5f";
-                  mctx.fillRect(tx, ty, TILE, TILE);
-                  mctx.strokeStyle = "#b17c7c";
-                } else if (t.key === "prison_exit") {
-                  mctx.fillStyle = "#5f8f70";
-                  mctx.fillRect(tx, ty, TILE, TILE);
-                  mctx.strokeStyle = "#89c2a0";
-                } else if (t.key === "prison_floor") {
-                  mctx.fillStyle = "#5c6974";
-                  mctx.fillRect(tx, ty, TILE, TILE);
-                  mctx.strokeStyle = "#7a8b99";
                 } else {
                   mctx.fillStyle = t.color;
                   mctx.fillRect(tx, ty, TILE, TILE);
@@ -2577,26 +2417,21 @@
         }
 
         function prerenderMinimapTerrain() {
-          const w = Math.max(1, mapWidth());
-          const h = Math.max(1, mapHeight());
           miniTerrainCtx.clearRect(0, 0, MINI_W, MINI_H);
-          for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
+          for (let y = 0; y < MAP_H; y++) {
+            for (let x = 0; x < MAP_W; x++) {
               const t = terrainAt(x, y);
-              if (!t) continue;
               miniTerrainCtx.fillStyle = t.color;
-              const x0 = Math.floor((x / w) * MINI_W);
-              const y0 = Math.floor((y / h) * MINI_H);
-              const x1 = Math.floor(((x + 1) / w) * MINI_W);
-              const y1 = Math.floor(((y + 1) / h) * MINI_H);
+              const x0 = Math.floor((x / MAP_W) * MINI_W);
+              const y0 = Math.floor((y / MAP_H) * MINI_H);
+              const x1 = Math.floor(((x + 1) / MAP_W) * MINI_W);
+              const y1 = Math.floor(((y + 1) / MAP_H) * MINI_H);
               miniTerrainCtx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
             }
           }
         }
 
         function drawMinimap() {
-          const w = Math.max(1, mapWidth());
-          const h = Math.max(1, mapHeight());
           miniCtx.clearRect(0, 0, MINI_W, MINI_H);
           miniCtx.drawImage(minimapTerrainCache, 0, 0);
 
@@ -2604,8 +2439,8 @@
           for (const u of units) {
             const ux = u.px != null ? u.px / TILE : u.x;
             const uy = u.py != null ? u.py / TILE : u.y;
-            const mx = Math.floor((ux / w) * MINI_W);
-            const my = Math.floor((uy / h) * MINI_H);
+            const mx = Math.floor((ux / MAP_W) * MINI_W);
+            const my = Math.floor((uy / MAP_H) * MINI_H);
             miniCtx.fillStyle = u.faction === "player" ? "#63b5ff" : (u.faction === "enemy" ? "#ff6f6f" : "#ffe38f");
             miniCtx.fillRect(mx, my, 3, 3);
 
@@ -2617,10 +2452,10 @@
             }
           }
 
-          const vx = (camera.xPx / (w * TILE)) * MINI_W;
-          const vy = (camera.yPx / (h * TILE)) * MINI_H;
-          const vw = (INTERNAL_W / (w * TILE)) * MINI_W;
-          const vh = (INTERNAL_H / (h * TILE)) * MINI_H;
+          const vx = (camera.xPx / (MAP_W * TILE)) * MINI_W;
+          const vy = (camera.yPx / (MAP_H * TILE)) * MINI_H;
+          const vw = (INTERNAL_W / (MAP_W * TILE)) * MINI_W;
+          const vh = (INTERNAL_H / (MAP_H * TILE)) * MINI_H;
           miniCtx.strokeStyle = "#dbeeff";
           miniCtx.lineWidth = 1;
           miniCtx.strokeRect(
@@ -2908,10 +2743,8 @@
 
           const sx = Math.max(0, Math.min(MINI_W - 1, Math.floor((mx / rect.width) * MINI_W)));
           const sy = Math.max(0, Math.min(MINI_H - 1, Math.floor((my / rect.height) * MINI_H)));
-          const w = Math.max(1, mapWidth());
-          const h = Math.max(1, mapHeight());
-          const tx = Math.floor((sx / MINI_W) * w);
-          const ty = Math.floor((sy / MINI_H) * h);
+          const tx = Math.floor((sx / MINI_W) * MAP_W);
+          const ty = Math.floor((sy / MINI_H) * MAP_H);
 
           camera.xPx = tx * TILE - INTERNAL_W / 2;
           camera.yPx = ty * TILE - INTERNAL_H / 2;
@@ -3145,18 +2978,6 @@
           const range = computeMoveRange(enemy);
           const players = units.filter(u => u.faction === "player");
           if (players.length === 0) return;
-          const stg2AlarmActive = currentCampaignStageId === "STG2" && !!getCampaignStageState("STG2")?.alarm;
-          const chaseExit = stg2AlarmActive && enemy.aiHint === "alarmChaseExit";
-          const exitTiles = chaseExit ? getTagTiles("STG2_EXIT") : [];
-          const nearestExitDist = (x, y) => {
-            if (!exitTiles.length) return Infinity;
-            let best = Infinity;
-            for (const t of exitTiles) {
-              const d = Math.abs(t.x - x) + Math.abs(t.y - y);
-              if (d < best) best = d;
-            }
-            return best;
-          };
 
           let target = pickAttackTarget(enemy, "player");
           if (target) {
@@ -3172,12 +2993,8 @@
             const [x, y] = parseKey(k);
             const d = nearestPlayerDist(x, y);
             const cost = range.dist.get(k) || 0;
-            let better = d < bestDist || (d === bestDist && cost > bestCost);
-            if (chaseExit) {
-              const ex = nearestExitDist(x, y);
-              const bex = nearestExitDist(best.x, best.y);
-              better = ex < bex || (ex === bex && (d < bestDist || (d === bestDist && cost > bestCost)));
-            }
+
+            const better = d < bestDist || (d === bestDist && cost > bestCost);
             if (better) {
               bestDist = d;
               best = { x, y };
@@ -3319,16 +3136,9 @@
           setPhase(PHASE.PLAYER);
           addLog("PLAYER PHASE 시작");
           dispatchStageTrigger("onTurnStart", { side: PHASE.PLAYER, turn: turnCounter });
-          runStageTurnHooks(PHASE.PLAYER, turnCounter);
           runTriggeredEvents("turnStart", { phase: PHASE.PLAYER, turn: turnCounter });
-          runStage2AlarmReinforcementTick();
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
-          if (autoDelegateEnabled) {
-            showToast("AUTO ON: 남은 아군 위임 실행", 900);
-            setTimeout(() => { runAutoDelegateOnce(); }, 40);
-          }
-          updateAutoControls();
         }
 
         function setPhase(next, initial = false) {
@@ -3363,158 +3173,13 @@
           if (DEV_BUILD && showDebugReadout) {
             const cx = Math.floor(camera.xPx / TILE);
             const cy = Math.floor(camera.yPx / TILE);
-            debugReadout.textContent = `MAP(${mapWidth()}x${mapHeight()}) VIEW(${VIEW_W}x${VIEW_H}) CAM(${cx},${cy}) internal(${INTERNAL_W}x${INTERNAL_H}px)`;
+            debugReadout.textContent = `MAP(${MAP_W}x${MAP_H}) VIEW(${VIEW_W}x${VIEW_H}) CAM(${cx},${cy}) internal(${INTERNAL_W}x${INTERNAL_H}px)`;
           } else {
             debugReadout.textContent = "";
           }
-          updateAutoControls();
           updateDevStatusLabel();
           updateCampButtonVisibility();
           updateMenuCampButtonVisibility();
-        }
-
-        function updateAutoControls() {
-          if (btnAuto) {
-            btnAuto.textContent = `AUTO: ${autoDelegateEnabled ? "ON" : "OFF"}`;
-            btnAuto.disabled = autoDelegateRunning || battleOver;
-          }
-        }
-
-        function toggleAutoDelegate() {
-          autoDelegateEnabled = !autoDelegateEnabled;
-          if (!autoDelegateEnabled) autoDelegateRunning = false;
-          if (campaign) {
-            ensureCampaignRecruitmentScaffold(campaign);
-            if (!campaign.settings) campaign.settings = {};
-            campaign.settings.auto = autoDelegateEnabled;
-            saveCampaign();
-          }
-          updateAutoControls();
-          if (autoDelegateEnabled && phase === PHASE.PLAYER && !battleOver) runAutoDelegateOnce();
-        }
-
-        function nearestEnemyFor(unit) {
-          let best = null;
-          let bestD = Infinity;
-          for (const e of units) {
-            if (e.faction !== "enemy") continue;
-            const d = Math.abs(e.x - unit.x) + Math.abs(e.y - unit.y);
-            if (d < bestD || (d === bestD && rng() < 0.5)) {
-              bestD = d;
-              best = e;
-            }
-          }
-          return best;
-        }
-
-        function pickAutoAdjacentEnemy(unit) {
-          const adj = neighbors(unit.x, unit.y)
-            .map((n) => getUnitAt(n.x, n.y))
-            .filter((u) => u && u.faction === "enemy");
-          if (!adj.length) return null;
-          return adj[Math.floor(rng() * adj.length)];
-        }
-
-        function findPath(start, end, ignoreId = null, allowOccupiedEnd = false) {
-          if (!start || !end || !inBounds(start.x, start.y) || !inBounds(end.x, end.y)) return null;
-          const startK = key(start.x, start.y);
-          const endK = key(end.x, end.y);
-          if (startK === endK) return [{ x: start.x, y: start.y }];
-          const queue = [startK];
-          const cameFrom = new Map();
-          const visited = new Set([startK]);
-          while (queue.length) {
-            const curK = queue.shift();
-            const cur = parseKeyToObj(curK);
-            for (const n of neighbors(cur.x, cur.y)) {
-              if (!inBounds(n.x, n.y)) continue;
-              if (terrainAt(n.x, n.y).moveCost >= 999) continue;
-              const nk = key(n.x, n.y);
-              if (visited.has(nk)) continue;
-              const occupied = isOccupied(n.x, n.y, ignoreId);
-              if (occupied && !(allowOccupiedEnd && nk === endK)) continue;
-              visited.add(nk);
-              cameFrom.set(nk, curK);
-              if (nk === endK) return reconstructPath(cameFrom, start, end);
-              queue.push(nk);
-            }
-          }
-          return null;
-        }
-
-        async function issueMove(unitId, x, y) {
-          const unit = unitById(unitId);
-          if (!unit || !inBounds(x, y)) return false;
-          if (unit.x === x && unit.y === y) return true;
-          const path = findPath({ x: unit.x, y: unit.y }, { x, y }, unit.id, false);
-          if (!path || path.length <= 1) return false;
-          await animateUnitAlongPath(unit, path);
-          unit.movedThisTurn = true;
-          addLog(`AUTO 이동: ${unit.name} -> (${x},${y})`);
-          emitUnitEnterTile(unit);
-          return true;
-        }
-
-        function autoBasicAttack(attacker, target) {
-          if (!attacker || !target || battleOver) return;
-          const hit = rng() < 0.75;
-          if (hit) {
-            const atk = Math.max(1, Number(attacker.atk || attacker.baseStats?.atk || 8));
-            const def = Math.max(0, Number(target.def || target.baseStats?.def || 3));
-            const dmg = Math.max(1, atk - def);
-            target.hp = Math.max(0, target.hp - dmg);
-            spawnFloatingText(target.x, target.y, `-${dmg}`, "#ffb4b4");
-            addLog(`AUTO 공격: ${attacker.name} -> ${target.name} (${dmg})`);
-            if (target.hp <= 0) removeUnit(target.id);
-          } else {
-            spawnFloatingText(target.x, target.y, "MISS", "#e7efff");
-            addLog(`AUTO 공격: ${attacker.name} -> ${target.name} (MISS)`);
-          }
-        }
-
-        async function autoActUnit(unit) {
-          if (!unitById(unit.id) || unit.acted || !isUnitControllable(unit) || battleOver) return;
-          const adjacentEnemy = pickAutoAdjacentEnemy(unit);
-          if (adjacentEnemy) {
-            autoBasicAttack(unit, adjacentEnemy);
-            unit.acted = true;
-            return;
-          }
-          const nearestEnemy = nearestEnemyFor(unit);
-          if (nearestEnemy) {
-            const path = findPath({ x: unit.x, y: unit.y }, { x: nearestEnemy.x, y: nearestEnemy.y }, unit.id, true);
-            if (path && path.length > 1) {
-              let step = Math.min(getMoveRange(unit), path.length - 1);
-              while (step > 0 && isOccupied(path[step].x, path[step].y, unit.id)) step -= 1;
-              if (step > 0) {
-                const dest = path[step];
-                await issueMove(unit.id, dest.x, dest.y);
-              }
-            }
-          }
-          const postMoveTarget = pickAutoAdjacentEnemy(unit);
-          if (postMoveTarget) autoBasicAttack(unit, postMoveTarget);
-          unit.acted = true;
-        }
-
-        async function runAutoDelegateOnce() {
-          if (!autoDelegateEnabled || autoDelegateRunning || battleOver || phase !== PHASE.PLAYER) return;
-          autoDelegateRunning = true;
-          inputLocked = true;
-          updateAutoControls();
-          const pending = units.filter((u) => isUnitControllable(u) && !u.acted).map((u) => u.id);
-          for (const id of pending) {
-            if (!autoDelegateEnabled || battleOver || phase !== PHASE.PLAYER) break;
-            const u = unitById(id);
-            if (!u || u.acted || !isUnitControllable(u)) continue;
-            await autoActUnit(u);
-            if (checkBattleEnd()) break;
-            await wait(70);
-          }
-          inputLocked = false;
-          autoDelegateRunning = false;
-          updateAutoControls();
-          if (!battleOver && autoDelegateEnabled && allPlayersActed()) startEnemyPhase();
         }
 
         function updateInfoPanel() {
@@ -3551,7 +3216,7 @@
             unitInfo.innerHTML =
               `<div><b>${target.name}</b> [${target.faction}]</div>` +
               `<div class="small">직업: ${escapeHtml(classLabel)}${escapeHtml(role)} | 무기: ${escapeHtml(target.weaponType || "-")}</div>` +
-              `<div class="small">HP ${target.hp}/${target.maxHp} | MOV ${getMoveRange(target)} | ${actedText}</div>` +
+              `<div class="small">HP ${target.hp}/${target.maxHp} | MOV ${target.mov} | ${actedText}</div>` +
               `<div class="small">Perk: ${escapeHtml(perkText)}</div>` +
               extraLine;
             hpFill.style.width = `${(target.hp / target.maxHp) * 100}%`;
@@ -3589,7 +3254,7 @@
 
               const step = terrainAt(n.x, n.y).moveCost;
               const nextCost = cur.cost + step;
-              if (nextCost > getMoveRange(unit)) continue;
+              if (nextCost > unit.mov) continue;
 
               const nk = key(n.x, n.y);
               if (nextCost < (dist.get(nk) ?? Infinity)) {
@@ -3619,7 +3284,7 @@
 
           const rev = [e];
           let cur = e;
-          let safety = mapWidth() * mapHeight() + 5;
+          let safety = MAP_W * MAP_H + 5;
           while (cur !== s && safety-- > 0) {
             cur = cameFrom.get(cur);
             if (!cur) return null;
@@ -3631,10 +3296,6 @@
 
         function selectedUnit() {
           return selectedUnitId ? unitById(selectedUnitId) : null;
-        }
-
-        function getMoveRange(unit) {
-          return unit?.move ?? unit?.stats?.move ?? defaultMove;
         }
 
         function clearSelection(removeRange = true) {
@@ -3670,8 +3331,7 @@
         }
 
         function terrainAt(x, y) {
-          const code = getTile(x, y);
-          if (code == null) return null;
+          const code = (MAP_ROWS[y][x] || "g").toLowerCase();
           return TERRAIN[code] || TERRAIN.g;
         }
 
@@ -3680,7 +3340,7 @@
         }
 
         function inBounds(x, y) {
-          return x >= 0 && y >= 0 && x < mapWidth() && y < mapHeight();
+          return x >= 0 && y >= 0 && x < MAP_W && y < MAP_H;
         }
 
         function key(x, y) {
@@ -3767,10 +3427,8 @@
           const mode = unit.weaponType === "staff" ? "heal" : "attack";
           const cfg = targetingConfig(unit, mode, true);
           const cells = [];
-          const h = mapHeight();
-          const w = mapWidth();
-          for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
+          for (let y = 0; y < MAP_H; y++) {
+            for (let x = 0; x < MAP_W; x++) {
               if (!isInAttackRange(unit, x, y)) continue;
               cells.push({ x, y });
             }
@@ -3882,27 +3540,7 @@
             ...(targetCampaign.checkpointFlags || {})
           };
           if (typeof targetCampaign.campUnlocked !== "boolean") targetCampaign.campUnlocked = false;
-          if (!targetCampaign.settings || typeof targetCampaign.settings !== "object") targetCampaign.settings = {};
-          if (typeof targetCampaign.settings.auto !== "boolean") targetCampaign.settings.auto = false;
-          if (!targetCampaign.flags || typeof targetCampaign.flags !== "object") targetCampaign.flags = {};
-          if (typeof targetCampaign.flags.metMeonji !== "boolean") targetCampaign.flags.metMeonji = false;
-          if (!("pendingNextStageId" in targetCampaign)) targetCampaign.pendingNextStageId = null;
-          if (targetCampaign.pendingNextStageId && !STAGE_ORDER.includes(targetCampaign.pendingNextStageId)) {
-            targetCampaign.pendingNextStageId = null;
-          }
-          if (!("lastClearedStageId" in targetCampaign)) targetCampaign.lastClearedStageId = null;
-          if (targetCampaign.lastClearedStageId && !STAGE_ORDER.includes(targetCampaign.lastClearedStageId)) {
-            targetCampaign.lastClearedStageId = null;
-          }
-          if (!targetCampaign.stageState || typeof targetCampaign.stageState !== "object") targetCampaign.stageState = {};
-          if (!targetCampaign.stageState.STG2 || typeof targetCampaign.stageState.STG2 !== "object") {
-            targetCampaign.stageState.STG2 = { rescuedKimwear: false, alarm: false, alarmTurn: 0, reinforceSpawned: 0 };
-          } else {
-            if (typeof targetCampaign.stageState.STG2.rescuedKimwear !== "boolean") targetCampaign.stageState.STG2.rescuedKimwear = false;
-            if (typeof targetCampaign.stageState.STG2.alarm !== "boolean") targetCampaign.stageState.STG2.alarm = false;
-            if (!Number.isFinite(Number(targetCampaign.stageState.STG2.alarmTurn))) targetCampaign.stageState.STG2.alarmTurn = 0;
-            if (!Number.isFinite(Number(targetCampaign.stageState.STG2.reinforceSpawned))) targetCampaign.stageState.STG2.reinforceSpawned = 0;
-          }
+          if (typeof targetCampaign.pendingNextStageId !== "string" && targetCampaign.pendingNextStageId !== null) targetCampaign.pendingNextStageId = null;
           if (!Array.isArray(targetCampaign.rosterIds)) targetCampaign.rosterIds = ["leader", "jeong2", "able"];
         }
 
@@ -3918,98 +3556,8 @@
           showToast(`${nameText} 합류! (${beforeCount}→${afterCount})`, 1700);
         }
 
-        function getCampaignStageState(stageId) {
-          if (!campaign) return {};
-          ensureCampaignRecruitmentScaffold(campaign);
-          if (!campaign.stageState[stageId]) campaign.stageState[stageId] = {};
-          return campaign.stageState[stageId];
-        }
-
-        function getKimwareUnit() {
-          return unitById("김웨어") || unitById("kimware");
-        }
-
-        function promoteKimwareToPlayer() {
-          const kimware = getKimwareUnit();
-          if (!kimware) return;
-          kimware.faction = "player";
-          kimware.paletteKey = "player";
-          kimware.controllable = true;
-          kimware.aiTeam = null;
-          kimware.acted = false;
-          stg2KimwareActive = true;
-        }
-
-        function ensureStg2KimwareRescueTalkEvent() {
-          if (currentCampaignStageId !== "STG2") return;
-          const exists = TALK_EVENTS.some((e) => e && e.eventId === "TE_STG2_RESCUE_KIMWARE");
-          if (exists) return;
-          TALK_EVENTS.push({
-            eventId: "TE_STG2_RESCUE_KIMWARE",
-            trigger: "adjacent+talk",
-            condition: "talk(리더→김웨어) && !RESCUE_KIMWARE_SUCCESS",
-            speakers: ["리더", "김웨어"],
-            lines: ["문 열어줘!", "지금 바로 나간다."],
-            effects: [{ type: "setFlag", flagId: RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS, value: true }],
-            once: true
-          });
-        }
-
-        function ensureStg2KimwareState() {
-          if (currentCampaignStageId !== "STG2") {
-            stg2KimwareActive = false;
-            return;
-          }
-          const stg2State = getCampaignStageState("STG2");
-          const kimPoint = currentStageRuntime?.stg2KimwarePos || { x: 6, y: 10 };
-          let kimware = getKimwareUnit();
-          if (!kimware) {
-            spawnStageUnit({
-              ...RECRUITMENT_UNIT_DEFS.kimware,
-              id: "김웨어",
-              name: "김웨어",
-              x: kimPoint.x,
-              y: kimPoint.y,
-              faction: "neutral",
-              paletteKey: "neutral",
-              controllable: false,
-              aiHint: "holdLine"
-            });
-            kimware = getKimwareUnit();
-          }
-          if (!kimware) return;
-          stg2KimwareActive = true;
-          stg2State.rescuedKimwear = !!getFlag(RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS);
-          if (stg2State.rescuedKimwear) {
-            promoteKimwareToPlayer();
-          } else {
-            kimware.faction = "neutral";
-            kimware.paletteKey = "neutral";
-            kimware.controllable = false;
-            kimware.aiTeam = "allyGuest";
-            ensureStg2KimwareRescueTalkEvent();
-          }
-        }
-
-        function triggerDefeat(reasonText = "DEFEAT") {
-          if (battleOver) return;
-          addLog(reasonText);
-          showToast(reasonText);
-          setBattleResult("DEFEAT");
-        }
-
-        function checkStage2KimwareFail() {
-          if (battleOver || currentCampaignStageId !== "STG2" || !stg2KimwareActive) return false;
-          const kimware = getKimwareUnit();
-          if (!kimware || kimware.hp <= 0) {
-            triggerDefeat("Kimwear down");
-            return true;
-          }
-          return false;
-        }
-
         function ensureJiningTalkEventForStage() {
-          if (currentCampaignStageId !== "STG5") return;
+          if (currentCampaignStageId !== "STG4_CORE") return;
           if (!getFlag(RECRUITMENT_FLAG_IDS.JINING_HP_LOW) || getFlag(RECRUITMENT_FLAG_IDS.LEADER_TALK_SUCCESS)) return;
           const exists = TALK_EVENTS.some((e) => e && e.eventId === "TE_STG4_LEADER_TALK_JINING");
           if (exists) return;
@@ -4026,7 +3574,7 @@
         }
 
         function spawnSireoGuestIfNeeded() {
-          if (!campaign || currentCampaignStageId !== "STG4") return;
+          if (!campaign || currentCampaignStageId !== "STG3_RUINS") return;
           if (!campaign.checkpointFlags?.SIRR_GUEST_ACTIVE) return;
           const existing = unitById("시리오") || units.find((u) => u.id === "sireo" || u.name === "시리오");
           if (existing) {
@@ -4071,21 +3619,7 @@
           };
 
           if (flagId === RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS && getFlag(flagId)) {
-            promoteKimwareToPlayer();
-            const stg2State = getCampaignStageState("STG2");
-            stg2State.rescuedKimwear = true;
-            stg2State.alarm = true;
-            stg2State.alarmTurn = turnCounter;
-            stg2State.reinforceSpawned = Number(stg2State.reinforceSpawned || 0);
             if (joinByRoster("kimware", "kimwareJoined", "김웨어")) changed = true;
-            setupStageObjectivesForCampaign();
-            updateObjectivePanel();
-            showToast("발각됐다! 증원이 온다!");
-            addLog("STG2 알람 발동");
-            setStage2ExitTilesCode(true);
-            prerenderMap();
-            prerenderMinimapTerrain();
-            saveCampaign();
           }
           if (flagId === RECRUITMENT_FLAG_IDS.NUBURI_JOIN && getFlag(flagId)) {
             if (joinByRoster("neoburi", "neoburiJoined", "너부리")) changed = true;
@@ -4350,9 +3884,10 @@
 
         function defaultCampaign() {
           return {
-            seasonId: "Season1",
+            seasonId: "S0",
             stageProgress: 0,
             currentStageId: "STG1",
+            pendingNextStageId: null,
             rosterIds: ["leader", "jeong2", "able"],
             playerProfile: { leaderName: "리더", mbti: "INTJ" },
             leaderBuild: {
@@ -4363,11 +3898,6 @@
             },
             recruitedFlags: recruitedFlagDefaults(),
             campUnlocked: false,
-            settings: { auto: false },
-            pendingNextStageId: null,
-            lastClearedStageId: null,
-            stageState: { STG2: { rescuedKimwear: false, alarm: false, alarmTurn: 0, reinforceSpawned: 0 } },
-            flags: { metMeonji: false },
             hiddenScore: 0,
             checkpointFlags: checkpointFlagDefaults(),
             ruleTwistSeen: false,
@@ -4398,37 +3928,25 @@
             const parsed = JSON.parse(raw);
             if (parsed?.saveVersion === SAVE_VERSION && parsed?.campaign) {
               campaign = { ...defaultCampaign(), ...parsed.campaign };
-              campaign.currentStageId = normalizeCampaignStageId(campaign.currentStageId);
               ensureLeaderProfileAndBuild(campaign);
               ensureCampaignRecruitmentScaffold(campaign);
-              autoDelegateEnabled = !!campaign.settings?.auto;
+              campaign.currentStageId = normalizeCampaignStageId(campaign.currentStageId);
+              if (typeof campaign.pendingNextStageId === "string") {
+                campaign.pendingNextStageId = normalizeCampaignStageId(campaign.pendingNextStageId);
+              }
+              campaign.stageProgress = Math.max(0, Math.min(CAMPAIGN_STAGE_ORDER.length - 1, Number(campaign.stageProgress) || 0));
               return true;
             }
             campaign = migrateCampaign(parsed?.saveVersion, parsed);
             ensureLeaderProfileAndBuild(campaign);
             ensureCampaignRecruitmentScaffold(campaign);
-            autoDelegateEnabled = !!campaign.settings?.auto;
             saveCampaign();
             showToast("세이브 버전 변경: 새로 시작");
             return false;
           } catch {
             campaign = defaultCampaign();
-            autoDelegateEnabled = false;
             return false;
           }
-        }
-
-        function normalizeCampaignStageId(stageId) {
-          const legacyMap = {
-            STG1_FOREST: "STG1",
-            STG2_CITY: "STG2",
-            STG3_RUINS: "STG3",
-            STG4_CORE: "STG4",
-            STG5_EPILOGUE: "STG5"
-          };
-          const normalized = legacyMap[stageId] || stageId;
-          if (STAGE_ORDER.includes(normalized)) return normalized;
-          return STAGE_ORDER[0];
         }
 
         function saveCampaign() {
@@ -4439,31 +3957,41 @@
         }
 
         function campaignStageIndex(stageId) {
-          return STAGE_ORDER.indexOf(stageId);
+          return CAMPAIGN_STAGE_ORDER.indexOf(stageId);
         }
 
-        function getNextStageId(stageId) {
+        function normalizeCampaignStageId(stageId) {
+          if (stageId === "STG0_PROLOGUE" || stageId === "STG1_FOREST") return "STG1";
+          if (stageId === "STG2_CITY") return "STG2";
+          if (stageId === "STG3_RUINS") return "STG3";
+          if (stageId === "STG4_CORE") return "STG4";
+          if (stageId === "STG5_EPILOGUE") return "STG5";
+          return CAMPAIGN_STAGE_ORDER.includes(stageId) ? stageId : "STG1";
+        }
+
+        function nextCampaignStageId(stageId) {
           const idx = campaignStageIndex(stageId);
-          if (idx < 0 || idx >= STAGE_ORDER.length - 1) return null;
-          return STAGE_ORDER[idx + 1];
+          if (idx < 0 || idx >= CAMPAIGN_STAGE_ORDER.length - 1) return null;
+          return CAMPAIGN_STAGE_ORDER[idx + 1];
         }
 
         function unlockedCampaignStageIds() {
-          const maxIdx = Math.max(0, Math.min(STAGE_ORDER.length - 1, campaign?.stageProgress ?? 0));
-          return STAGE_ORDER.slice(0, maxIdx + 1);
+          const maxIdx = Math.max(0, Math.min(CAMPAIGN_STAGE_ORDER.length - 1, campaign?.stageProgress ?? 0));
+          return CAMPAIGN_STAGE_ORDER.slice(0, maxIdx + 1);
         }
 
         function stageLabelByCampaignId(campaignStageId) {
+          if (campaignStageId === "STG1") return "첫 번째 발걸음";
+          if (campaignStageId === "STG2") return "STG2";
+          if (STAGES[campaignStageId]) return STAGES[campaignStageId].name || campaignStageId;
           return campaignStageId;
         }
 
         function resolvePlayableStageId(campaignStageId) {
-          const mapped = CAMPAIGN_STAGE_TO_PLAYABLE[campaignStageId];
-          if (mapped && STAGES[mapped]) return mapped;
-          const firstMapped = CAMPAIGN_STAGE_TO_PLAYABLE[STAGE_ORDER[0]];
-          if (firstMapped && STAGES[firstMapped]) return firstMapped;
+          if (STAGES[campaignStageId]) return campaignStageId;
+          if ((campaignStageId === "STG0_PROLOGUE" || campaignStageId === "STG1_FOREST") && STAGES.STG1) return "STG1";
           if (STAGES[CURRENT_STAGE]) return CURRENT_STAGE;
-          return CURRENT_STAGE;
+          return Object.keys(STAGES)[0];
         }
 
         function initializeStageSelect() {
@@ -4485,11 +4013,13 @@
           else if (menuStageSelect.options.length) menuStageSelect.selectedIndex = 0;
           menuStartBtn.textContent = `시작 (로스터 ${campaign.rosterIds.length})`;
           updateCampButtonVisibility();
+          updateCampNextStageButton();
         }
 
         function loadCampaignStage(campaignStageId, { save = true } = {}) {
           const unlocked = new Set(unlockedCampaignStageIds());
-          const safeCampaignStageId = unlocked.has(campaignStageId) ? campaignStageId : STAGE_ORDER[0];
+          const normalized = normalizeCampaignStageId(campaignStageId);
+          const safeCampaignStageId = unlocked.has(normalized) ? normalized : unlockedCampaignStageIds()[0];
           currentCampaignStageId = safeCampaignStageId;
           campaign.currentStageId = safeCampaignStageId;
           if (save) saveCampaign();
@@ -4502,30 +4032,59 @@
           if (speaker?.id === "지나가는사람" || partner?.id === "지나가는사람") campaign.recruitedFlags.passingPersonMet = true;
         }
 
+        function applyVictoryToCampaign() {
+          if (!campaign) return;
+          ensureCampaignRecruitmentScaffold(campaign);
+          const clearedStageId = campaign.currentStageId;
+          const idx = campaignStageIndex(campaign.currentStageId);
+          if (idx >= 0) {
+            campaign.stageProgress = Math.max(campaign.stageProgress, Math.min(CAMPAIGN_STAGE_ORDER.length - 1, idx + 1));
+          }
+          let justUnlockedCamp = false;
+          if (clearedStageId === "STG1_FOREST") {
+            if (!campaign.campUnlocked) {
+              campaign.campUnlocked = true;
+              justUnlockedCamp = true;
+              campAutoOpenPending = true; // transient: open once in this flow only
+            }
+          }
+          const nextId = nextCampaignStageId(campaign.currentStageId);
+          if (nextId) campaign.currentStageId = nextId;
+          saveCampaign();
+          initializeStageSelect();
+          nextStageBtn.style.display = nextId ? "inline-block" : "none";
+          if (justUnlockedCamp && campAutoOpenPending) {
+            openCampModal({ intro: true });
+            campAutoOpenPending = false;
+          }
+        }
+
         function onStageClear(stageId) {
           if (!campaign) return;
           ensureCampaignRecruitmentScaffold(campaign);
-          const idx = campaignStageIndex(stageId);
-          if (idx >= 0) {
-            campaign.stageProgress = Math.max(campaign.stageProgress, Math.min(STAGE_ORDER.length - 1, idx + 1));
+          if (stageId === "STG1") {
+            campaign.campUnlocked = true;
+            campaign.pendingNextStageId = "STG2";
+            campaign.currentStageId = "STG1";
+            const stg2Idx = campaignStageIndex("STG2");
+            if (stg2Idx >= 0) campaign.stageProgress = Math.max(campaign.stageProgress, stg2Idx);
+            saveCampaign();
+            initializeStageSelect();
+            updateCampNextStageButton();
+            nextStageBtn.style.display = "none";
+            openCampModal({ intro: true });
+            return;
           }
-          const nextId = getNextStageId(stageId);
-          campaign.campUnlocked = true;
-          campaign.pendingNextStageId = nextId || null;
-          campaign.lastClearedStageId = stageId;
-          saveCampaign();
-          initializeStageSelect();
-          openCampScene();
-          return;
+          applyVictoryToCampaign();
         }
 
         function onNextStage() {
-          if (campaign && !campaign.pendingNextStageId && campaign.lastClearedStageId) {
-            campaign.pendingNextStageId = getNextStageId(campaign.lastClearedStageId) || null;
-            saveCampaign();
+          if (!campaign) return;
+          if (currentCampaignStageId === "STG1" && campaign.pendingNextStageId) {
+            openCampModal({ intro: false });
+            return;
           }
-          openCampScene();
-          return;
+          loadCampaignStage(campaign.currentStageId, { save: false });
         }
 
         function showMenu() {
@@ -4543,10 +4102,6 @@
           loadCampaign();
           initializeStageSelect();
           hideMenu();
-          if (campaign?.pendingNextStageId) {
-            openCampScene();
-            return;
-          }
           loadCampaignStage(campaign.currentStageId, { save: false });
         }
 
@@ -4554,7 +4109,6 @@
           const leaderName = (menuLeaderName?.value || "리더").trim() || "리더";
           const mbti = MBTI_OPTIONS.includes(menuMbti?.value) ? menuMbti.value : "INTJ";
           campaign = defaultCampaign();
-          autoDelegateEnabled = !!campaign.settings?.auto;
           campaign.playerProfile = { leaderName, mbti };
           campaign.leaderBuild = buildLeaderBuild(leaderName, mbti);
           saveCampaign();
@@ -4567,10 +4121,6 @@
           if (!campaign) return;
           const campaignStageId = menuStageSelect.value || campaign.currentStageId;
           hideMenu();
-          if (campaign?.pendingNextStageId) {
-            openCampScene();
-            return;
-          }
           loadCampaignStage(campaignStageId, { save: true });
         }
 
@@ -4634,10 +4184,10 @@
           return out;
         }
 
-        function defaultPlayerStartTileByIndex(idx, stageHeight = mapHeight()) {
+        function defaultPlayerStartTileByIndex(idx) {
           const rowWidth = 3;
           const x = 2 + (idx % rowWidth);
-          const y = Math.max(1, stageHeight - 4 + Math.floor(idx / rowWidth));
+          const y = Math.max(1, MAP_H - 4 + Math.floor(idx / rowWidth));
           return { x, y };
         }
 
@@ -4677,15 +4227,18 @@
           }
         }
 
-        function spawnPlayersFromCampaignRoster() {
+        function spawnPlayersFromCampaignRoster(stage = null) {
           ensureCampaignRecruitmentScaffold(campaign);
-          const rosterIds = Array.isArray(campaign?.rosterIds) ? campaign.rosterIds : [];
+          const rosterIds = Array.isArray(stage?.fixedPlayerRosterIds) && stage.fixedPlayerRosterIds.length
+            ? stage.fixedPlayerRosterIds.slice()
+            : (Array.isArray(campaign?.rosterIds) ? campaign.rosterIds : []);
+          const placementByRosterId = new Map((stage?.playerPlacement || []).map((p) => [p.rosterId, { x: p.x, y: p.y }]));
           const taggedStarts = getPlayerStartTilesFromStage();
 
           rosterIds.forEach((rosterId, idx) => {
             const spawn = rosterSpawnById(rosterId, idx);
             if (!spawn) return;
-            const preferred = taggedStarts[idx] || defaultPlayerStartTileByIndex(idx);
+            const preferred = placementByRosterId.get(rosterId) || taggedStarts[idx] || defaultPlayerStartTileByIndex(idx);
             const tile = findFreeSpawnTile(preferred.x, preferred.y, 12);
             if (tile) {
               spawn.x = tile.x;
@@ -4699,466 +4252,25 @@
           });
         }
 
-        function defaultRosterSpawnPointsForCrop() {
-          const points = [];
-          const rosterIds = Array.isArray(campaign?.rosterIds) && campaign.rosterIds.length ? campaign.rosterIds : ["leader", "jeong2", "able"];
-          for (let idx = 0; idx < rosterIds.length; idx++) {
-            const p = defaultPlayerStartTileByIndex(idx, MAP_H);
-            points.push({ x: p.x, y: p.y });
-          }
-          return points;
-        }
-
-        function collectStagePoints(stage) {
-          const out = [];
-          for (const s of stage?.spawns || []) {
-            if (typeof s?.x === "number" && typeof s?.y === "number") out.push({ x: s.x, y: s.y });
-          }
-          for (const tiles of Object.values(stage?.tileTags || {})) {
-            if (!Array.isArray(tiles)) continue;
-            for (const t of tiles) if (typeof t?.x === "number" && typeof t?.y === "number") out.push({ x: t.x, y: t.y });
-          }
-          for (const obj of stage?.objectives || []) {
-            if (typeof obj?.params?.x === "number" && typeof obj?.params?.y === "number") out.push({ x: obj.params.x, y: obj.params.y });
-          }
-          for (const tr of stage?.triggers || []) {
-            if (typeof tr?.when?.x === "number" && typeof tr?.when?.y === "number") out.push({ x: tr.when.x, y: tr.when.y });
-            for (const action of tr?.actions || []) {
-              const sx = action?.spawnDef?.x ?? action?.unitDef?.x ?? action?.x;
-              const sy = action?.spawnDef?.y ?? action?.unitDef?.y ?? action?.y;
-              if (typeof sx === "number" && typeof sy === "number") out.push({ x: sx, y: sy });
-            }
-          }
-          return out;
-        }
-
-        function applyOffsetToStage(stage, offX, offY) {
-          const shift = (obj) => {
-            if (!obj || typeof obj.x !== "number" || typeof obj.y !== "number") return;
-            obj.x -= offX;
-            obj.y -= offY;
-          };
-          for (const s of stage?.spawns || []) shift(s);
-          for (const tiles of Object.values(stage?.tileTags || {})) {
-            if (!Array.isArray(tiles)) continue;
-            for (const t of tiles) shift(t);
-          }
-          for (const obj of stage?.objectives || []) shift(obj?.params);
-          for (const tr of stage?.triggers || []) {
-            shift(tr?.when);
-            for (const action of tr?.actions || []) {
-              shift(action?.spawnDef);
-              shift(action?.unitDef);
-              shift(action);
-            }
-          }
-        }
-
-        function medianCoord(values) {
-          if (!values.length) return 0;
-          const sorted = [...values].sort((a, b) => a - b);
-          return sorted[Math.floor(sorted.length / 2)];
-        }
-
-        function cropStage(stageId, stage, points, marginX = 3, marginY = 3, minW = 12, minH = 10, maxW = null, maxH = null, mapRowsInput = null) {
-          const mapRows = Array.isArray(mapRowsInput) && mapRowsInput.length ? mapRowsInput : (stage?.mapData ? cloneSimple(stage.mapData) : (stage?.mapGen ? stage.mapGen() : buildMapRows(SEED)));
-          const oldH = mapRows.length;
-          const oldW = mapRows[0]?.length || 0;
-          const valid = (points || []).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y));
-          if (!valid.length || oldW <= 0 || oldH <= 0) return { mapRows, offX: 0, offY: 0, newW: oldW, newH: oldH };
-
-          let minX = Math.min(...valid.map((p) => p.x));
-          let maxX = Math.max(...valid.map((p) => p.x));
-          let minY = Math.min(...valid.map((p) => p.y));
-          let maxY = Math.max(...valid.map((p) => p.y));
-          minX = Math.max(0, minX - marginX);
-          minY = Math.max(0, minY - marginY);
-          maxX = Math.min(oldW - 1, maxX + marginX);
-          maxY = Math.min(oldH - 1, maxY + marginY);
-
-          let w = maxX - minX + 1;
-          let h = maxY - minY + 1;
-          if (w < minW) {
-            const deficit = minW - w;
-            const left = Math.min(minX, Math.floor(deficit / 2));
-            const right = Math.min(oldW - 1 - maxX, deficit - left);
-            minX -= left;
-            maxX += right;
-            w = maxX - minX + 1;
-          }
-          if (h < minH) {
-            const deficit = minH - h;
-            const up = Math.min(minY, Math.floor(deficit / 2));
-            const down = Math.min(oldH - 1 - maxY, deficit - up);
-            minY -= up;
-            maxY += down;
-            h = maxY - minY + 1;
-          }
-
-          const reqXs = valid.map((p) => p.x);
-          const reqYs = valid.map((p) => p.y);
-          const reqMinX = Math.min(...reqXs);
-          const reqMaxX = Math.max(...reqXs);
-          const reqMinY = Math.min(...reqYs);
-          const reqMaxY = Math.max(...reqYs);
-          const medX = medianCoord(reqXs);
-          const medY = medianCoord(reqYs);
-
-          if (maxW && maxW > 0 && w > maxW) {
-            let winMinX = Math.max(0, Math.min(oldW - maxW, Math.round(medX - maxW / 2)));
-            let winMaxX = winMinX + maxW - 1;
-            if (reqMinX < winMinX) {
-              winMinX = reqMinX;
-              winMaxX = winMinX + maxW - 1;
-            }
-            if (reqMaxX > winMaxX) {
-              winMaxX = reqMaxX;
-              winMinX = winMaxX - maxW + 1;
-            }
-            winMinX = Math.max(0, Math.min(oldW - maxW, winMinX));
-            winMaxX = winMinX + maxW - 1;
-            minX = winMinX;
-            maxX = winMaxX;
-            w = maxW;
-          }
-          if (maxH && maxH > 0 && h > maxH) {
-            let winMinY = Math.max(0, Math.min(oldH - maxH, Math.round(medY - maxH / 2)));
-            let winMaxY = winMinY + maxH - 1;
-            if (reqMinY < winMinY) {
-              winMinY = reqMinY;
-              winMaxY = winMinY + maxH - 1;
-            }
-            if (reqMaxY > winMaxY) {
-              winMaxY = reqMaxY;
-              winMinY = winMaxY - maxH + 1;
-            }
-            winMinY = Math.max(0, Math.min(oldH - maxH, winMinY));
-            winMaxY = winMinY + maxH - 1;
-            minY = winMinY;
-            maxY = winMaxY;
-            h = maxH;
-          }
-
-          const croppedRows = [];
-          for (let y = minY; y <= maxY; y++) {
-            const row = mapRows[y] || "";
-            croppedRows.push(row.slice(minX, maxX + 1).padEnd(w, "g"));
-          }
-          applyOffsetToStage(stage, minX, minY);
-          if (stage && stage._stage2KimwarePos) {
-            stage._stage2KimwarePos.x -= minX;
-            stage._stage2KimwarePos.y -= minY;
-          }
-          console.log("[CROP]", stageId, oldW, oldH, "->", w, h, "off", minX, minY);
-          return { mapRows: croppedRows, offX: minX, offY: minY, newW: w, newH: h };
-        }
-
-        function ensureStage2ScaffoldForCrop(stage) {
-          const bp = buildStage2PrisonBlueprint();
-          if (!stage.tileTags) stage.tileTags = {};
-          stage.mapData = cloneSimple(bp.mapRows);
-          stage.spawns = cloneSimple(bp.spawns);
-          stage.tileTags = cloneSimple(bp.tileTags);
-          stage._stage2KimwarePos = { ...bp.prisonerAnchor };
-        }
-
-        function nearestCellToAnchor(cells, anchor) {
-          let best = null;
-          let bestD = Infinity;
-          for (const c of cells) {
-            const d = Math.abs(c.x - anchor.x) + Math.abs(c.y - anchor.y);
-            if (d < bestD) {
-              best = c;
-              bestD = d;
-            }
-          }
-          return best;
-        }
-
-        function setupStage2PrisonScenario(stage) {
-          if (currentCampaignStageId !== "STG2") return;
-          const leader = unitById("리더") || units.find((u) => u.faction === "player");
-          const anchor = leader ? { x: leader.x, y: leader.y } : { x: 2, y: Math.max(1, mapHeight() - 3) };
-          const targetDist = 9;
-          const candidates = [];
-          for (let y = 1; y < mapHeight() - 1; y++) {
-            for (let x = 1; x < mapWidth() - 1; x++) {
-              const code = getTile(x, y);
-              if (code !== "C" && code !== "D" && code !== "P") continue;
-              if (isOccupied(x, y)) continue;
-              const d = Math.abs(x - anchor.x) + Math.abs(y - anchor.y);
-              const score = Math.abs(d - targetDist) + (d < 8 ? 8 : 0);
-              candidates.push({ x, y, d, score });
-            }
-          }
-          candidates.sort((a, b) => a.score - b.score);
-          const chosen = candidates[0] || { x: 8, y: 4, d: 0 };
-          const rescueAdj = neighbors(chosen.x, chosen.y).filter((p) => {
-            if (!inBounds(p.x, p.y)) return false;
-            const t = terrainAt(p.x, p.y);
-            return !!t && t.moveCost < 999;
-          });
-          const rescueTile = nearestCellToAnchor(rescueAdj, anchor) || { x: chosen.x - 1, y: chosen.y };
-          stage._stage2KimwarePos = { x: chosen.x, y: chosen.y };
-          stage.tileTags = stage.tileTags || {};
-          stage.tileTags.STG2_RESCUE = [{ x: rescueTile.x, y: rescueTile.y }];
-          if (!Array.isArray(stage.tileTags.STG2_GUARD_GATE) || !stage.tileTags.STG2_GUARD_GATE.length) {
-            stage.tileTags.STG2_GUARD_GATE = [{ x: 12, y: 2 }];
-          }
-          if (!Array.isArray(stage.tileTags.STG2_GATE) || !stage.tileTags.STG2_GATE.length) {
-            stage.tileTags.STG2_GATE = cloneSimple(stage.tileTags.STG2_GUARD_GATE);
-          }
-          currentStageRuntime.stg2KimwarePos = { x: chosen.x, y: chosen.y };
-          currentStageRuntime.stg2RescueTiles = cloneSimple(stage.tileTags.STG2_RESCUE);
-          currentStageRuntime.stg2GuardGate = cloneSimple(stage.tileTags.STG2_GUARD_GATE);
-          currentStageRuntime.stg2AlarmTiles = cloneSimple(stage.tileTags.STG2_ALARM || []);
-          const dist = Math.abs(anchor.x - chosen.x) + Math.abs(anchor.y - chosen.y);
-          if (dist < 8 || dist > 10) console.error("[STG2] kimwear distance out of target(8~10):", dist);
-        }
-
-        function placeStage2ExitCornerTiles(anchor) {
-          const w = mapWidth();
-          const h = mapHeight();
-          if (w <= 0 || h <= 0) return [];
-          const corners = [
-            { id: "TL", x: 0, y: 0 },
-            { id: "TR", x: w - 1, y: 0 },
-            { id: "BL", x: 0, y: h - 1 },
-            { id: "BR", x: w - 1, y: h - 1 }
-          ];
-          let chosen = corners[0];
-          let bestDist = -1;
-          for (const c of corners) {
-            const d = Math.abs(anchor.x - c.x) + Math.abs(anchor.y - c.y);
-            if (d > bestDist) {
-              bestDist = d;
-              chosen = c;
-            }
-          }
-          const dx = chosen.id === "TR" || chosen.id === "BR" ? -1 : 1;
-          const dy = chosen.id === "BL" || chosen.id === "BR" ? -1 : 1;
-          const candidates = [
-            { x: chosen.x, y: chosen.y },
-            { x: chosen.x + dx, y: chosen.y },
-            { x: chosen.x, y: chosen.y + dy },
-            { x: chosen.x + dx, y: chosen.y + dy },
-            { x: chosen.x + dx * 2, y: chosen.y },
-            { x: chosen.x, y: chosen.y + dy * 2 }
-          ];
-          const passable = [];
-          const fallback = [];
-          for (const p of candidates) {
-            if (!inBounds(p.x, p.y)) continue;
-            fallback.push({ x: p.x, y: p.y });
-            const t = terrainAt(p.x, p.y);
-            if (t && t.moveCost < 999) passable.push({ x: p.x, y: p.y });
-          }
-          const out = (passable.length >= 2 ? passable : fallback).slice(0, 4);
-          return out;
-        }
-
-        function relocateStage2ExitToCorner(stage) {
-          if (currentCampaignStageId !== "STG2" || !stage) return;
-          const leader = unitById("리더") || units.find((u) => u.faction === "player");
-          const anchor = leader ? { x: leader.x, y: leader.y } : { x: 2, y: Math.max(1, mapHeight() - 3) };
-          const exitTiles = placeStage2ExitCornerTiles(anchor);
-          stage.tileTags = stage.tileTags || {};
-          stage.tileTags.STG2_EXIT = exitTiles;
-          currentStageTileTags.STG2_EXIT = cloneSimple(exitTiles);
-          currentStageRuntime.stg2ExitTiles = cloneSimple(exitTiles);
-          if (exitTiles.length < 2) console.error("[CROP][STG2] missing exit tiles (<2) after corner relocate");
-        }
-
-        function setStage2ExitTilesCode(showExitCode) {
-          if (currentCampaignStageId !== "STG2") return;
-          const exitTiles = getTagTiles("STG2_EXIT");
-          for (const t of exitTiles) {
-            if (!inBounds(t.x, t.y)) continue;
-            setMapTileCode(t.x, t.y, showExitCode ? "E" : "P");
-          }
-        }
-
-        function runStage2AlarmReinforcementTick() {
-          if (battleOver || currentCampaignStageId !== "STG2" || !campaign) return;
-          const stg2State = getCampaignStageState("STG2");
-          if (!stg2State.alarm) return;
-          const alarmTurn = Number(stg2State.alarmTurn || 0);
-          if (turnCounter <= alarmTurn) return;
-          if (((turnCounter - alarmTurn) % 2) !== 0) return;
-          const maxSpawn = 6;
-          const spawned = Number(stg2State.reinforceSpawned || 0);
-          if (spawned >= maxSpawn) return;
-          const gateTiles = getTagTiles("STG2_GATE").length ? getTagTiles("STG2_GATE") : getTagTiles("STG2_GUARD_GATE");
-          if (!gateTiles.length) return;
-          const waveCount = Math.min(1 + Math.floor(rng() * 2), maxSpawn - spawned);
-          let made = 0;
-          for (let i = 0; i < waveCount; i++) {
-            const gate = gateTiles[i % gateTiles.length];
-            const spawn = findFreeSpawnTile(gate.x, gate.y, 5) || gate;
-            const id = `stg2_alarm_${turnCounter}_${spawned + i + 1}`;
-            const cls = (i % 2 === 0) ? "CL_SWD_GUARD" : "CL_LNC_PIKER";
-            const ok = spawnStageUnit({
-              id,
-              name: `간수${spawned + i + 1}`,
-              faction: "enemy",
-              x: spawn.x,
-              y: spawn.y,
-              spriteType: "enemy",
-              paletteKey: "enemy",
-              classId: cls,
-              perks: [],
-              aiHint: "alarmChaseExit"
-            });
-            if (ok) made++;
-          }
-          if (made > 0) {
-            stg2State.reinforceSpawned = spawned + made;
-            saveCampaign();
-            showToast("정문에서 증원 도착!");
-            addLog(`STG2 알람 증원 +${made} (누적 ${stg2State.reinforceSpawned})`);
-          }
-        }
-
-        function relocateUNyangsanAfterCrop() {
-          const cat = unitById("n1") || unitById("우냥산");
-          const crop = currentStageRuntime?.crop;
-          if (!cat || !crop) return;
-          const maxX = Math.max(0, mapWidth() - 1);
-          const maxY = Math.max(0, mapHeight() - 1);
-          let nx = Math.max(0, Math.min(maxX, cat.x));
-          let ny = Math.max(0, Math.min(maxY, cat.y));
-          if (cat.x !== nx || cat.y !== ny) {
-            const tether = { x: Math.max(1, Math.min(maxX, Math.floor(maxX * 0.6))), y: Math.max(1, Math.min(maxY, Math.floor(maxY * 0.6))) };
-            const free = findFreeSpawnTile(tether.x, tether.y, 8);
-            nx = free ? free.x : tether.x;
-            ny = free ? free.y : tether.y;
-          }
-          cat.x = nx;
-          cat.y = ny;
-        }
-
-        function getCurrentStageId() {
-          return currentCampaignStageId;
-        }
-
-        function clearAllStageHooks() {
-          stageTurnHooks = [];
-        }
-
-        function resetTurnHooks() {
-          stageTurnHooks = [];
-        }
-
-        function resetReinforceQueue() {
-          reinforceQueue = [];
-        }
-
-        function registerStageHooks(stageId) {
-          if (stageId !== "STG3") return;
-          stageTurnHooks.push({
-            id: "HOOK_STG3_NUBURI_T3",
-            side: PHASE.PLAYER,
-            turn: 3,
-            once: true,
-            fired: false,
-            run: () => spawnNuburiReinforcement()
-          });
-        }
-
-        function runStageTurnHooks(side, turn) {
-          for (const hook of stageTurnHooks) {
-            if (!hook || hook.fired) continue;
-            if (hook.side && hook.side !== side) continue;
-            if (hook.turn != null && hook.turn !== turn) continue;
-            hook.run?.();
-            if (hook.once) hook.fired = true;
-          }
-        }
-
-        function spawnNuburiReinforcement() {
-          if (getCurrentStageId() !== "STG3") return;
-          if (getFlag(RECRUITMENT_FLAG_IDS.NUBURI_JOIN)) return;
-          if (unitById("너부리")) return;
-          showToast("너부리: 지금 간다!");
-          const sideSpawn = findFreeSpawnTile(0, 10, 8) || { x: 0, y: 10 };
-          const ok = spawnStageUnit({
-            ...RECRUITMENT_UNIT_DEFS.neoburi,
-            id: "너부리",
-            name: "너부리",
-            faction: "player",
-            x: sideSpawn.x,
-            y: sideSpawn.y
-          });
-          if (ok) {
-            setFlag(RECRUITMENT_FLAG_IDS.NUBURI_JOIN, true);
-            addLog("너부리 증원 합류");
-          }
-        }
-
         function loadStage(stageId) {
-          clearAllStageHooks();
-          resetTurnHooks();
-          resetReinforceQueue();
-          const stageBase = STAGES[stageId] || STAGES[CURRENT_STAGE];
-          const stage = cloneSimple(stageBase);
+          const stage = STAGES[stageId] || STAGES[CURRENT_STAGE];
           currentStageId = stageId in STAGES ? stageId : CURRENT_STAGE;
           stageSelect.value = currentStageId;
-          let stageMapRows = stage.mapData ? cloneSimple(stage.mapData) : (stage.mapGen ? stage.mapGen() : buildMapRows(SEED));
-          currentStageRuntime = {};
-          if (currentCampaignStageId === "STG1") {
-            const enemyPoints = (stage.spawns || [])
-              .filter((s) => s && s.faction === "enemy")
-              .map((s) => ({ x: s.x, y: s.y }));
-            const points = [
-              ...defaultRosterSpawnPointsForCrop(),
-              ...enemyPoints
-            ];
-            const cropped = cropStage("STG1", stage, points, 3, 3, 12, 10, 14, 12, stageMapRows);
-            stageMapRows = cropped.mapRows;
-            currentStageRuntime.crop = cropped;
-          } else if (currentCampaignStageId === "STG2") {
-            ensureStage2ScaffoldForCrop(stage);
-            stageMapRows = cloneSimple(stage.mapData || stageMapRows);
-            currentStageRuntime.stg2KimwarePos = stage._stage2KimwarePos ? { ...stage._stage2KimwarePos } : null;
-            currentStageRuntime.stg2RescueTiles = cloneSimple(stage.tileTags?.STG2_RESCUE || []);
-            currentStageRuntime.stg2ExitTiles = cloneSimple(stage.tileTags?.STG2_EXIT || []);
-            currentStageRuntime.stg2GuardGate = cloneSimple(stage.tileTags?.STG2_GUARD_GATE || []);
-          }
-          MAP_ROWS = stageMapRows;
-          stage.mapRows = stageMapRows;
-          stage.w = mapWidth();
-          stage.h = mapHeight();
-          if (currentCampaignStageId === "STG2" && campaign) {
-            ensureCampaignRecruitmentScaffold(campaign);
-            let changed = false;
-            const beforeLen = campaign.rosterIds.length;
-            campaign.rosterIds = campaign.rosterIds.filter((id) => id !== "kimwear");
-            if (campaign.rosterIds.length !== beforeLen) changed = true;
-            if (campaign.checkpointFlags[RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS] !== false) changed = true;
-            campaign.checkpointFlags[RECRUITMENT_FLAG_IDS.RESCUE_KIMWARE_SUCCESS] = false;
-            const stg2State = getCampaignStageState("STG2");
-            if (stg2State.rescuedKimwear !== false) {
-              stg2State.rescuedKimwear = false;
-              changed = true;
-            }
-            if (stg2State.alarm !== false) { stg2State.alarm = false; changed = true; }
-            if (Number(stg2State.alarmTurn || 0) !== 0) { stg2State.alarmTurn = 0; changed = true; }
-            if (Number(stg2State.reinforceSpawned || 0) !== 0) { stg2State.reinforceSpawned = 0; changed = true; }
-            if (changed) saveCampaign();
-          }
+          const parsedMap = parseStageMap(stage);
+          MAP_ROWS = parsedMap.rows;
+          currentStageMarkers = parsedMap.markers;
+          MAP_H = MAP_ROWS.length;
+          MAP_W = MAP_ROWS[0]?.length || 0;
+          mapCache.width = MAP_W * TILE;
+          mapCache.height = MAP_H * TILE;
           rng = mulberry32(SEED);
           units = [];
           clearExistingPlayerUnits();
           currentStageTileTags = cloneSimple(stage.tileTags || {});
           spawnEnemiesAndNeutralsFromStage(stage);
-          spawnPlayersFromCampaignRoster();
-          if (currentCampaignStageId === "STG2") setupStage2PrisonScenario(stage);
-          if (currentCampaignStageId === "STG2") relocateStage2ExitToCorner(stage);
-          if (currentCampaignStageId === "STG2") setStage2ExitTilesCode(false);
-          relocateUNyangsanAfterCrop();
+          spawnPlayersFromCampaignRoster(stage);
           applyStageRecruitmentScaffoldOnLoad();
           stageObjectives = (stage.objectives || []).map((obj) => ({ ...cloneSimple(obj), status: "ongoing" }));
-          setupStageObjectivesForCampaign();
           stageTriggers = (stage.triggers || []).map((tr) => cloneSimple(tr));
           safetyRouteSteps = (stage.safetyRoute || []).map((s) => cloneSimple(s));
           firedSafetyRouteSteps = new Set();
@@ -5166,23 +4278,12 @@
           TALK_EVENTS.length = 0;
           for (const e of stage.talkEvents || []) TALK_EVENTS.push(cloneSimple(e));
           firedStageTriggers = new Set();
-          registerStageHooks(currentCampaignStageId);
           resetFlagsToDefaults(stage.flagDefaults || null);
           if (campaign?.checkpointFlags) {
             for (const [flagId, value] of Object.entries(campaign.checkpointFlags)) {
               if (value === true) flags[flagId] = true;
             }
           }
-          if (currentCampaignStageId === "STG2") {
-            const rescueTiles = currentStageRuntime.stg2RescueTiles || [];
-            const exitTiles = currentStageRuntime.stg2ExitTiles || [];
-            if (!currentStageRuntime.stg2KimwarePos) console.error("[CROP][STG2] missing kimware point after crop");
-            if (rescueTiles.length < 1) console.error("[CROP][STG2] missing rescue trigger tile after crop");
-            if (exitTiles.length < 2) console.error("[CROP][STG2] missing exit tiles (<2) after crop");
-            const invalidDefeatAll = stageObjectives.some((o) => o.type === "ROUTE" || /모든 적 격파|전멸/.test(objectiveLabel(o)));
-            if (invalidDefeatAll) console.error("[STG2][OBJECTIVE] defeat-all objective text/type detected");
-          }
-          ensureStg2KimwareState();
           ensureJiningTalkEventForStage();
           firedEvents.clear();
           for (const key of Object.keys(inventory)) delete inventory[key];
@@ -5205,7 +4306,6 @@
           catLineIndex = 0;
           restartBtn.style.display = "none";
           nextStageBtn.style.display = "none";
-          if (victoryCampBtn) victoryCampBtn.style.display = "none";
           closeCommandMenu();
           dialogOverlay.classList.remove("show");
           activeDialog = null;
@@ -5225,7 +4325,6 @@
           }
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
-          checkStage2KimwareFail();
           updateTopGuide();
         }
 
@@ -5245,51 +4344,11 @@
         }
 
         function objectiveLabel(obj) {
-          if (obj.type === "STG2_RESCUE") return "김웨어 구출(대화)";
-          if (obj.type === "STG2_ESCAPE") return "전원 출구 2칸 내 탈출(출구 표시됨)";
           if (obj.type === "ROUTE") return "모든 적 격파";
           if (obj.type === "SURVIVE") return `${obj.params?.turns || 0}턴 생존`;
           if (obj.type === "SEIZE") return `거점 점령 (${obj.params?.x},${obj.params?.y})`;
           if (obj.type === "ESCAPE") return `탈출 (${obj.params?.x},${obj.params?.y})`;
           return obj.type;
-        }
-
-        function setupStageObjectivesForCampaign() {
-          if (currentCampaignStageId !== "STG2") return;
-          const stg2State = getCampaignStageState("STG2");
-          if (!stg2State.rescuedKimwear) {
-            stageObjectives = [{ id: "OBJ_STG2_RESCUE", type: "STG2_RESCUE", params: {}, status: "ongoing" }];
-          } else {
-            stageObjectives = [{ id: "OBJ_STG2_ESCAPE", type: "STG2_ESCAPE", params: {}, status: "ongoing" }];
-          }
-        }
-
-        function minExitDistToAny(unit, exitTiles) {
-          let best = Infinity;
-          for (const t of exitTiles) {
-            const d = Math.abs(unit.x - t.x) + Math.abs(unit.y - t.y);
-            if (d < best) best = d;
-          }
-          return best;
-        }
-
-        function checkStage2EscortClear() {
-          if (battleOver || currentCampaignStageId !== "STG2" || !campaign) return false;
-          const stg2State = getCampaignStageState("STG2");
-          if (!stg2State.rescuedKimwear) return false;
-          const exitTiles = getTagTiles("STG2_EXIT");
-          if (!exitTiles.length) return false;
-          const players = units.filter((u) => u.faction === "player");
-          if (!players.length) return false;
-          const allWithin = players.every((u) => minExitDistToAny(u, exitTiles) <= 2);
-          const escapeObj = stageObjectives.find((o) => o.id === "OBJ_STG2_ESCAPE");
-          if (escapeObj && allWithin) escapeObj.status = "complete";
-          updateObjectivePanel();
-          if (allWithin) {
-            onStageClear("STG2");
-            return true;
-          }
-          return false;
         }
 
         function updateObjectivePanel() {
@@ -5301,20 +4360,16 @@
         }
 
         function stageHasAllObjectivesComplete() {
-          if (stageObjectives.length === 0) return units.filter((u) => u.faction === "enemy").length === 0;
+          if (stageObjectives.length === 0) return false;
           return stageObjectives.every((obj) => obj.status === "complete");
         }
 
         function evaluateObjectives(context = {}) {
           if (!stageObjectives.length || battleOver) return;
-          if (currentCampaignStageId === "STG2") {
-            checkStage2EscortClear();
-            return;
-          }
           for (const obj of stageObjectives) {
             if (obj.status !== "ongoing") continue;
             if (obj.type === "ROUTE") {
-              if (currentCampaignStageId !== "STG2" && units.filter((u) => u.faction === "enemy").length === 0) obj.status = "complete";
+              if (units.filter((u) => u.faction === "enemy").length === 0) obj.status = "complete";
             } else if (obj.type === "SURVIVE") {
               if (turnCounter >= (obj.params?.turns || 0)) obj.status = "complete";
             } else if (obj.type === "SEIZE") {
@@ -5357,7 +4412,7 @@
         }
 
         function findFreeSpawnTile(x, y, maxRadius = 6) {
-          if (inBounds(x, y) && !isOccupied(x, y) && terrainAt(x, y).moveCost < 999) return { x, y };
+          if (inBounds(x, y) && !isOccupied(x, y)) return { x, y };
           for (let r = 1; r <= maxRadius; r++) {
             for (let dy = -r; dy <= r; dy++) {
               for (let dx = -r; dx <= r; dx++) {
@@ -5365,7 +4420,7 @@
                 const nx = x + dx;
                 const ny = y + dy;
                 if (!inBounds(nx, ny)) continue;
-                if (!isOccupied(nx, ny) && terrainAt(nx, ny).moveCost < 999) return { x: nx, y: ny };
+                if (!isOccupied(nx, ny)) return { x: nx, y: ny };
               }
             }
           }
@@ -5913,23 +4968,25 @@
             targetingMode = null;
           }
           evaluateObjectives({ type: "unitRemoved", unitId: id });
-          checkStage2KimwareFail();
         }
 
         function checkBattleEnd() {
-          if (checkStage2KimwareFail()) return true;
-          if (currentCampaignStageId === "STG2" && checkStage2EscortClear()) return true;
+          const leader = unitById("리더");
+          if (!leader || leader.hp <= 0) {
+            setBattleResult("DEFEAT");
+            return true;
+          }
           const players = units.filter(u => u.faction === "player");
           if (players.length === 0) {
             setBattleResult("DEFEAT");
             return true;
           }
-          evaluateObjectives({ type: "check" });
-          if (battleOver) return true;
-          if (currentCampaignStageId !== "STG2" && !stageObjectives.length && units.filter(u => u.faction === "enemy").length === 0) {
+          if (currentCampaignStageId === "STG1" && units.filter((u) => u.faction === "enemy").length === 0) {
             setBattleResult("VICTORY");
             return true;
           }
+          evaluateObjectives({ type: "check" });
+          if (battleOver) return true;
           return false;
         }
 
@@ -5942,17 +4999,9 @@
           phaseBanner = { text, life: 999999, max: 999999 };
           addLog(text === "VICTORY" ? "승리!" : "패배...");
           showToast(text === "VICTORY" ? "승리!" : "패배!");
-          if (text === "VICTORY") {
-            onStageClear(currentCampaignStageId);
-            nextStageBtn.textContent = "캠프로 계속";
-            nextStageBtn.style.display = "inline-block";
-            if (victoryCampBtn) victoryCampBtn.style.display = "none";
-          } else {
-            nextStageBtn.style.display = "none";
-            if (victoryCampBtn) victoryCampBtn.style.display = "none";
-          }
+          if (text === "VICTORY") onStageClear(currentCampaignStageId || currentStageId);
+          else nextStageBtn.style.display = "none";
           restartBtn.style.display = "inline-block";
-          updateAutoControls();
         }
 
         function canCounterattack(defender, attacker) {
@@ -6186,36 +5235,105 @@
         }
 
         function clampCamera() {
-          const maxX = Math.max(0, mapWidth() * TILE - INTERNAL_W);
-          const maxY = Math.max(0, mapHeight() * TILE - INTERNAL_H);
+          const maxX = Math.max(0, MAP_W * TILE - INTERNAL_W);
+          const maxY = Math.max(0, MAP_H * TILE - INTERNAL_H);
           camera.xPx = Math.max(0, Math.min(maxX, camera.xPx));
           camera.yPx = Math.max(0, Math.min(maxY, camera.yPx));
         }
 
-        function buildMapRows(seed) {
-          const rows = Array.from({ length: MAP_H }, () => Array.from({ length: MAP_W }, () => "g"));
+        function mapCodeFromPaletteToken(token) {
+          const key = String(token || "").trim().toUpperCase();
+          if (key === "GRASS") return "g";
+          if (key === "FOREST") return "f";
+          if (key === "FORT") return "t";
+          if (key === "ROAD") return "r";
+          if (key === "HIGHLIGHT") return "h";
+          return "g";
+        }
+
+        function parseStageMap(stage) {
+          if (Array.isArray(stage?.mapData) && stage.mapData.length) {
+            return { rows: cloneSimple(stage.mapData), markers: { start: [], enemy: [] } };
+          }
+          if (Array.isArray(stage?.layout) && stage.layout.length) {
+            const paletteMap = stage.palette || {};
+            const rows = [];
+            const markers = { start: [], enemy: [] };
+            const declaredH = Number(stage?.mapSize?.h) || stage.layout.length;
+            const declaredW = Number(stage?.mapSize?.w) || Math.max(...stage.layout.map((r) => String(r || "").length));
+            const h = Math.max(1, declaredH);
+            const w = Math.max(1, declaredW);
+            for (let y = 0; y < h; y++) {
+              const src = String(stage.layout[y] || "").padEnd(w, "G").slice(0, w);
+              const out = [];
+              for (let x = 0; x < w; x++) {
+                const ch = src[x];
+                if (ch === "S") {
+                  markers.start.push({ x, y });
+                  out.push("g");
+                  continue;
+                }
+                if (ch === "E") {
+                  markers.enemy.push({ x, y });
+                  out.push("g");
+                  continue;
+                }
+                out.push(mapCodeFromPaletteToken(paletteMap[ch] || "GRASS"));
+              }
+              rows.push(out.join(""));
+            }
+            return { rows, markers };
+          }
+          const rows = stage?.mapGen ? stage.mapGen() : buildMapRows(SEED);
+          return { rows, markers: { start: [], enemy: [] } };
+        }
+
+        function drawStageMarkers(ctx) {
+          if (!currentStageMarkers) return;
+          ctx.save();
+          for (const t of currentStageMarkers.start || []) {
+            const tx = t.x * TILE;
+            const ty = t.y * TILE;
+            ctx.fillStyle = "rgba(65, 130, 255, 0.35)";
+            ctx.fillRect(tx, ty, TILE, TILE);
+            ctx.strokeStyle = "rgba(170,220,255,0.95)";
+            ctx.strokeRect(tx + 1.5, ty + 1.5, TILE - 3, TILE - 3);
+          }
+          for (const t of currentStageMarkers.enemy || []) {
+            const tx = t.x * TILE;
+            const ty = t.y * TILE;
+            ctx.fillStyle = "rgba(255, 80, 80, 0.30)";
+            ctx.fillRect(tx, ty, TILE, TILE);
+            ctx.strokeStyle = "rgba(255,180,180,0.95)";
+            ctx.strokeRect(tx + 1.5, ty + 1.5, TILE - 3, TILE - 3);
+          }
+          ctx.restore();
+        }
+
+        function buildMapRows(seed, width = 30, height = 20) {
+          const rows = Array.from({ length: height }, () => Array.from({ length: width }, () => "g"));
           const localRng = mulberry32(seed ^ 0xa13f5e9b);
 
-          paintForestBlob(rows, 7, 6, 5, 4, localRng);
-          paintForestBlob(rows, 23, 13, 5, 4, localRng);
+          paintForestBlob(rows, 7, 6, 5, 4, localRng, width, height);
+          paintForestBlob(rows, 23, 13, 5, 4, localRng, width, height);
 
           const roadYBase = 9;
-          for (let x = 1; x < MAP_W - 1; x++) {
+          for (let x = 1; x < width - 1; x++) {
             const y = roadYBase + ((x % 7 === 0) ? 1 : 0);
-            rows[y][x] = "r";
+            if (rows[y] && rows[y][x] != null) rows[y][x] = "r";
           }
-          rows[8][10] = "r";
-          rows[10][18] = "r";
+          if (rows[8] && rows[8][10] != null) rows[8][10] = "r";
+          if (rows[10] && rows[10][18] != null) rows[10][18] = "r";
 
-          rows[7][11] = "t";
-          rows[11][20] = "t";
+          if (rows[7] && rows[7][11] != null) rows[7][11] = "t";
+          if (rows[11] && rows[11][20] != null) rows[11][20] = "t";
 
           return rows.map((r) => r.join(""));
         }
 
-        function paintForestBlob(rows, cx, cy, rx, ry, random) {
-          for (let y = Math.max(0, cy - ry); y <= Math.min(MAP_H - 1, cy + ry); y++) {
-            for (let x = Math.max(0, cx - rx); x <= Math.min(MAP_W - 1, cx + rx); x++) {
+        function paintForestBlob(rows, cx, cy, rx, ry, random, width, height) {
+          for (let y = Math.max(0, cy - ry); y <= Math.min(height - 1, cy + ry); y++) {
+            for (let x = Math.max(0, cx - rx); x <= Math.min(width - 1, cx + rx); x++) {
               const nx = (x - cx) / rx;
               const ny = (y - cy) / ry;
               const noise = (random() - 0.5) * 0.45;
