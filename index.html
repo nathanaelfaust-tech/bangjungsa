@@ -1420,6 +1420,7 @@
         const tutorialDialogSpeakerEl = tutorialDialogEl.querySelector("#tutorialDialogSpeaker");
         const tutorialDialogLineEl = tutorialDialogEl.querySelector("#tutorialDialogLine");
         const tutorialDialogNextBtn = tutorialDialogEl.querySelector("#tutorialDialogNextBtn");
+        window.TUTORIAL_DISABLED = true;
 
         const catLines = ["나 버려요?", "나한테 꼬옥 붙어잇오…", "코코넨네"];
         let catLineIndex = 0;
@@ -1750,16 +1751,53 @@
           return currentCampaignStageId === "STG1" && currentStageId === "STG1";
         }
 
+        function isTutorialDisabledRuntime() {
+          return window.TUTORIAL_DISABLED === true;
+        }
+
+        function closeDialogueBox() {
+          tutorialDialogQueue = [];
+          tutorialDialogOpen = false;
+          tutorialDialogEl.classList.remove("show");
+        }
+
+        function bypassTutorialRuntime() {
+          if (!isTutorialDisabledRuntime()) return;
+          stg1TutorialQueue = [];
+          stg1TutorialFlags = {
+            enter: true, moveIntent: true, uy: true, moveCommit: true, attackSuccess: true, idle: true, firstKill: true, clear: true, camp: true
+          };
+          stg1TutorialState.active = false;
+          stg1TutorialState.gatingMode = "OFF";
+          stg1TutorialState.step = STG1_TUTOR_STEP.FREE;
+          if (stg1IdleTimer) {
+            clearTimeout(stg1IdleTimer);
+            stg1IdleTimer = null;
+          }
+          closeDialogueBox();
+          tutorialDialogEl.style.pointerEvents = "none";
+          tutorialDialogEl.style.display = "none";
+          if (typeof window.gamePaused !== "undefined") window.gamePaused = false;
+          if (typeof window.isPaused !== "undefined") window.isPaused = false;
+          if (typeof window.stopAllInput !== "undefined") window.stopAllInput = false;
+          if (DEV_BUILD && !window.__TUTORIAL_DISABLED_LOGGED__) {
+            window.__TUTORIAL_DISABLED_LOGGED__ = true;
+            console.log("[TUTORIAL_DISABLED] all gating/dialogue/overlays bypassed");
+          }
+        }
+
         function stg1LeaderUnit() {
           const leader = getLeaderUnit();
           return leader && leader.id ? leader : null;
         }
 
         function isTutorialHardMode() {
+          if (isTutorialDisabledRuntime()) return false;
           return isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.gatingMode === "HARD";
         }
 
         function isTutorialOffMode() {
+          if (isTutorialDisabledRuntime()) return true;
           return isStg1TutorialStage() && stg1TutorialState.active && stg1TutorialState.gatingMode === "OFF";
         }
 
@@ -1768,6 +1806,7 @@
         }
 
         function pickEnemyTargetForTutorial() {
+          if (isTutorialDisabledRuntime()) return null;
           const leader = stg1LeaderUnit();
           if (!leader) return null;
           const enemies = units.filter((u) => u.faction === "enemy" && u.hp > 0);
@@ -1777,6 +1816,7 @@
         }
 
         function pickRecommendedMoveTileForTutorial(enemyTarget) {
+          if (isTutorialDisabledRuntime()) return null;
           const leader = stg1LeaderUnit();
           if (!leader) return null;
           const adjacent = neighbors(leader.x, leader.y).filter((p) => canMoveToTile(leader, p.x, p.y));
@@ -1787,6 +1827,7 @@
         }
 
         function refreshStg1TutorialTargets(force = false) {
+          if (isTutorialDisabledRuntime()) return;
           if (!isStg1TutorialStage() || !stg1TutorialState.active || isTutorialOffMode()) return;
           const now = Date.now();
           if (!force && now - (stg1TutorialState.lastTargetRefreshAt || 0) < 450) return;
@@ -1797,6 +1838,7 @@
         }
 
         function tutorialEnemyTargetUnit() {
+          if (isTutorialDisabledRuntime()) return null;
           return stg1TutorialState.enemyTargetId ? unitById(stg1TutorialState.enemyTargetId) : null;
         }
 
@@ -1809,6 +1851,7 @@
         }
 
         function drawTutorialHintOverlays(ctx) {
+          if (isTutorialDisabledRuntime()) return;
           if (!isStg1TutorialStage() || !stg1TutorialState.active || isTutorialOffMode()) return;
           ctx.save();
           if (stg1TutorialState.step === STG1_TUTOR_STEP.MOVE_HINT && stg1TutorialState.recommendedMoveTile) {
@@ -1857,6 +1900,7 @@
         }
 
         function setStg1TutorialStep(step) {
+          if (isTutorialDisabledRuntime()) return;
           if (!isStg1TutorialStage()) return;
           stg1TutorialState.step = step;
           if (step === STG1_TUTOR_STEP.MOVE_HINT) stg1TutorialState.moveHintBlinkUntil = performance.now() + 2000;
@@ -1872,6 +1916,7 @@
         }
 
         function nudgeTutorial(message) {
+          if (isTutorialDisabledRuntime()) return;
           const now = Date.now();
           if (now - stg1TutorialState.nudgeAt < 700) return;
           stg1TutorialState.nudgeAt = now;
@@ -1880,6 +1925,7 @@
         }
 
         function canUseAttackNow(mode = "attack") {
+          if (isTutorialDisabledRuntime()) return true;
           if (!isTutorialHardMode()) return true;
           if (stg1TutorialState.step === STG1_TUTOR_STEP.ATTACK_HINT) return mode === "attack" || mode === "strike";
           return stg1TutorialState.step >= STG1_TUTOR_STEP.FREE;
@@ -1898,13 +1944,11 @@
             camp: false
           };
           stg1TutorialQueue = [];
-          tutorialDialogQueue = [];
-          tutorialDialogOpen = false;
-          tutorialDialogEl.classList.remove("show");
+          closeDialogueBox();
           stg1TutorialState = {
-            active: isStg1TutorialStage(),
-            gatingMode: isStg1TutorialStage() ? "SOFT" : "OFF",
-            step: isStg1TutorialStage() ? STG1_TUTOR_STEP.MOVE_HINT : STG1_TUTOR_STEP.INIT,
+            active: isTutorialDisabledRuntime() ? false : isStg1TutorialStage(),
+            gatingMode: isTutorialDisabledRuntime() ? "OFF" : (isStg1TutorialStage() ? "SOFT" : "OFF"),
+            step: isTutorialDisabledRuntime() ? STG1_TUTOR_STEP.FREE : (isStg1TutorialStage() ? STG1_TUTOR_STEP.MOVE_HINT : STG1_TUTOR_STEP.INIT),
             nudgeAt: 0,
             recommendedMoveTile: null,
             enemyTargetId: null,
@@ -1914,6 +1958,10 @@
             lastHintNudgeAt: 0,
             lastTargetRefreshAt: 0
           };
+          if (isTutorialDisabledRuntime()) {
+            bypassTutorialRuntime();
+            return;
+          }
           if (isStg1TutorialStage()) {
             queueStg1TutorialLine("enter", "TUT_STG1_01");
             queueStg1TutorialLine("moveIntent", "TUT_STG1_02");
@@ -1927,6 +1975,7 @@
         }
 
         function flushTutorialDialogQueue() {
+          if (isTutorialDisabledRuntime()) return;
           if (tutorialDialogOpen || !tutorialDialogQueue.length) return;
           const next = tutorialDialogQueue.shift();
           if (!next) return;
@@ -1937,17 +1986,26 @@
         }
 
         function showDialogueBox(speaker, text) {
+          if (isTutorialDisabledRuntime()) {
+            closeDialogueBox();
+            return;
+          }
           tutorialDialogQueue.push({ speaker: speaker || "먼지", text: String(text || "") });
           flushTutorialDialogQueue();
         }
 
         function onTutorialDialogNext() {
+          if (isTutorialDisabledRuntime()) {
+            closeDialogueBox();
+            return;
+          }
           tutorialDialogOpen = false;
           tutorialDialogEl.classList.remove("show");
           flushTutorialDialogQueue();
         }
 
         function queueStg1TutorialLine(flagKey, textKey) {
+          if (isTutorialDisabledRuntime()) return;
           if (!isStg1TutorialStage()) return;
           if (stg1TutorialFlags[flagKey]) return;
           stg1TutorialFlags[flagKey] = true;
@@ -1959,6 +2017,7 @@
         }
 
         function queueStg1IdleTutorial() {
+          if (isTutorialDisabledRuntime()) return;
           if (isTutorialHardMode()) return;
           if (!isStg1TutorialStage() || stg1TutorialFlags.idle) return;
           if (stg1IdleTimer) clearTimeout(stg1IdleTimer);
@@ -2219,6 +2278,7 @@
         }
 
         function update(dt) {
+          bypassTutorialRuntime();
           updateCamera(dt);
           refreshRangePreview();
           refreshStg1TutorialTargets(false);
