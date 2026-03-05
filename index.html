@@ -460,6 +460,45 @@
         display: block;
       }
 
+      .tutorial-dialog {
+        position: fixed;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        width: min(680px, calc(100vw - 20px));
+        display: none;
+        z-index: 35;
+        border: 1px solid #496586;
+        border-radius: 10px;
+        background: rgba(12, 18, 26, 0.96);
+        color: #e9f3ff;
+        padding: 10px 12px;
+        pointer-events: auto;
+      }
+
+      .tutorial-dialog.show {
+        display: block;
+      }
+
+      .tutorial-dialog-speaker {
+        color: #b9d9ff;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+
+      .tutorial-dialog-line {
+        min-height: 2.8em;
+        line-height: 1.4;
+        font-size: 14px;
+        white-space: pre-line;
+      }
+
+      .tutorial-dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 8px;
+      }
+
       .phase-pill {
         display: inline-block;
         min-width: 70px;
@@ -1064,8 +1103,7 @@
             spawns: [
               { id: "STG1_ENEMY_SCARECROW_A", name: "허수아비 A", faction: "enemy", x: 5, y: 2, spriteType: "enemy", paletteKey: "enemy", classId: "CL_AXE_BRUISER", weaponType: "axe", perks: [], aiHint: "holdLine", maxHp: 12, hp: 12, atk: 5, def: 1, hit: 70, crit: 0 },
               { id: "STG1_ENEMY_SCARECROW_B", name: "허수아비 B", faction: "enemy", x: 5, y: 3, spriteType: "enemy", paletteKey: "enemy", classId: "CL_AXE_BRUISER", weaponType: "axe", perks: [], aiHint: "holdLine", maxHp: 12, hp: 12, atk: 5, def: 1, hit: 70, crit: 0 },
-              { id: "STG1_UY_BLOCK_1", name: "우냥산", faction: "neutral", x: 4, y: 2, spriteType: "cat", paletteKey: "neutral", classId: "CL_NONE_JESTER", weaponType: "none", perks: [], aiHint: "holdLine", maxHp: 99, hp: 99 },
-              { id: "STG1_UY_BLOCK_2", name: "우냥산", faction: "neutral", x: 4, y: 3, spriteType: "cat", paletteKey: "neutral", classId: "CL_NONE_JESTER", weaponType: "none", perks: [], aiHint: "holdLine", maxHp: 99, hp: 99 }
+              { id: "STG1_UY_BLOCK", name: "우냥산", faction: "neutral", x: 4, y: 3, spriteType: "cat", paletteKey: "neutral", classId: "CL_NONE_JESTER", weaponType: "none", perks: [], aiHint: "holdLine", maxHp: 99, hp: 99 }
             ],
             objectives: [],
             triggers: [],
@@ -1358,6 +1396,15 @@
         const stageToastEl = document.createElement("div");
         stageToastEl.className = "stage-toast";
         document.body.appendChild(stageToastEl);
+        const tutorialDialogEl = document.createElement("div");
+        tutorialDialogEl.className = "tutorial-dialog";
+        tutorialDialogEl.innerHTML = `<div id="tutorialDialogSpeaker" class="tutorial-dialog-speaker"></div>
+          <div id="tutorialDialogLine" class="tutorial-dialog-line"></div>
+          <div class="tutorial-dialog-actions"><button id="tutorialDialogNextBtn" class="btnSmall" type="button">다음</button></div>`;
+        document.body.appendChild(tutorialDialogEl);
+        const tutorialDialogSpeakerEl = tutorialDialogEl.querySelector("#tutorialDialogSpeaker");
+        const tutorialDialogLineEl = tutorialDialogEl.querySelector("#tutorialDialogLine");
+        const tutorialDialogNextBtn = tutorialDialogEl.querySelector("#tutorialDialogNextBtn");
 
         const catLines = ["나 버려요?", "나한테 꼬옥 붙어잇오…", "코코넨네"];
         let catLineIndex = 0;
@@ -1418,8 +1465,9 @@
         let currentStageMarkers = { start: [], enemy: [] };
         let stg1MarkerBlinkUntil = 0;
         let stg1TutorialQueue = [];
-        let stg1TutorialTimer = null;
         let stg1IdleTimer = null;
+        let tutorialDialogQueue = [];
+        let tutorialDialogOpen = false;
         let stg1TutorialFlags = {
           enter: false,
           moveIntent: false,
@@ -1686,33 +1734,45 @@
             camp: false
           };
           stg1TutorialQueue = [];
-          if (stg1TutorialTimer) {
-            clearTimeout(stg1TutorialTimer);
-            stg1TutorialTimer = null;
-          }
+          tutorialDialogQueue = [];
+          tutorialDialogOpen = false;
+          tutorialDialogEl.classList.remove("show");
           if (stg1IdleTimer) {
             clearTimeout(stg1IdleTimer);
             stg1IdleTimer = null;
           }
         }
 
-        function flushStg1TutorialQueue() {
-          if (!isStg1TutorialStage() || stg1TutorialTimer || !stg1TutorialQueue.length) return;
-          const text = stg1TutorialQueue.shift();
-          showToast(text, 2100);
-          addLog(`먼지: ${text}`);
-          stg1TutorialTimer = setTimeout(() => {
-            stg1TutorialTimer = null;
-            flushStg1TutorialQueue();
-          }, 2150);
+        function flushTutorialDialogQueue() {
+          if (tutorialDialogOpen || !tutorialDialogQueue.length) return;
+          const next = tutorialDialogQueue.shift();
+          if (!next) return;
+          tutorialDialogOpen = true;
+          tutorialDialogSpeakerEl.textContent = next.speaker || "먼지";
+          tutorialDialogLineEl.textContent = next.text || "";
+          tutorialDialogEl.classList.add("show");
+        }
+
+        function showDialogueBox(speaker, text) {
+          tutorialDialogQueue.push({ speaker: speaker || "먼지", text: String(text || "") });
+          flushTutorialDialogQueue();
+        }
+
+        function onTutorialDialogNext() {
+          tutorialDialogOpen = false;
+          tutorialDialogEl.classList.remove("show");
+          flushTutorialDialogQueue();
         }
 
         function queueStg1TutorialLine(flagKey, textKey) {
           if (!isStg1TutorialStage()) return;
           if (stg1TutorialFlags[flagKey]) return;
           stg1TutorialFlags[flagKey] = true;
-          stg1TutorialQueue.push(STG1_TUTORIAL_LINES[textKey]);
-          flushStg1TutorialQueue();
+          const text = STG1_TUTORIAL_LINES[textKey];
+          if (!text) return;
+          stg1TutorialQueue.push(text);
+          showDialogueBox("먼지", text);
+          addLog(`먼지: ${text}`);
         }
 
         function queueStg1IdleTutorial() {
@@ -1840,6 +1900,7 @@
         cmdTalkBtn.addEventListener("click", onCommandTalk);
         cmdWaitBtn.addEventListener("click", onCommandWait);
         dialogNextBtn.addEventListener("click", onDialogNext);
+        tutorialDialogNextBtn.addEventListener("click", onTutorialDialogNext);
         stageSelect.addEventListener("change", () => {
           const option = stageSelect.selectedOptions[0];
           const campaignStageId = option?.dataset?.campaignId || stageSelect.value;
@@ -2682,6 +2743,11 @@
               invalidFeedback();
               return;
             }
+            if (isStg1TutorialStage() && !stg1TutorialFlags.enter) {
+              queueStg1TutorialLine("enter", "TUT_STG1_01");
+              queueStg1TutorialLine("moveIntent", "TUT_STG1_02");
+              queueStg1TutorialLine("uy", "TUT_STG1_UY");
+            }
             selectedUnitId = u.id;
             moveRange = computeMoveRange(u);
             u.actionState = u.actionState || "idle";
@@ -2703,11 +2769,6 @@
           if (!path) {
             invalidFeedback();
             return;
-          }
-
-          if (isStg1TutorialStage() && path.length > 1 && !stg1TutorialFlags.moveIntent) {
-            queueStg1TutorialLine("moveIntent", "TUT_STG1_02");
-            queueStg1TutorialLine("uy", "TUT_STG1_UY");
           }
 
           executePlayerMove(su, path);
@@ -4378,6 +4439,27 @@
           });
         }
 
+        function enforceStg1SingleUyangsan() {
+          if (currentCampaignStageId !== "STG1" || currentStageId !== "STG1") return;
+          units = units.filter((u) => !(u.faction === "neutral" && (u.id === "STG1_UY_BLOCK" || /^STG1_UY_BLOCK_/.test(u.id) || u.name === "우냥산")));
+          const uySpawn = {
+            id: "STG1_UY_BLOCK",
+            name: "우냥산",
+            faction: "neutral",
+            x: 4,
+            y: 3,
+            spriteType: "cat",
+            paletteKey: "neutral",
+            classId: "CL_NONE_JESTER",
+            weaponType: "none",
+            perks: [],
+            aiHint: "holdLine",
+            maxHp: 99,
+            hp: 99
+          };
+          spawnStageUnit(uySpawn);
+        }
+
         function loadStage(stageId) {
           const stage = STAGES[stageId] || STAGES[CURRENT_STAGE];
           currentStageId = stageId in STAGES ? stageId : CURRENT_STAGE;
@@ -4395,6 +4477,7 @@
           currentStageTileTags = cloneSimple(stage.tileTags || {});
           spawnEnemiesAndNeutralsFromStage(stage);
           spawnPlayersFromCampaignRoster(stage);
+          enforceStg1SingleUyangsan();
           applyStageRecruitmentScaffoldOnLoad();
           stageObjectives = (stage.objectives || []).map((obj) => ({ ...cloneSimple(obj), status: "ongoing" }));
           stageTriggers = (stage.triggers || []).map((tr) => cloneSimple(tr));
@@ -4456,7 +4539,6 @@
           if (isStg1TutorialStage()) {
             resetStg1TutorialState();
             stg1MarkerBlinkUntil = performance.now() + 2000;
-            queueStg1TutorialLine("enter", "TUT_STG1_01");
           } else {
             resetStg1TutorialState();
             stg1MarkerBlinkUntil = 0;
