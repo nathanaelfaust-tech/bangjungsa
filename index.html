@@ -4565,8 +4565,7 @@
             }
             if (enemy.aiMode === "HUNT" || enemy.aiHint === "HUNT") {
               const t = blockedTarget || nearestFactionUnit(enemy, "player");
-              const d = t ? Math.abs(enemy.x - t.x) + Math.abs(enemy.y - t.y) : -1;
-              console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=${t?.id || "none"} dist=${d} moved=${verifyMoved} attacked=${verifyAttacked}`);
+              console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=${t?.id || "none"} path=NONE usedBFS=true fallback=F2 moved=${verifyMoved}`);
             }
             return;
           }
@@ -4582,34 +4581,49 @@
               dist = huntTarget ? Math.abs(enemy.x - huntTarget.x) + Math.abs(enemy.y - huntTarget.y) : Infinity;
             }
             if (!huntTarget) {
-              console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=none dist=-1 moved=false attacked=false`);
+              console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=none path=NONE usedBFS=true fallback=F2 moved=false`);
               return;
             }
 
+            let bfsPath = null;
+            let fallbackCode = "NONE";
             if (isTargetValidForMode(enemy, huntTarget, "attack")) {
               await executeCombat(enemy, huntTarget, "attack");
               verifyAttacked = true;
             } else {
-              const huntRange = computeMoveRange(enemy);
-              let best = { x: enemy.x, y: enemy.y };
-              let bestDist = Infinity;
-              let bestCost = huntRange.dist.get(key(enemy.x, enemy.y)) || 0;
-              for (const k of huntRange.reachable.keys()) {
-                const [x, y] = parseKey(k);
-                const d = Math.abs(huntTarget.x - x) + Math.abs(huntTarget.y - y);
-                const cost = huntRange.dist.get(k) || 0;
-                const better = d < bestDist || (d === bestDist && cost > bestCost);
-                if (better) {
-                  bestDist = d;
-                  best = { x, y };
-                  bestCost = cost;
+              bfsPath = findHuntPathBFS(enemy, huntTarget);
+              if (bfsPath && bfsPath.length > 1) {
+                const capped = bfsPath.slice(0, Math.min(bfsPath.length, (enemy.mov || 0) + 1));
+                if (capped.length > 1) {
+                  await animateUnitAlongPath(enemy, capped);
+                  emitUnitEnterTile(enemy);
+                  verifyMoved = true;
                 }
-              }
-              const path = reconstructPath(huntRange.cameFrom, { x: enemy.x, y: enemy.y }, best, huntRange.pathEndStateByPos) || [{ x: enemy.x, y: enemy.y }];
-              if (path.length > 1) {
-                await animateUnitAlongPath(enemy, path);
-                emitUnitEnterTile(enemy);
-                verifyMoved = true;
+              } else {
+                fallbackCode = "F1";
+                const huntRange = computeMoveRange(enemy);
+                let best = { x: enemy.x, y: enemy.y };
+                let bestDist = Infinity;
+                let bestCost = huntRange.dist.get(key(enemy.x, enemy.y)) || 0;
+                for (const k of huntRange.reachable.keys()) {
+                  const [x, y] = parseKey(k);
+                  const d = Math.abs(huntTarget.x - x) + Math.abs(huntTarget.y - y);
+                  const cost = huntRange.dist.get(k) || 0;
+                  const better = d < bestDist || (d === bestDist && cost > bestCost);
+                  if (better) {
+                    bestDist = d;
+                    best = { x, y };
+                    bestCost = cost;
+                  }
+                }
+                const path = reconstructPath(huntRange.cameFrom, { x: enemy.x, y: enemy.y }, best, huntRange.pathEndStateByPos) || [{ x: enemy.x, y: enemy.y }];
+                if (path.length > 1) {
+                  await animateUnitAlongPath(enemy, path);
+                  emitUnitEnterTile(enemy);
+                  verifyMoved = true;
+                } else {
+                  fallbackCode = "F2";
+                }
               }
               const liveTarget = unitById(huntTarget.id);
               if (liveTarget && liveTarget.hp > 0 && isTargetValidForMode(enemy, liveTarget, "attack")) {
@@ -4618,8 +4632,7 @@
               }
             }
             const live = unitById(enemy.huntTargetId) || nearestFactionUnit(enemy, "player");
-            const finalDist = live ? Math.abs(enemy.x - live.x) + Math.abs(enemy.y - live.y) : -1;
-            console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=${live?.id || "none"} dist=${finalDist} moved=${verifyMoved} attacked=${verifyAttacked}`);
+            console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=${live?.id || "none"} path=${bfsPath ? bfsPath.length : "NONE"} usedBFS=true fallback=${fallbackCode} moved=${verifyMoved}`);
             return;
           }
 
@@ -5181,6 +5194,65 @@
             if (d < bestDist) {
               bestDist = d;
               best = u;
+            }
+          }
+          return best;
+        }
+
+        function findPathBFS(start, goal, mover, { respectWalls = true, allowPassThroughAllies = true, blockEnemies = true, respectZoc = true } = {}) {
+          if (!start || !goal || !mover) return null;
+          if (start.x === goal.x && start.y === goal.y) return [{ x: start.x, y: start.y }];
+          const q = [{ x: start.x, y: start.y }];
+          const visited = new Set([key(start.x, start.y)]);
+          const came = new Map();
+
+          while (q.length) {
+            const cur = q.shift();
+            for (const n of neighbors(cur.x, cur.y)) {
+              if (!inBounds(n.x, n.y)) continue;
+              const nk = key(n.x, n.y);
+              if (visited.has(nk)) continue;
+              if (respectWalls && terrainAt(n.x, n.y).moveCost >= 99) continue;
+              const occ = getUnitAt(n.x, n.y);
+              if (occ && occ.id !== mover.id) {
+                const sameFaction = occ.faction === mover.faction;
+                if (!(sameFaction && allowPassThroughAllies)) {
+                  if (blockEnemies) continue;
+                }
+              }
+              visited.add(nk);
+              came.set(nk, key(cur.x, cur.y));
+              if (n.x === goal.x && n.y === goal.y) {
+                const rev = [nk];
+                let c = nk;
+                while (c !== key(start.x, start.y)) {
+                  c = came.get(c);
+                  if (!c) break;
+                  rev.push(c);
+                }
+                rev.reverse();
+                return rev.map((k0) => parseKeyToObj(k0));
+              }
+              q.push({ x: n.x, y: n.y });
+            }
+          }
+          return null;
+        }
+
+        function findHuntPathBFS(enemy, huntTarget) {
+          if (!enemy || !huntTarget) return null;
+          let best = null;
+          for (let y = 0; y < MAP_H; y++) {
+            for (let x = 0; x < MAP_W; x++) {
+              const occ = getUnitAt(x, y);
+              if (occ && occ.id !== enemy.id && occ.faction !== enemy.faction) continue;
+              const d = Math.abs(x - huntTarget.x) + Math.abs(y - huntTarget.y);
+              const minR = enemy.minRange ?? 1;
+              const maxR = enemy.maxRange ?? (enemy.atkRange || 1);
+              if (d < minR || d > maxR) continue;
+              const p = findPathBFS({ x: enemy.x, y: enemy.y }, { x, y }, enemy, { respectWalls: true, allowPassThroughAllies: true, blockEnemies: true, respectZoc: true });
+              if (!p) continue;
+              if (!best || p.length < best.length) best = p;
             }
           }
           return best;
@@ -7181,7 +7253,7 @@
           return bonus;
         }
 
-        async function resolveAttack(attacker, target, { actionMode = "attack", contextTag = "normal", logPrefix = "", damageMult = 1, onHitEffect = null, forceHit = false, minDamageOnHit = 0 } = {}) {
+        async function resolveAttack(attacker, target, { actionMode = "attack", contextTag = "normal", logPrefix = "", damageMult = 1, onHitEffect = null, forceHit = false, minDamageOnHit = 0, fixedDamage = null } = {}) {
           if (!attacker || !target || battleOver) return { resolved: false };
           const dist = Math.abs(attacker.x - target.x) + Math.abs(attacker.y - target.y);
           const payload = { unit: attacker, attacker, target, dist, mods: { hit: 0, atk: 0, crit: 0 }, heal: 0, purify: false };
@@ -7224,9 +7296,11 @@
           }
 
           const critChance = statWithEffects(attacker, "crit") + payload.mods.crit + (attacker.nextAttackBonus.crit || 0);
-          const crit = Math.floor(rng() * 100) < critChance;
-          let dmg = Math.max(0, (statWithEffects(attacker, "atk") + payload.mods.atk + tri.atk + (attacker.nextAttackBonus.atk || 0)) -
-            statWithEffects(target, "def")) * Math.max(0, Number(damageMult) || 0);
+          const crit = fixedDamage == null && (Math.floor(rng() * 100) < critChance);
+          let dmg = fixedDamage == null
+            ? (Math.max(0, (statWithEffects(attacker, "atk") + payload.mods.atk + tri.atk + (attacker.nextAttackBonus.atk || 0)) -
+              statWithEffects(target, "def")) * Math.max(0, Number(damageMult) || 0))
+            : Math.max(0, Number(fixedDamage) || 0);
           if (target.heroState?.instinctGuardActive) {
             dmg *= HERO_PASSIVE_DR_MULT;
             target.heroState.instinctGuardActive = false;
@@ -7240,7 +7314,7 @@
           }
           if (crit) dmg *= 2;
           dmg = Math.max(0, Math.round(dmg));
-          if (dmg > 0 && minDamageOnHit > 0) dmg = Math.max(minDamageOnHit, dmg);
+          if (minDamageOnHit > 0) dmg = Math.max(minDamageOnHit, dmg);
           target.hp = Math.max(0, target.hp - dmg);
           if (isStg2Stage() && dmg > 0 && attacker.faction === "enemy" && target.faction === "player") {
             triggerAlarm("COMBAT", attacker.id || attacker.name || null);
@@ -7277,7 +7351,7 @@
           return { resolved: true, hit: true, crit, dmg, triText, targetDefeated };
         }
 
-        async function executeCombat(attacker, target, actionMode = "attack") {
+        async function executeCombat(attacker, target, actionMode = "attack", opts = {}) {
           if (!attacker || !target || battleOver) return;
           if (isStg2Stage()) {
             const hostile = (attacker.faction === "player" && target.faction === "enemy") ||
@@ -7297,6 +7371,16 @@
           if (!isTargetValidForMode(attacker, target, actionMode)) {
             addLog("스킬 대상 조건 불충족");
             return;
+          }
+          if (!opts?.isSupportShot && attacker.faction === "player" && target.faction === "enemy") {
+            await triggerJung2SupportShotOnAttempt(attacker, target);
+            const liveAfterSupport = unitById(target.id);
+            if (!liveAfterSupport || liveAfterSupport.hp <= 0) {
+              checkBattleEnd();
+              if (!battleOver) inputLocked = false;
+              return;
+            }
+            target = liveAfterSupport;
           }
           inputLocked = true;
           if (actionMode === "hero_dash") {
@@ -7342,10 +7426,6 @@
             return;
           }
 
-          if (attacker.faction === "player" && target.faction === "enemy" && first.hit && (first.dmg || 0) > 0) {
-            await triggerJung2SupportShot(attacker, target);
-          }
-
           const liveAttacker = unitById(attacker.id);
           const liveDefender = unitById(target.id);
           if (canCounterattack(liveDefender, liveAttacker)) {
@@ -7360,28 +7440,26 @@
           if (!battleOver) inputLocked = false;
         }
 
-        async function triggerJung2SupportShot(attacker, target) {
+        async function triggerJung2SupportShotOnAttempt(attacker, target) {
           if (!attacker || !target || battleOver) return;
-          if (attacker.faction !== "player" || target.faction !== "enemy") return;
-          const jung2 = units.find((u) => isJung2Unit(u) && u.hp > 0 && u.passivePerk?.id === "PK_JEONG2_SUPPORT_SHOT");
-          if (!jung2) return;
-          if (jung2.id === attacker.id) return;
           const liveTarget = unitById(target.id);
-          if (!liveTarget || liveTarget.hp <= 0) return;
-          const inRangeBasic = isTargetValidForMode(jung2, liveTarget, "attack");
-          const tri = triangleResult(jung2, liveTarget);
-          const base = (statWithEffects(jung2, "atk") + tri.atk + (jung2.nextAttackBonus?.atk || 0)) - statWithEffects(liveTarget, "def");
-          const raw = Math.round(Math.max(0, base) * 0.25);
-          const final = raw > 0 ? Math.max(2, raw) : 0;
-          console.log(`[VERIFY_SUPPORT] src=jeong2 target=${liveTarget.id} inRangeBasic=${inRangeBasic} final=${final}`);
-          if (!inRangeBasic || final <= 0) return;
+          const selfBlocked = isJung2Unit(attacker);
+          const jung2 = units.find((u) => isJung2Unit(u) && u.hp > 0 && u.faction === "player" && u.passivePerk?.id === "PK_JEONG2_SUPPORT_SHOT");
+          const inRangeBasic = !!(jung2 && liveTarget && isTargetValidForMode(jung2, liveTarget, "attack"));
+          const supportFinal = 2;
+          console.log(`[VERIFY_SUPPORT] trig=attempt attacker=${attacker.id} selfBlocked=${selfBlocked} target=${liveTarget?.id || target.id} inRangeBasic=${inRangeBasic} supportFinal=${supportFinal}`);
+          if (attacker.faction !== "player" || target.faction !== "enemy") return;
+          if (selfBlocked) return;
+          if (!jung2 || !liveTarget || liveTarget.hp <= 0) return;
+          if (!inRangeBasic) return;
           spawnFloatingText(liveTarget.x, liveTarget.y, "지원사격!", "#9ed1ff");
           await resolveAttack(jung2, liveTarget, {
             actionMode: "attack",
             contextTag: "support_shot",
             logPrefix: "지원사격! ",
-            damageMult: 0.25,
-            minDamageOnHit: 2
+            forceHit: true,
+            fixedDamage: supportFinal,
+            minDamageOnHit: supportFinal
           });
         }
 
