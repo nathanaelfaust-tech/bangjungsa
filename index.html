@@ -1798,6 +1798,10 @@
           SK_STRIKE_BASIC: { uiName: "공격" },
           SK_STRIKE: { uiName: "공격" },
           SK_ATTACK: { uiName: "공격" },
+          SK_NEWBIE_SPIRIT: { uiName: "스킬", desc: "3턴 동안 공격/방어 상승", type: "SELF_BUFF", cooldown: 2 },
+          SK_JEONG2_JABDORI: { uiName: "스킬", desc: "사거리 3~5 필중 + 1턴 이동불가", type: "SPECIAL_ATTACK", cooldown: 2 },
+          SK_ABEL_REACT: { uiName: "스킬", desc: "아군 즉시 재행동", type: "SUPPORT", cooldown: 2 },
+          SK_KIMWEAR_FLU: { uiName: "스킬", desc: "다음 적턴 회피 대폭 상승", type: "SELF_BUFF", cooldown: 2 },
           SK_SNIPER_LONG: {
             uiName: "저격",
             desc: "장거리 단일 저격",
@@ -3597,9 +3601,15 @@
               invalidFeedback();
               return;
             }
-            executeCombat(attacker, u, mode).then(() => {
-              finalizePlayerAction(attacker);
-            });
+            if (mode === "abel_react" || mode === "jeong2_jabdori") {
+              executeActiveSkill(attacker, u).then((ok) => {
+                if (ok) finalizePlayerAction(attacker);
+              });
+            } else {
+              executeCombat(attacker, u, mode).then(() => {
+                finalizePlayerAction(attacker);
+              });
+            }
             return;
           }
 
@@ -3631,7 +3641,7 @@
               }
             }
             selectedUnitId = u.id;
-            moveRange = computeMoveRange(u);
+            moveRange = computeMoveRange(u, moveCapForSelection(u));
             u.actionState = u.actionState || "idle";
             refreshRangePreview(true);
             triggerPerkEvent("select", { unit: u });
@@ -3894,26 +3904,20 @@
           const sid = getUnitActiveSkillId(unit);
           cmdAttackBtn.style.display = "inline-block";
           cmdAttackBtn.textContent = "공격";
-          cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, "attack"), "attack").length === 0;
+          const basicMode = basicCommandMode(unit);
+          cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, basicMode), basicMode).length === 0;
           const hasSkillBtn = hasSeparateActiveSkill(unit);
           cmdSkillBtn.style.display = hasSkillBtn ? "inline-block" : "none";
           cmdSkillBtn.disabled = false;
           if (hasSkillBtn) {
-            let label = getActiveSkillUiName(unit) || "스킬";
-            if (sid === "SK_REPOSITION_2") {
-              const cd = unit.skillCooldowns?.[sid] || 0;
-              if (cd > 0) label = `${label} CD:${cd}`;
-              const hasTarget = units.some((t) => t.faction === "player" && t.id !== unit.id && Math.abs(t.x - unit.x) + Math.abs(t.y - unit.y) <= 2);
-              cmdSkillBtn.disabled = cd > 0 || !hasTarget;
-            } else if (sid === "SK_SNIPER_LONG") {
-              cmdSkillBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, "sniper_long"), "sniper_long").length === 0;
-            } else {
-              const skillMode = unit.activeSkill?.type === "STRIKE" ? "strike" : "attack";
-              cmdSkillBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, skillMode), skillMode).length === 0;
-            }
-            cmdSkillBtn.textContent = label;
+            const cd = unit.skillCooldowns?.[sid] || 0;
+            cmdSkillBtn.textContent = cd > 0 ? `스킬 CD:${cd}` : "스킬";
+            const skillMode = activeSkillMode(unit);
+            if (!skillMode) cmdSkillBtn.disabled = cd > 0;
+            else cmdSkillBtn.disabled = cd > 0 || getAttackTargets(unit, getCommandTargetFaction(unit, skillMode), skillMode).length === 0;
           } else {
             cmdSkillBtn.textContent = "스킬";
+            cmdSkillBtn.disabled = true;
           }
           cmdHeroBoltBtn.style.display = "none";
           cmdHeroDashBtn.style.display = "none";
@@ -3944,7 +3948,8 @@
         function onCommandAttack() {
           const u = unitById(commandMenuUnitId);
           if (!u) return;
-          const mode = "attack";
+          normalizeUnitSkillContract(u);
+          const mode = basicCommandMode(u);
           if (!canUseAttackNow(mode)) {
             nudgeTutorial("지금은 공격할 단계가 아니구여");
             return;
@@ -3960,30 +3965,117 @@
           emitBubble(u, "attack");
         }
 
-        function onCommandSkill() {
+        async function onCommandSkill() {
           const u = unitById(commandMenuUnitId);
           if (!u) return;
           normalizeUnitSkillContract(u);
           const sid = getUnitActiveSkillId(u);
-          if (!sid || isBasicAttackSkillId(sid)) return;
-          if (sid === "SK_REPOSITION_2") {
-            startRepositionMode(u);
+          if (!sid) return;
+          const cdNow = u.skillCooldowns?.[sid] || 0;
+          if (cdNow > 0) {
+            addLog(`스킬 쿨다운 ${cdNow}턴`);
+            console.log(`[VERIFY_SKILL] unit=${u.id} skill=${u.activeSkill?.name || "none"} cdNow=${cdNow} target=none`);
             return;
           }
-          const mode = sid === "SK_SNIPER_LONG" ? "sniper_long" : (u.activeSkill?.type === "STRIKE" ? "strike" : "attack");
-          if (!canUseAttackNow(mode)) {
-            nudgeTutorial("지금은 스킬을 쓸 수 없어여");
+          const mode = activeSkillMode(u);
+          if (!mode) {
+            const ok = await executeActiveSkill(u, null);
+            if (ok) finalizePlayerAction(u);
+            return;
+          }
+          if (!canUseAttackNow("attack")) {
+            nudgeTutorial("지금은 공격 타이밍이 아니구여");
             return;
           }
           targetingUnitId = u.id;
           targetingMode = mode;
-          showTriangleTutorialHintOnce();
           cmdMenu.classList.remove("show");
           const targetFaction = getCommandTargetFaction(u, mode);
           if (getAttackTargets(u, targetFaction, mode).length === 0) {
             addLog(targetFaction === u.faction ? "사거리 내 아군이 없음" : "사거리 내 적이 없음");
           }
-          emitBubble(u, "attack");
+        }
+
+        function setSkillCooldown(unit, sid) {
+          if (!unit || !sid) return;
+          unit.skillCooldowns = unit.skillCooldowns || {};
+          const cd = Number(SkillCatalog[sid]?.cooldown || 0);
+          unit.skillCooldowns[sid] = Math.max(0, cd);
+        }
+
+        function upsertTimedEntry(list, entry, key = "id") {
+          if (!Array.isArray(list)) return;
+          const idx = list.findIndex((item) => item && item[key] === entry[key]);
+          if (idx >= 0) list[idx] = { ...list[idx], ...entry };
+          else list.push(entry);
+        }
+
+        async function executeActiveSkill(user, target) {
+          if (!user) return false;
+          normalizeUnitSkillContract(user);
+          const sid = getUnitActiveSkillId(user);
+          user.skillCooldowns = user.skillCooldowns || {};
+          const cdNow = user.skillCooldowns[sid] || 0;
+          if (cdNow > 0) {
+            console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${cdNow} target=${target?.id || "none"}`);
+            return false;
+          }
+
+          if (sid === "SK_NEWBIE_SPIRIT") {
+            user.buffs = user.buffs || [];
+            upsertTimedEntry(user.buffs, { id: "NEWBIE_SPIRIT", turns: 3, atkDelta: 2, defDelta: 2 });
+            setSkillCooldown(user, sid);
+            console.log(`[VERIFY_BUFF] unit=hero buff=NEWBIE_SPIRIT turns=3`);
+            console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${user.skillCooldowns[sid] || 0} target=none`);
+            return true;
+          }
+
+          if (sid === "SK_KIMWEAR_FLU") {
+            user.buffs = user.buffs || [];
+            upsertTimedEntry(user.buffs, { id: "FLU_EVA_UP", enemyTurns: 1, evadeBonus: 35 });
+            setSkillCooldown(user, sid);
+            console.log("[VERIFY_BUFF] unit=kimwear buff=FLU_EVA_UP enemyTurns=1");
+            console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${user.skillCooldowns[sid] || 0} target=none`);
+            return true;
+          }
+
+          if (sid === "SK_ABEL_REACT") {
+            if (!target || target.faction !== user.faction || target.id === user.id || target.hp <= 0) {
+              console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${user.skillCooldowns[sid] || 0} target=${target?.id || "none"}`);
+              return false;
+            }
+            if (target.reactionSource === "abel") {
+              console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${user.skillCooldowns[sid] || 0} target=${target?.id || "none"}`);
+              return false;
+            }
+            target.acted = false;
+            target.actionState = "idle";
+            target.preMove = null;
+            target.reactionSource = "abel";
+            setSkillCooldown(user, sid);
+            console.log(`[VERIFY_REACT] src=abel target=${target.id} granted=true`);
+            console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${user.skillCooldowns[sid] || 0} target=${target.id}`);
+            return true;
+          }
+
+          if (sid === "SK_JEONG2_JABDORI") {
+            if (!target || target.faction === user.faction || target.hp <= 0) {
+              console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${user.skillCooldowns[sid] || 0} target=${target?.id || "none"}`);
+              return false;
+            }
+            const mode = "jeong2_jabdori";
+            if (!isTargetValidForMode(user, target, mode)) {
+              console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${user.skillCooldowns[sid] || 0} target=${target?.id || "none"}`);
+              return false;
+            }
+            await executeCombat(user, target, mode);
+            setSkillCooldown(user, sid);
+            console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${user.skillCooldowns[sid] || 0} target=${target.id}`);
+            return true;
+          }
+
+          console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${cdNow} target=${target?.id || "none"}`);
+          return false;
         }
 
         function onCommandHeroBolt() {
@@ -4307,11 +4399,31 @@
         }
 
         function finalizePlayerAction(unit) {
+          if (isAbelUnit(unit) && unit.passivePerk?.id === "PK_ABEL_CANTO" && !unit.canCanto && !unit.cantoGrantedThisTurn) {
+            const remain = Math.max(0, (Number(unit.mov) || 0) - (Number(unit.moveSpentThisTurn) || 0));
+            console.log(`[VERIFY_CANTO] unit=abel remainingMove=${remain}`);
+            if (remain > 0) {
+              closeCommandMenu();
+              pendingActionUnitId = null;
+              unit.acted = false;
+              unit.canCanto = true;
+              unit.cantoGrantedThisTurn = true;
+              unit.cantoMoveRemaining = remain;
+              unit.actionState = "canto_ready";
+              selectedUnitId = unit.id;
+              moveRange = computeMoveRange(unit, remain);
+              refreshRangePreview(true);
+              queueStg1IdleTutorial();
+              return;
+            }
+          }
           closeCommandMenu();
           pendingActionUnitId = null;
           unit.acted = true;
           unit.actionState = "committed";
           unit.preMove = null;
+          unit.canCanto = false;
+          unit.cantoMoveRemaining = 0;
           evaluateObjectives({ type: "turnEnd", side: PHASE.PLAYER, unit });
           clearSelection();
           queueStg1IdleTutorial();
@@ -4322,10 +4434,22 @@
 
         async function executePlayerMove(unit, path) {
           inputLocked = true;
+          if (path.length > 1 && consumeImmobileOnMoveAttempt(unit)) {
+            addLog(`${unit.name} 이동 불가(이동봉쇄)`);
+            pendingActionUnitId = unit.id;
+            selectedUnitId = unit.id;
+            unit.actionState = "moved_uncommitted";
+            moveRange = null;
+            openCommandMenu(unit);
+            refreshRangePreview(true);
+            inputLocked = false;
+            return;
+          }
           if (!unit.preMove) {
             unit.preMove = { x0: unit.x, y0: unit.y, px0: unit.px, py0: unit.py, hadMoved: !!unit.movedThisTurn };
           }
           unit.movedThisTurn = path.length > 1;
+          unit.moveSpentThisTurn = (Number(unit.moveSpentThisTurn) || 0) + estimatePathCost(unit, path);
 
           if (path.length > 1) {
             await animateUnitAlongPath(unit, path);
@@ -4340,6 +4464,13 @@
             }
           } else {
             addLog(`${unit.name} 이동 후 명령 대기`);
+          }
+          if (unit.canCanto) {
+            unit.canCanto = false;
+            unit.cantoMoveRemaining = 0;
+            finalizePlayerAction(unit);
+            inputLocked = false;
+            return;
           }
           triggerPerkEvent("move", { unit });
           emitBubble(unit, "move");
@@ -4382,6 +4513,12 @@
 
         async function enemyAct(enemy) {
           if (!unitById(enemy.id)) return;
+          if (consumeImmobileOnMoveAttempt(enemy)) {
+            addLog(`${enemy.name} 이동 불가(이동봉쇄)`);
+            const blockedTarget = pickAttackTarget(enemy, "player");
+            if (blockedTarget) await executeCombat(enemy, blockedTarget);
+            return;
+          }
           const range = computeMoveRange(enemy);
           const players = units.filter(u => u.faction === "player");
           if (players.length === 0) return;
@@ -4575,26 +4712,39 @@
             p.movedThisTurn = false;
             p.actionState = "idle";
             p.preMove = null;
+            p.canCanto = false;
+            p.cantoMoveRemaining = 0;
+            p.moveSpentThisTurn = 0;
+            p.cantoGrantedThisTurn = false;
             p.turnFlags.firstAttackUsed = false;
             p.skillCooldowns = p.skillCooldowns || {};
-            const reposCd = p.skillCooldowns.SK_REPOSITION_2 || 0;
-            if (reposCd > 0) p.skillCooldowns.SK_REPOSITION_2 = Math.max(0, reposCd - 1);
-            if (isJung2Unit(p)) {
-              console.log("[VERIFY_REPOS] cooldownNow=", p.skillCooldowns.SK_REPOSITION_2 || 0);
+            p.statuses = Array.isArray(p.statuses) ? p.statuses : [];
+            p.buffs = Array.isArray(p.buffs) ? p.buffs : [];
+            p.reactionSource = null;
+            for (const sid of Object.keys(p.skillCooldowns)) {
+              p.skillCooldowns[sid] = Math.max(0, (p.skillCooldowns[sid] || 0) - 1);
             }
-            if (isKimwearUnit(p) && p.passivePerk?.id === "PK_HEAL_AURA_SMALL") {
-              let healed = 0;
-              for (const ally of units) {
-                if (ally.faction !== "player") continue;
-                const d = Math.abs(ally.x - p.x) + Math.abs(ally.y - p.y);
-                if (d <= 1 && ally.hp < ally.maxHp) {
-                  const before = ally.hp;
-                  ally.hp = Math.min(ally.maxHp, ally.hp + 2);
-                  if (ally.hp > before) healed++;
-                }
-              }
-              if (healed > 0) addLog(`김웨어 치유 오라 +${healed}`);
-              console.log("[VERIFY_KW] healAuraTick=", healed);
+            p.statuses = p.statuses.filter((st) => (Number(st?.turns) || 0) > 0);
+            if (isHeroUnit(p)) {
+              let turnsLeft = 0;
+              p.buffs = p.buffs.filter((b) => {
+                if (b?.id !== "NEWBIE_SPIRIT") return true;
+                const nextTurns = Math.max(0, (Number(b.turns) || 0) - 1);
+                b.turns = nextTurns;
+                turnsLeft = nextTurns;
+                return nextTurns > 0;
+              });
+              if (turnsLeft > 0) console.log(`[VERIFY_BUFF] unit=hero buff=NEWBIE_SPIRIT turns=${turnsLeft}`);
+            }
+            if (isKimwearUnit(p)) {
+              p.buffs = p.buffs.filter((b) => {
+                if (b?.id !== "FLU_EVA_UP") return true;
+                const nextEnemyTurns = Math.max(0, (Number(b.enemyTurns) || 0) - 1);
+                b.enemyTurns = nextEnemyTurns;
+                return nextEnemyTurns > 0;
+              });
+              const isolated = isKimwearIsolated(p);
+              console.log(`[VERIFY_PASSIVE] unit=kimwear passive=집에 갈래 isolated=${isolated} zocIgnore=true`);
             }
             if (p.heroState) {
               p.heroState.dashCd = Math.max(0, (p.heroState.dashCd || 0) - 1);
@@ -4631,7 +4781,7 @@
             else guideText.textContent = "공격 대상 선택 (우클릭/ESC 취소)";
           } else if (commandMenuUnitId) {
             const u = unitById(commandMenuUnitId);
-            guideText.textContent = u && u.weaponType === "staff" ? "명령 선택: 치유 / 정화 / 대화 / 대기" : "명령 선택: 공격 / 대화 / 대기";
+            guideText.textContent = u && basicCommandMode(u) === "heal" ? "명령 선택: 치유 / 스킬 / 대화 / 대기" : "명령 선택: 공격 / 스킬 / 대화 / 대기";
           } else if (phase === PHASE.PLAYER) {
             guideText.textContent = selectedUnitId ? "이동 타일 클릭 (우클릭/ESC 취소)" : (turnGuidanceText || "아군 유닛 클릭 → 이동");
           } else if (phase === PHASE.ENEMY) {
@@ -4680,7 +4830,7 @@
             let extraLine = "";
             if (hoverTile && target.x === hoverTile.x && target.y === hoverTile.y) {
               const attacker = unitById(targetingUnitId) || selectedUnit();
-              const mode = targetingUnitId ? (targetingMode || "attack") : (attacker?.weaponType === "staff" ? "heal" : "attack");
+              const mode = targetingUnitId ? (targetingMode || "attack") : basicCommandMode(attacker);
               if (attacker && attacker.faction === "player") {
                 const targetFaction = getCommandTargetFaction(attacker, mode);
                 if (target.faction === targetFaction && isInAttackRange(attacker, target.x, target.y, mode)) {
@@ -4711,10 +4861,11 @@
           }
         }
 
-        function computeMoveRange(unit) {
+        function computeMoveRange(unit, moveCapOverride = null) {
           const start = { x: unit.x, y: unit.y };
           const startK = key(start.x, start.y);
-          const usesZocPenalty = unit.faction === "player";
+          const usesZocPenalty = unit.faction === "player" && !isKimwearUnit(unit);
+          const moveCap = moveCapOverride == null ? unit.mov : Math.max(0, Number(moveCapOverride) || 0);
           const dist = new Map();
           const cameFrom = new Map();
           const open = [];
@@ -4769,7 +4920,7 @@
               }
               const step = stepBase + zocAdd;
               const nextCost = cur.cost + step;
-              if (nextCost > unit.mov) continue;
+              if (nextCost > moveCap) continue;
 
               const nk = key(n.x, n.y);
               const nsk = stateKey(n.x, n.y, nextZocUsed);
@@ -4915,6 +5066,47 @@
           return false;
         }
 
+        function isKimwearIsolated(unit, radius = 2) {
+          if (!unit) return false;
+          let allies = 0;
+          for (const ally of units) {
+            if (ally.id === unit.id) continue;
+            if (ally.faction !== unit.faction) continue;
+            const d = Math.abs(ally.x - unit.x) + Math.abs(ally.y - unit.y);
+            if (d <= radius) allies++;
+          }
+          return allies === 0;
+        }
+
+        function getStatusEntry(unit, statusId) {
+          if (!unit || !Array.isArray(unit.statuses)) return null;
+          return unit.statuses.find((s) => s && s.id === statusId) || null;
+        }
+
+        function consumeImmobileOnMoveAttempt(unit) {
+          const st = getStatusEntry(unit, "IMMOBILE");
+          if (!st || (Number(st.turns) || 0) <= 0) return false;
+          st.turns = Math.max(0, (Number(st.turns) || 0) - 1);
+          unit.statuses = unit.statuses.filter((s) => s && s.id !== "IMMOBILE" ? true : (Number(s.turns) || 0) > 0);
+          return true;
+        }
+
+        function estimatePathCost(unit, path) {
+          if (!unit || !Array.isArray(path) || path.length <= 1) return 0;
+          let cost = 0;
+          for (let i = 1; i < path.length; i++) {
+            const step = path[i];
+            cost += terrainAt(step.x, step.y).moveCost;
+          }
+          return cost;
+        }
+
+        function moveCapForSelection(unit) {
+          if (!unit) return 0;
+          if (unit.canCanto) return Math.max(0, Number(unit.cantoMoveRemaining) || 0);
+          return Math.max(0, Number(unit.mov) || 0);
+        }
+
         function isHeroUnit(unit) {
           return unit?.classId === "CL_HERO_HYBRID";
         }
@@ -4923,8 +5115,33 @@
           return !!unit && (unit.id === "jung2" || unit.id === "정2" || unit.unitId === "jung2" || unit.charId === "jeong2");
         }
 
+        function isAbelUnit(unit) {
+          if (!unit) return false;
+          const id = String(unit.id || "").toLowerCase();
+          const name = String(unit.name || "");
+          return id === "able" || id === "abel" || name === "애블" || unit.charId === "able" || unit.charId === "abel";
+        }
+
         function isKimwearUnit(unit) {
           return !!unit && (unit.id === "kimwear" || unit.id === "김웨어" || unit.unitId === "kimwear" || unit.charId === "kim_ware");
+        }
+
+        function isS1RosterCoreUnit(unit) {
+          return isHeroUnit(unit) || isJung2Unit(unit) || isAbelUnit(unit) || isKimwearUnit(unit);
+        }
+
+        function activeSkillMode(unit) {
+          const sid = getUnitActiveSkillId(unit);
+          if (sid === "SK_JEONG2_JABDORI") return "jeong2_jabdori";
+          if (sid === "SK_ABEL_REACT") return "abel_react";
+          return null;
+        }
+
+        function basicCommandMode(unit) {
+          if (!unit) return "attack";
+          if (unit.attackMode === "heal") return "heal";
+          if (unit.weaponType === "staff") return "heal";
+          return "attack";
         }
 
         function buildDefaultActiveSkill(unit) {
@@ -4947,27 +5164,41 @@
           }
           if (!unit.activeSkillId && unit.activeSkill?.id) unit.activeSkillId = unit.activeSkill.id;
           if (isHeroUnit(unit)) {
-            unit.activeSkill = { id: "SK_STRIKE", type: "STRIKE", name: "Strike", dmgMult: 1.2 };
-            unit.activeSkillId = "SK_STRIKE";
-            unit.passivePerk = { id: "SURVIVOR_TEMP", name: "용사의 본능(임시)" };
+            unit.activeSkill = { id: "SK_NEWBIE_SPIRIT", type: "SELF_BUFF", name: "뉴비의 패기", dmgMult: 0 };
+            unit.activeSkillId = "SK_NEWBIE_SPIRIT";
+            unit.passivePerk = { id: "PK_HERO_NEWBIE_PERK", name: "뉴비 특혜 1회" };
+            unit.attackMode = "attack";
+            unit.newbiePerkUsed = !!unit.newbiePerkUsed;
+            unit.buffs = unit.buffs || [];
           } else if (isJung2Unit(unit)) {
-            unit.activeSkillId = "SK_SNIPER_LONG";
-            unit.activeSkill = { id: "SK_SNIPER_LONG", type: "SNIPER", name: "저격", dmgMult: 1.0 };
-            unit.passivePerk = { id: "PK_SUPPORT_SHOT_WEAK", name: "지원사격(약)" };
+            unit.activeSkillId = "SK_JEONG2_JABDORI";
+            unit.activeSkill = { id: "SK_JEONG2_JABDORI", type: "SPECIAL_ATTACK", name: "잡도리", dmgMult: 1.0 };
+            unit.passivePerk = { id: "PK_JEONG2_SUPPORT_SHOT", name: "지원사격" };
+            unit.attackMode = "attack";
+            unit.statuses = unit.statuses || [];
             unit.skillCooldowns = unit.skillCooldowns || {};
-            if (!verifyRoleLogs.jung2Ready) {
-              verifyRoleLogs.jung2Ready = true;
-              console.log("[VERIFY_J2] sniperReady=true");
-            }
+            unit.rangeMin = unit.rangeMin ?? unit.minRange ?? 2;
+            unit.rangeMax = unit.rangeMax ?? unit.maxRange ?? 2;
+          } else if (isAbelUnit(unit)) {
+            unit.activeSkillId = "SK_ABEL_REACT";
+            unit.activeSkill = { id: "SK_ABEL_REACT", type: "SUPPORT", name: "재행동", dmgMult: 0 };
+            unit.passivePerk = { id: "PK_ABEL_CANTO", name: "재이동" };
+            unit.attackMode = "heal";
+            unit.healPower = unit.healPower ?? 8;
+            unit.canCanto = !!unit.canCanto;
+            unit.reactedByAbel = !!unit.reactedByAbel;
+            unit.skillCooldowns = unit.skillCooldowns || {};
           } else if (isKimwearUnit(unit)) {
-            unit.activeSkillId = "SK_REPOSITION_2";
-            unit.activeSkill = { id: "SK_REPOSITION_2", type: "TACTIC", name: "전술 명령", dmgMult: 0 };
-            unit.passivePerk = { id: "PK_HEAL_AURA_SMALL", name: "치유 오라(소)" };
-            unit.weaponType = "staff";
+            unit.activeSkillId = "SK_KIMWEAR_FLU";
+            unit.activeSkill = { id: "SK_KIMWEAR_FLU", type: "SELF_BUFF", name: "독감", dmgMult: 0 };
+            unit.passivePerk = { id: "PK_KIMWEAR_HOME", name: "집에 갈래" };
+            unit.attackMode = "attack";
+            unit.buffs = unit.buffs || [];
             unit.skillCooldowns = unit.skillCooldowns || {};
           } else if (!unit.passivePerk) {
             unit.passivePerk = null;
           }
+          unit.passive = unit.passivePerk || null;
           delete unit.activeSkills;
           delete unit.passivePerks;
         }
@@ -4975,6 +5206,8 @@
         function commandRangeForMode(attacker, mode = "attack") {
           if (mode === "strike") return { min: 1, max: 1 };
           if (mode === "sniper_long") return { min: 2, max: 5 };
+          if (mode === "jeong2_jabdori") return { min: 3, max: 5 };
+          if (mode === "abel_react") return { min: 1, max: 3 };
           if (mode === "hero_bolt") return { min: 2, max: 2 };
           if (mode === "hero_dash") return { min: 1, max: 2 };
           if (mode === "hero_arc") return { min: 1, max: HERO_ARC_RANGE };
@@ -5028,6 +5261,7 @@
         function isTargetValidForMode(attacker, target, mode = "attack") {
           if (!attacker || !target) return false;
           if (!isInAttackRange(attacker, target.x, target.y, mode)) return false;
+          if (mode === "abel_react") return target.id !== attacker.id;
           if (mode === "hero_dash") return !!heroDashLandingTile(attacker, target) && !hasWallOnLine(attacker, target);
           if (mode === "hero_arc") return !hasWallOnLine(attacker, target);
           return true;
@@ -5038,13 +5272,13 @@
         }
 
         function getCommandTargetFaction(unit, mode = "attack") {
-          if (mode === "heal" || mode === "purify") return unit.faction;
+          if (mode === "heal" || mode === "purify" || mode === "abel_react") return unit.faction;
           return unit.faction === "player" ? "enemy" : "player";
         }
 
         function targetingConfig(unit, mode = "attack", preview = false) {
           const alpha = preview ? 0.32 : 0.42;
-          if (mode === "heal" || mode === "purify") {
+          if (mode === "heal" || mode === "purify" || mode === "abel_react") {
             return {
               targetFaction: getCommandTargetFaction(unit, mode),
               tint: `rgba(80, 200, 120, ${alpha})`,
@@ -5065,7 +5299,7 @@
         }
 
         function buildRangePreview(unit) {
-          const mode = unit.weaponType === "staff" ? "heal" : "attack";
+          const mode = basicCommandMode(unit);
           const cfg = targetingConfig(unit, mode, true);
           const cells = [];
           for (let y = 0; y < MAP_H; y++) {
@@ -5096,7 +5330,7 @@
             rangePreview = null;
             return;
           }
-          const mode = unit.weaponType === "staff" ? "heal" : "attack";
+          const mode = basicCommandMode(unit);
           const originKey = key(unit.x, unit.y);
           if (!force && rangePreview && rangePreview.unitId === unit.id && rangePreview.originKey === originKey && rangePreview.mode === mode) {
             return;
@@ -5130,7 +5364,7 @@
           targetingMode = null;
           cmdMenu.classList.remove("show");
           selectedUnitId = unit.id;
-          moveRange = computeMoveRange(unit);
+          moveRange = computeMoveRange(unit, moveCapForSelection(unit));
           refreshRangePreview(true);
           addLog(`${unit.name} 이동 취소`);
           return true;
@@ -6516,6 +6750,18 @@
             unit.heroState = unit.heroState || { dashCd: 0, arcCd: 0, passiveTriggered: false, instinctGuardActive: false };
           }
           normalizeUnitSkillContract(unit);
+          unit.statuses = unit.statuses || [];
+          unit.buffs = unit.buffs || [];
+          unit.skillCooldowns = unit.skillCooldowns || {};
+          unit.moveSpentThisTurn = Number(unit.moveSpentThisTurn) || 0;
+          unit.cantoMoveRemaining = Number(unit.cantoMoveRemaining) || 0;
+          unit.cantoGrantedThisTurn = !!unit.cantoGrantedThisTurn;
+          unit.canCanto = !!unit.canCanto;
+          unit.reactionSource = unit.reactionSource || null;
+          if (isS1RosterCoreUnit(unit) && !unit.verifyUiLogged) {
+            unit.verifyUiLogged = true;
+            console.log(`[VERIFY_UI] unit=${unit.id} hasAttack=true attackMode=${unit.attackMode || "attack"} hasSkillBtn=${!!unit.activeSkill} passive=${unit.passive?.name || "none"}`);
+          }
           unit.movedThisTurn = !!unit.movedThisTurn;
           unit.preMove = unit.preMove || null;
           unit.actionState = unit.actionState || "idle";
@@ -6547,7 +6793,15 @@
         function statWithEffects(unit, stat) {
           const base = unit.baseStats ? unit.baseStats[stat] : (unit[stat] || 0);
           const eff = (unit.effects || []).filter((e) => e.stat === stat).reduce((s, e) => s + e.delta, 0);
-          return base + eff;
+          const buffBonus = (unit.buffs || []).reduce((s, b) => {
+            if (!b) return s;
+            if (b.id === "NEWBIE_SPIRIT") {
+              if (stat === "atk") return s + (Number(b.atkDelta) || 0);
+              if (stat === "def") return s + (Number(b.defDelta) || 0);
+            }
+            return s;
+          }, 0);
+          return base + eff + buffBonus;
         }
 
         function triangleResult(attacker, target) {
@@ -6576,8 +6830,8 @@
         function buildCombatPreview(attacker, target, mode = "attack") {
           const tri = triangleResult(attacker, target);
           const triText = triangleLabelWithIcon(tri);
-          if (mode === "heal" || mode === "purify") {
-            const line = mode === "purify" ? "예상: 정화 시도" : "예상: 치유";
+          if (mode === "heal" || mode === "purify" || mode === "abel_react") {
+            const line = mode === "purify" ? "예상: 정화 시도" : (mode === "abel_react" ? "예상: 재행동 부여" : "예상: 치유");
             return {
               primaryLine: `${line} | 상성 ${triText}`,
               triangleGuide: "상성: 유리▲ / 불리▼ / 보통="
@@ -6764,24 +7018,39 @@
           showToast("용사의 본능 발동!", 1100);
         }
 
-        async function resolveAttack(attacker, target, { actionMode = "attack", contextTag = "normal", logPrefix = "", damageMult = 1, onHitEffect = null } = {}) {
+        function kimwearEvasionBonus(target) {
+          if (!isKimwearUnit(target)) return 0;
+          let bonus = 0;
+          const flu = (target.buffs || []).find((b) => b && b.id === "FLU_EVA_UP" && (Number(b.enemyTurns) || 0) > 0);
+          if (flu) bonus += Number(flu.evadeBonus) || 0;
+          const isolated = isKimwearIsolated(target);
+          if (isolated) bonus += 15;
+          console.log(`[VERIFY_PASSIVE] unit=kimwear passive=집에 갈래 isolated=${isolated} zocIgnore=true`);
+          return bonus;
+        }
+
+        async function resolveAttack(attacker, target, { actionMode = "attack", contextTag = "normal", logPrefix = "", damageMult = 1, onHitEffect = null, forceHit = false, minDamageOnHit = 0 } = {}) {
           if (!attacker || !target || battleOver) return { resolved: false };
           const dist = Math.abs(attacker.x - target.x) + Math.abs(attacker.y - target.y);
           const payload = { unit: attacker, attacker, target, dist, mods: { hit: 0, atk: 0, crit: 0 }, heal: 0, purify: false };
           triggerPerkEvent("attack", payload);
           emitBubble(attacker, "attack");
 
-          if (attacker.weaponType === "staff" && target.faction === attacker.faction) {
+          if ((actionMode === "heal" || actionMode === "purify") && target.faction === attacker.faction) {
             if (actionMode === "purify") {
               const idx = (target.effects || []).findIndex((e) => e.delta < 0);
               if (idx >= 0) target.effects.splice(idx, 1);
               addLog(`${logPrefix}${attacker.name} -> ${target.name}: ${idx >= 0 ? "정화 1개" : "정화(없음)"}`);
               if (idx >= 0) spawnFloatingText(target.x, target.y, "정화", "#a2fff0");
             } else {
-              const healValue = Math.max(0, payload.heal);
+              const fallbackHeal = isAbelUnit(attacker) ? Math.max(0, Number(attacker.healPower) || 0) : 0;
+              const healValue = Math.max(0, payload.heal || fallbackHeal);
               target.hp = Math.min(target.maxHp, target.hp + healValue);
               spawnFloatingText(target.x, target.y, `치유 +${healValue}`, "#9cffb8");
               addLog(`${logPrefix}${attacker.name} -> ${target.name}: 치유 +${healValue}`);
+              if (isAbelUnit(attacker)) {
+                console.log(`[VERIFY_HEAL] unit=abel amount=${healValue} target=${target.id}`);
+              }
             }
             return { resolved: true, support: true, triText: "보통=" };
           }
@@ -6789,8 +7058,9 @@
           const tri = triangleResult(attacker, target);
           const triText = triangleLabelWithIcon(tri);
           addLog(`${logPrefix}삼각 상성: ${triText}`);
-          const hitChance = statWithEffects(attacker, "hit") + payload.mods.hit + tri.hit + (attacker.nextAttackBonus.hit || 0);
-          const hit = Math.floor(rng() * 100) < hitChance;
+          const evadeBonus = kimwearEvasionBonus(target);
+          const hitChance = statWithEffects(attacker, "hit") + payload.mods.hit + tri.hit + (attacker.nextAttackBonus.hit || 0) - evadeBonus;
+          const hit = forceHit || (Math.floor(rng() * 100) < hitChance);
           if (!hit) {
             spawnFloatingText(target.x, target.y, "MISS", "#e7efff");
             addLog(`${logPrefix}${attacker.name} -> ${target.name}: MISS (${triText})`);
@@ -6810,8 +7080,14 @@
             target.heroState.instinctGuardActive = false;
             addLog(`${target.name}: 본능 방어로 피해 감소`);
           }
+          if (isHeroUnit(target) && !target.newbiePerkUsed && dmg > 0) {
+            dmg = 0;
+            target.newbiePerkUsed = true;
+            console.log("[VERIFY_PASSIVE] unit=hero passive=뉴비 특혜 1회 consumed=true");
+          }
           if (crit) dmg *= 2;
           dmg = Math.max(0, Math.round(dmg));
+          if (dmg > 0 && minDamageOnHit > 0) dmg = Math.max(minDamageOnHit, dmg);
           target.hp = Math.max(0, target.hp - dmg);
           if (isStg2Stage() && dmg > 0 && attacker.faction === "enemy" && target.faction === "player") {
             triggerAlarm("COMBAT", attacker.id || attacker.name || null);
@@ -6889,16 +7165,21 @@
             ? HERO_BOLT_DMG_MULT
             : (actionMode === "hero_dash"
                 ? HERO_DASH_DMG_MULT
-                : (actionMode === "hero_arc" ? HERO_ARC_DMG_MULT : (actionMode === "strike" ? 1.2 : (actionMode === "sniper_long" ? 1.0 : HERO_MELEE_DMG_BASE))));
+                : (actionMode === "hero_arc" ? HERO_ARC_DMG_MULT : (actionMode === "strike" ? 1.2 : ((actionMode === "sniper_long" || actionMode === "jeong2_jabdori") ? 1.0 : HERO_MELEE_DMG_BASE))));
           const first = await resolveAttack(attacker, target, {
             actionMode,
             contextTag: "initial",
             logPrefix: "",
             damageMult: firstDamageMult,
+            forceHit: actionMode === "jeong2_jabdori",
             onHitEffect: actionMode === "hero_arc" ? ((_, tgt) => {
               addEffect(tgt, { stat: "mov", delta: -1, expiresTurn: turnCounter + 2, key: "hero_marked" });
               addLog(`${tgt.name}: 표식(이동 -1)`);
-            }) : null
+            }) : (actionMode === "jeong2_jabdori" ? ((_, tgt) => {
+              tgt.statuses = Array.isArray(tgt.statuses) ? tgt.statuses : [];
+              upsertTimedEntry(tgt.statuses, { id: "IMMOBILE", turns: 1 });
+              console.log(`[VERIFY_DEBUFF] src=jeong2 debuff=IMMOBILE target=${tgt.id} dur=1`);
+            }) : null)
           });
           if (actionMode === "hero_dash" && attacker.heroState) attacker.heroState.dashCd = HERO_DASH_CD;
           if (actionMode === "hero_arc" && attacker.heroState) attacker.heroState.arcCd = HERO_ARC_CD;
@@ -6908,8 +7189,8 @@
             return;
           }
 
-          if (attacker.faction === "player" && target.faction === "enemy") {
-            triggerJung2SupportShot(attacker, target);
+          if (attacker.faction === "player" && target.faction === "enemy" && first.hit && (first.dmg || 0) > 0) {
+            await triggerJung2SupportShot(attacker, target);
           }
 
           const liveAttacker = unitById(attacker.id);
@@ -6926,22 +7207,29 @@
           if (!battleOver) inputLocked = false;
         }
 
-        function triggerJung2SupportShot(attacker, target) {
+        async function triggerJung2SupportShot(attacker, target) {
           if (!attacker || !target || battleOver) return;
           if (attacker.faction !== "player" || target.faction !== "enemy") return;
-          const jung2 = units.find((u) => isJung2Unit(u) && u.hp > 0 && u.passivePerk?.id === "PK_SUPPORT_SHOT_WEAK");
+          const jung2 = units.find((u) => isJung2Unit(u) && u.hp > 0 && u.passivePerk?.id === "PK_JEONG2_SUPPORT_SHOT");
           if (!jung2) return;
           if (jung2.id === attacker.id) return;
           const liveTarget = unitById(target.id);
           if (!liveTarget || liveTarget.hp <= 0) return;
-          if (!isInAttackRange(jung2, liveTarget.x, liveTarget.y, "sniper_long")) return;
-          const raw = Math.max(0, Math.round(statWithEffects(jung2, "atk") * 0.35 - statWithEffects(liveTarget, "def")));
-          const dmg = Math.max(0, Math.min(raw, Math.max(0, liveTarget.hp - 1)));
-          if (dmg <= 0) return;
-          liveTarget.hp = Math.max(1, liveTarget.hp - dmg);
-          spawnFloatingText(liveTarget.x, liveTarget.y, `지원 -${dmg}`, "#a9d7ff");
-          addLog(`정2 지원사격: ${liveTarget.name} -${dmg}`);
-          console.log("[VERIFY_J2] supportShotFired target=", liveTarget.id, "dmgScale=0.35");
+          const supportMode = "jeong2_jabdori";
+          const inRange = isInAttackRange(jung2, liveTarget.x, liveTarget.y, supportMode);
+          const tri = triangleResult(jung2, liveTarget);
+          const base = (statWithEffects(jung2, "atk") + tri.atk + (jung2.nextAttackBonus?.atk || 0)) - statWithEffects(liveTarget, "def");
+          const raw = Math.round(Math.max(0, base) * 0.25);
+          const final = raw > 0 ? Math.max(2, raw) : 0;
+          console.log(`[VERIFY_SUPPORT] src=jeong2 target=${liveTarget.id} inRange=${inRange} raw=${raw} final=${final}`);
+          if (!inRange || final <= 0) return;
+          await resolveAttack(jung2, liveTarget, {
+            actionMode: "attack",
+            contextTag: "support_shot",
+            logPrefix: "지원사격! ",
+            damageMult: 0.25,
+            minDamageOnHit: 2
+          });
         }
 
         function spawnFloatingText(tx, ty, text, color = "#ffffff") {
