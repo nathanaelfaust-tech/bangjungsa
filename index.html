@@ -2141,8 +2141,8 @@
           });
           const spawned = units.find((u) => isNyangsanUnit(u));
           if (spawned) {
-            const nx = 15;
-            const ny = 1;
+            const nx = 17;
+            const ny = 10;
             const passable = inBounds(nx, ny) && (terrainAt(nx, ny)?.moveCost || 999) < 999;
             const vacant = !isOccupied(nx, ny, spawned.id);
             if (passable && vacant) {
@@ -2151,7 +2151,7 @@
               spawned.px = null;
               spawned.py = null;
             }
-            console.log(`[VERIFY_NY] stg=STG2 requested=(15,1) used=(${spawned.x},${spawned.y})`);
+            console.log(`[VERIFY_NY] stg=STG2 requested=(17,10) used=(${spawned.x},${spawned.y})`);
           }
           const pos = spawned ? { x: spawned.x, y: spawned.y } : null;
           console.log("[VERIFY_NY] spawnStrategy=nearExitDist4to6 pos=", pos);
@@ -2224,20 +2224,23 @@
         function spawnStg2ReinforcementsIfNeeded() {
           if (!isStg2Stage() || battleOver) return;
           const st = ensureStg2RuntimeState();
+          const reinforceEveryTurns = 1;
+          const reinforcePerWave = 2;
+          const maxTotal = 8;
           if (!st.reinforceTuningLogged) {
             st.reinforceTuningLogged = true;
-            console.log("[VERIFY_ALARM] reinforcePerWave=2 maxTotal=8");
+            console.log("[VERIFY_ALARM] reinforceEveryTurns=1 reinforcePerWave=2 maxTotal=8");
           }
           if (!st.alarm || !st.alarmTurn) return;
           const elapsed = turnCounter - st.alarmTurn;
-          if (elapsed <= 0 || elapsed % 2 !== 0) return;
-          if ((st.reinforcementsSpawned || 0) >= 8) return;
+          if (elapsed <= 0 || elapsed % reinforceEveryTurns !== 0) return;
+          if ((st.reinforcementsSpawned || 0) >= maxTotal) return;
           const poi = stg2Poi();
           const gates = [poi?.G1, poi?.G2].filter((g) => Array.isArray(g) && g.length >= 2);
           if (!gates.length) return;
 
-          let requested = 2;
-          requested = Math.min(requested, 8 - (st.reinforcementsSpawned || 0));
+          let requested = reinforcePerWave;
+          requested = Math.min(requested, maxTotal - (st.reinforcementsSpawned || 0));
           let spawned = 0;
           for (let i = 0; i < requested; i++) {
             const gate = gates[Math.floor(rng() * gates.length)];
