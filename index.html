@@ -432,6 +432,11 @@
         display: block;
       }
 
+      .portraitBox img.portraitCard {
+        object-fit: cover;
+        object-position: 50% 18%;
+      }
+
       .unitInfoSection {
         display: flex;
         flex-direction: column;
@@ -3282,15 +3287,20 @@
           return null;
         }
 
-        function portraitImageByKey(key, face = "idle", idForLog = null) {
+        function portraitPickByKey(key, face = "idle", idForLog = null) {
           if (!key) return null;
           const pack = ASSETS?.portraits?.[key];
           if (!pack) return null;
+          const isCard = !!(pack && !(pack instanceof Image) && pack.card);
           const p = (pack instanceof Image)
             ? pack
             : (pack.card || pack[face] || pack.idle || pack.talk || pack.sleep || null);
           console.log(`[VERIFY_PORTRAIT_PICK] id=${idForLog || key} face=${face} picked=${p ? "img" : "none"} prefer=card`);
-          return p;
+          return p ? { img: p, isCard } : null;
+        }
+
+        function portraitImageByKey(key, face = "idle", idForLog = null) {
+          return portraitPickByKey(key, face, idForLog)?.img || null;
         }
 
         function portraitImageBySpeakerToken(speakerToken, face = "idle") {
@@ -3307,14 +3317,18 @@
           dialogBarEl.style.display = "flex";
           dialogNamePillEl.textContent = dialogState.speakerName || dialogState.speakerId || "";
           dialogTextBodyEl.textContent = dialogState.text || "";
-          const p = portraitImageBySpeakerToken(dialogState.speakerId, dialogState.face);
+          const key = unitAssetKey({ id: dialogState.speakerId, faction: "player" });
+          const picked = portraitPickByKey(key, dialogState.face, dialogState.speakerId);
+          const p = picked?.img || null;
           if (p) {
             dialogBarPortraitImgEl.src = p.src;
             dialogBarPortraitImgEl.alt = dialogState.speakerName || dialogState.speakerId || "";
+            dialogBarPortraitImgEl.classList.toggle("portraitCard", !!picked?.isCard);
             dialogBarPortraitEl.style.display = "flex";
           } else {
             dialogBarPortraitImgEl.removeAttribute("src");
             dialogBarPortraitImgEl.alt = "";
+            dialogBarPortraitImgEl.classList.remove("portraitCard");
             dialogBarPortraitEl.style.display = "none";
           }
           console.log(`[VERIFY_DIALOG] open=${dialogState.open} speaker=${dialogState.speakerId} face=${dialogState.face} hasPortrait=${!!p}`);
@@ -5275,9 +5289,11 @@
               : "VS - : HIT -  EVA -";
             console.log(`[VERIFY_VS] unit=${target.id} vs=${opp?.id || "none"} hitP=${vs?.hitP ?? "NA"} evaP=${vs?.evaP ?? "NA"}`);
             const portraitKey = unitAssetKey(target);
-            const portrait = portraitImageByKey(portraitKey, "idle", target.id);
+            const portraitPicked = portraitPickByKey(portraitKey, "idle", target.id);
+            const portrait = portraitPicked?.img || null;
+            const portraitClass = portraitPicked?.isCard ? "portraitCard" : "";
             const portraitHtml = portrait
-              ? `<div class="portraitBox"><img src="${escapeHtml(portrait.src)}" alt="${escapeHtml(target.name)}" /></div>`
+              ? `<div class="portraitBox"><img class="${portraitClass}" src="${escapeHtml(portrait.src)}" alt="${escapeHtml(target.name)}" /></div>`
               : "";
             unitInfo.innerHTML =
               `<div class="unitInfoSection">` +
