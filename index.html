@@ -4588,16 +4588,21 @@
           const fallbackPos = { x: enemy.x, y: enemy.y };
           let verifyMoved = false;
           let verifyAttacked = false;
+          let verifyDecision = "HOLD_F2";
           if (consumeImmobileOnMoveAttempt(enemy)) {
             addLog(`${enemy.name} 이동 불가(이동봉쇄)`);
             const blockedTarget = pickAttackTarget(enemy, "player");
             if (blockedTarget) {
               await executeCombat(enemy, blockedTarget);
               verifyAttacked = true;
+              verifyDecision = "ATTACK";
+            } else {
+              verifyDecision = "IMMOBILE";
             }
-            if (enemy.aiMode === "HUNT" || enemy.aiHint === "HUNT") {
+            if (enemy.engaged || enemy.aiMode === "HUNT" || enemy.aiHint === "HUNT") {
               const t = blockedTarget || nearestFactionUnit(enemy, "player");
-              console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=${t?.id || "none"} path=NONE usedBFS=true fallback=F2 moved=${verifyMoved}`);
+              const d = t ? Math.abs(enemy.x - t.x) + Math.abs(enemy.y - t.y) : "NA";
+              console.log(`[VERIFY_AI] unit=${enemy.id} engaged=${!!enemy.engaged} target=${t?.id || "none"} dist=${d} decision=${verifyDecision} moved=${verifyMoved} attacked=${verifyAttacked}`);
             }
             finalizeEnemyPosition(enemy, fallbackPos);
             return;
@@ -4605,7 +4610,7 @@
           const players = units.filter(u => u.faction === "player");
           if (players.length === 0) return;
 
-          if (enemy.aiMode === "HUNT" || enemy.aiHint === "HUNT") {
+          if (enemy.engaged || enemy.aiMode === "HUNT" || enemy.aiHint === "HUNT") {
             let huntTarget = unitById(enemy.huntTargetId);
             let dist = huntTarget ? Math.abs(enemy.x - huntTarget.x) + Math.abs(enemy.y - huntTarget.y) : Infinity;
             if (!huntTarget || huntTarget.hp <= 0 || dist > 12) {
@@ -4614,16 +4619,16 @@
               dist = huntTarget ? Math.abs(enemy.x - huntTarget.x) + Math.abs(enemy.y - huntTarget.y) : Infinity;
             }
             if (!huntTarget) {
-              console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=none path=NONE usedBFS=true fallback=F2 moved=false`);
+              console.log(`[VERIFY_AI] unit=${enemy.id} engaged=${!!enemy.engaged} target=none dist=NA decision=HOLD_F2 moved=false attacked=false`);
               finalizeEnemyPosition(enemy, fallbackPos);
               return;
             }
 
             let bfsPath = null;
-            let fallbackCode = "NONE";
             if (isTargetValidForMode(enemy, huntTarget, "attack")) {
               await executeCombat(enemy, huntTarget, "attack");
               verifyAttacked = true;
+              verifyDecision = "ATTACK";
             } else {
               bfsPath = findHuntPathBFS(enemy, huntTarget);
               if (bfsPath && bfsPath.length > 1) {
@@ -4637,9 +4642,9 @@
                   await animateUnitAlongPath(enemy, capped);
                   emitUnitEnterTile(enemy);
                   verifyMoved = true;
+                  verifyDecision = "MOVE_BFS";
                 }
               } else {
-                fallbackCode = "F1";
                 const huntRange = computeMoveRange(enemy);
                 let best = { x: enemy.x, y: enemy.y };
                 let bestDist = Infinity;
@@ -4660,18 +4665,21 @@
                   await animateUnitAlongPath(enemy, path);
                   emitUnitEnterTile(enemy);
                   verifyMoved = true;
+                  verifyDecision = "MOVE_F1";
                 } else {
-                  fallbackCode = "F2";
+                  verifyDecision = "HOLD_F2";
                 }
               }
               const liveTarget = unitById(huntTarget.id);
               if (liveTarget && liveTarget.hp > 0 && isTargetValidForMode(enemy, liveTarget, "attack")) {
                 await executeCombat(enemy, liveTarget, "attack");
                 verifyAttacked = true;
+                verifyDecision = "ATTACK";
               }
             }
             const live = unitById(enemy.huntTargetId) || nearestFactionUnit(enemy, "player");
-            console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=${live?.id || "none"} path=${bfsPath ? bfsPath.length : "NONE"} usedBFS=true fallback=${fallbackCode} moved=${verifyMoved}`);
+            const d = live ? Math.abs(enemy.x - live.x) + Math.abs(enemy.y - live.y) : "NA";
+            console.log(`[VERIFY_AI] unit=${enemy.id} engaged=${!!enemy.engaged} target=${live?.id || "none"} dist=${d} decision=${verifyDecision} moved=${verifyMoved} attacked=${verifyAttacked}`);
             finalizeEnemyPosition(enemy, fallbackPos);
             return;
           }
@@ -5595,6 +5603,9 @@
         }
 
         function getAttackTargets(attacker, targetFaction, mode = "attack") {
+          if (mode === "heal") {
+            return units.filter((u) => u.faction === targetFaction && u.hp < u.maxHp && isTargetValidForMode(attacker, u, mode));
+          }
           return units.filter((u) => u.faction === targetFaction && isTargetValidForMode(attacker, u, mode));
         }
 
@@ -7387,6 +7398,10 @@
         async function resolveAttack(attacker, target, { actionMode = "attack", contextTag = "normal", logPrefix = "", damageMult = 1, onHitEffect = null, forceHit = false, minDamageOnHit = 0, fixedDamage = null } = {}) {
           if (!attacker || !target || battleOver) return { resolved: false };
           target.lastAttackerId = attacker.id;
+          if (attacker.faction !== target.faction) {
+            attacker.engaged = true;
+            target.engaged = true;
+          }
           const dist = Math.abs(attacker.x - target.x) + Math.abs(attacker.y - target.y);
           const payload = { unit: attacker, attacker, target, dist, mods: { hit: 0, atk: 0, crit: 0 }, heal: 0, purify: false };
           triggerPerkEvent("attack", payload);
@@ -7405,7 +7420,7 @@
               spawnFloatingText(target.x, target.y, `치유 +${healValue}`, "#9cffb8");
               addLog(`${logPrefix}${attacker.name} -> ${target.name}: 치유 +${healValue}`);
               if (isAbelUnit(attacker)) {
-                console.log(`[VERIFY_HEAL] unit=abel amount=${healValue} target=${target.id}`);
+                console.log(`[VERIFY_HEAL] src=abel target=${target.id} self=${target.id === attacker.id} amount=${healValue} hpAfter=${target.hp}`);
               }
             }
             return { resolved: true, support: true, triText: "보통=" };
