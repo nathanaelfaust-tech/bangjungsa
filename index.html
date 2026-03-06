@@ -5077,6 +5077,7 @@
         function computeMoveRange(unit, moveCapOverride = null) {
           const start = { x: unit.x, y: unit.y };
           const startK = key(start.x, start.y);
+          const zocExtraCost = 2;
           const usesZocPenalty = (unit.faction === "player" && !isKimwearUnit(unit)) || unit.faction === "enemy";
           const moverTeam = unit.faction === "player" ? "ALLY" : (unit.faction === "enemy" ? "ENEMY" : "OTHER");
           const moveCap = moveCapOverride == null ? unit.mov : Math.max(0, Number(moveCapOverride) || 0);
@@ -5137,7 +5138,7 @@
               let nextZocUsed = cur.zocUsed;
               const zocTypes = usesZocPenalty ? zocPressureTypesAt(n.x, n.y, unit.id) : null;
               if (usesZocPenalty && zocTypes && zocTypes.size > 0) {
-                zocAdd = 1;
+                zocAdd = zocExtraCost;
                 nextZocUsed++;
                 for (const zt of zocTypes) zocTypesSeen.add(zt);
               }
@@ -5171,10 +5172,10 @@
           }
           if (unit.faction === "player" && zocTypesSeen.size > 0) {
             const seen = ["enemy", "nyangsan", "ally"].filter((k) => zocTypesSeen.has(k));
-            console.log(`[VERIFY_ZOC] moverTeam=${moverTeam} appliedFrom=${seen.join(",")}`);
+            console.log(`[VERIFY_ZOC] zocExtraCost=2 mover=${unit.id} appliedFrom=${seen.join(",")}`);
           } else if (unit.faction === "enemy" && zocTypesSeen.size > 0) {
             const seen = ["ally"].filter((k) => zocTypesSeen.has(k));
-            console.log(`[VERIFY_ZOC] moverTeam=${moverTeam} appliedFrom=${seen.join(",")}`);
+            console.log(`[VERIFY_ZOC] zocExtraCost=2 mover=${unit.id} appliedFrom=${seen.join(",")}`);
           }
 
           return { dist: bestByPos, cameFrom, reachable, pathEndStateByPos: endStateByPos };
