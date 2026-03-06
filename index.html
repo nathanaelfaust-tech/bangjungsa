@@ -1626,7 +1626,7 @@
         minimapTerrainCache.width = MINI_W;
         minimapTerrainCache.height = MINI_H;
         const miniTerrainCtx = minimapTerrainCache.getContext("2d");
-        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, ready: false, manifest: null };
+        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, portraits: {}, ready: false, manifest: null };
 
         async function loadManifest(season) {
           try {
@@ -1654,7 +1654,7 @@
           ASSETS.ready = false;
           const mj = await loadManifest(season);
           ASSETS.manifest = mj;
-          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, missing: 0 };
+          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, portraits: 0, missing: 0 };
 
           if (!mj) {
             ASSETS.ready = true;
@@ -1662,7 +1662,7 @@
             return;
           }
 
-          for (const group of ["units", "icons", "vfx", "ui"]) {
+          for (const group of ["units", "icons", "vfx", "ui", "portraits"]) {
             ASSETS[group] = {};
             const entries = mj[group] || {};
             for (const k of Object.keys(entries)) {
@@ -1673,7 +1673,7 @@
             }
           }
           ASSETS.ready = true;
-          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} missing=${counts.missing}`);
+          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} portraits=${counts.portraits} missing=${counts.missing}`);
         }
 
         if (!DEV_BUILD) {
@@ -3151,34 +3151,10 @@
           return null;
         }
 
-        function drawUnitAsset(ctx, unit, px, py) {
-          const key = unitAssetKey(unit);
-          const img = key ? ASSETS?.units?.[key] : null;
-          if (!img) return false;
-          const bob = Math.round(Math.sin((renderClock + unit.x * 17 + unit.y * 31) * 0.008));
-          const w = TILE;
-          const h = TILE;
-          const dx = Math.round(px + (TILE - w) * 0.5);
-          const dy = Math.round(py + TILE - h + bob);
-          ctx.save();
-          ctx.imageSmoothingEnabled = false;
-          ctx.drawImage(img, dx, dy, w, h);
-          if (unit?.faction === "player" && unit.acted && phase === PHASE.PLAYER) {
-            ctx.fillStyle = "rgba(0,0,0,0.6)";
-            ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
-            ctx.fillStyle = "#d8e1eb";
-            ctx.font = "8px monospace";
-            ctx.fillText("ACT", px + 3, py + 10);
-          }
-          ctx.restore();
-          return true;
-        }
-
         function drawUnits(ctx) {
           for (const u of units) {
             const px = (u.px != null ? u.px : u.x * TILE);
             const py = (u.py != null ? u.py : u.y * TILE);
-            if (drawUnitAsset(ctx, u, px, py)) continue;
             if (visualSkin === "flat_v1") {
               if (Tier1CharIds.has(u.charId)) drawUnitSD_Tier1(ctx, u, px, py);
               else drawUnitFlat(ctx, u, px, py);
@@ -5111,8 +5087,14 @@
               ? `VS ${opp.name}: HIT ${vs.hitP}%  EVA ${vs.evaP}%`
               : "VS - : HIT -  EVA -";
             console.log(`[VERIFY_VS] unit=${target.id} vs=${opp?.id || "none"} hitP=${vs?.hitP ?? "NA"} evaP=${vs?.evaP ?? "NA"}`);
+            const portraitKey = unitAssetKey(target);
+            const portrait = portraitKey ? ASSETS?.portraits?.[portraitKey] : null;
+            const portraitHtml = portrait
+              ? `<div style="margin:6px 0;"><img src="${escapeHtml(portrait.src)}" alt="${escapeHtml(target.name)}" style="display:block;width:100%;max-width:120px;height:auto;border:1px solid rgba(168,210,255,0.45);border-radius:6px;" /></div>`
+              : "";
             unitInfo.innerHTML =
               `<div><b>${target.name}</b> [${target.faction}]</div>` +
+              portraitHtml +
               `<div class="small">직업: ${escapeHtml(classLabel)}${escapeHtml(role)} | 무기: ${escapeHtml(target.weaponType || "-")}</div>` +
               `<div class="small">HP ${target.hp}/${target.maxHp} | MOV ${target.mov} | ${actedText}</div>` +
               `<div class="small">${escapeHtml(vsText)}</div>` +
@@ -6098,6 +6080,14 @@
         }
 
         function updateDialogPortrait(speakerToken) {
+          const key = unitAssetKey({ id: speakerToken, faction: "player" });
+          const seasonPortrait = key ? ASSETS?.portraits?.[key] : null;
+          if (seasonPortrait) {
+            dialogPortraitImgEl.src = seasonPortrait.src;
+            dialogPortraitImgEl.alt = String(speakerToken || "");
+            dialogPortraitWrapEl.style.display = "block";
+            return;
+          }
           const meta = characterMetaByToken(speakerToken);
           const portraitUrl = meta?.portraitUrl || null;
           if (!portraitUrl) {

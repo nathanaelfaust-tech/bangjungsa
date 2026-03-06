@@ -6,7 +6,7 @@
     "abel": "",
     "kimwear": "",
     "guard": "",
-    "nyangsan": "assets/s1/units/nyangsan_idle.png"
+    "nyangsan": ""
   },
   "icons": {
     "buff": "",
@@ -20,5 +20,13 @@
     "heal": "",
     "jabdori": "",
     "spirit": ""
+  },
+  "portraits": {
+    "hero": "",
+    "jeong2": "",
+    "abel": "",
+    "kimwear": "",
+    "guard": "",
+    "nyangsan": "assets/s1/units/nyangsan_idle.png"
   }
 }
