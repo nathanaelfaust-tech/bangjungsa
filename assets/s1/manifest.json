@@ -1,0 +1,24 @@
+{
+  "season": "s1",
+  "units": {
+    "hero": "",
+    "jeong2": "",
+    "abel": "",
+    "kimwear": "",
+    "guard": "",
+    "nyangsan": ""
+  },
+  "icons": {
+    "buff": "",
+    "immobile": "",
+    "canto": "",
+    "support": "",
+    "react": ""
+  },
+  "vfx": {
+    "hit": "",
+    "heal": "",
+    "jabdori": "",
+    "spirit": ""
+  }
+}
