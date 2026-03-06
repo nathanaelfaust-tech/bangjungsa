@@ -27,6 +27,10 @@
     "abel": "",
     "kimwear": "",
     "guard": "",
-    "nyangsan": "assets/s1/units/nyangsan_idle.png"
+    "nyangsan": {
+      "idle": "assets/s1/units/nyangsan_idle.png",
+      "talk": "assets/s1/units/nyangsan_talk.png",
+      "sleep": "assets/s1/units/nyangsan_sleep.png"
+    }
   }
 }

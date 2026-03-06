@@ -432,6 +432,57 @@
         display: block;
       }
 
+      #dialogBar {
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        display: none;
+        gap: 10px;
+        align-items: flex-end;
+        padding: 10px;
+        border-radius: 16px;
+        background: rgba(15, 15, 20, 0.72);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+        z-index: 25;
+      }
+
+      #dialogCard {
+        flex: 1;
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      #dialogNamePill {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.10);
+        margin-bottom: 6px;
+        font-weight: 700;
+        font-size: 13px;
+      }
+
+      #dialogTextBody {
+        font-size: 14px;
+        line-height: 1.35;
+        max-height: 3.2em;
+        overflow: hidden;
+      }
+
+      #dialogBarNextBtn {
+        margin-top: 8px;
+        padding: 6px 10px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.12);
+        border: 0;
+        color: #e7edf5;
+        cursor: pointer;
+      }
+
       .dialog-content {
         min-width: 0;
         flex: 1;
@@ -686,6 +737,14 @@
         .dialog-portrait {
           width: 72px;
           height: 72px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        #dialogBar {
+          left: 10px;
+          right: 10px;
+          bottom: 10px;
         }
       }
     </style>
@@ -1474,6 +1533,20 @@
           dialogPortraitImgEl.removeAttribute("src");
           dialogPortraitWrapEl.style.display = "none";
         });
+        const dialogBarEl = document.createElement("div");
+        dialogBarEl.id = "dialogBar";
+        dialogBarEl.innerHTML = `<div id="dialogBarPortrait" class="portraitBox"><img id="dialogBarPortraitImg" alt="" /></div>
+          <div id="dialogCard">
+            <div id="dialogNamePill"></div>
+            <div id="dialogTextBody"></div>
+            <button id="dialogBarNextBtn" type="button">다음</button>
+          </div>`;
+        document.body.appendChild(dialogBarEl);
+        const dialogBarPortraitEl = dialogBarEl.querySelector("#dialogBarPortrait");
+        const dialogBarPortraitImgEl = dialogBarEl.querySelector("#dialogBarPortraitImg");
+        const dialogNamePillEl = dialogBarEl.querySelector("#dialogNamePill");
+        const dialogTextBodyEl = dialogBarEl.querySelector("#dialogTextBody");
+        const dialogBarNextBtn = dialogBarEl.querySelector("#dialogBarNextBtn");
         const stageToastEl = document.createElement("div");
         stageToastEl.className = "stage-toast";
         document.body.appendChild(stageToastEl);
@@ -1538,6 +1611,13 @@
         const firedEvents = new Set();
         const inventory = {};
         let activeDialog = null;
+        let dialogState = {
+          open: false,
+          speakerId: "",
+          speakerName: "",
+          face: "idle",
+          text: ""
+        };
         let stageObjectives = [];
         let stageTriggers = [];
         let firedStageTriggers = new Set();
@@ -1683,7 +1763,7 @@
             return;
           }
 
-          for (const group of ["units", "icons", "vfx", "ui", "portraits"]) {
+          for (const group of ["units", "icons", "vfx", "ui"]) {
             ASSETS[group] = {};
             const entries = mj[group] || {};
             for (const k of Object.keys(entries)) {
@@ -1693,8 +1773,27 @@
               if (img) counts[group]++; else counts.missing++;
             }
           }
+          ASSETS.portraits = {};
+          const portraitEntries = mj.portraits || {};
+          for (const k of Object.keys(portraitEntries)) {
+            const entry = portraitEntries[k];
+            if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+              const idle = await preloadImage(entry.idle || "");
+              const talk = await preloadImage(entry.talk || entry.idle || "");
+              const sleep = await preloadImage(entry.sleep || entry.idle || "");
+              ASSETS.portraits[k] = { idle, talk, sleep };
+              if (idle) counts.portraits++; else counts.missing++;
+              if (talk) counts.portraits++; else counts.missing++;
+              if (sleep) counts.portraits++; else counts.missing++;
+            } else {
+              const img = await preloadImage(entry || "");
+              ASSETS.portraits[k] = { idle: img, talk: img, sleep: img };
+              if (img) counts.portraits++; else counts.missing++;
+            }
+          }
           ASSETS.ready = true;
           console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} portraits=${counts.portraits} missing=${counts.missing}`);
+          console.log(`[VERIFY_ASSET] season=${season} portraits=${Object.keys(ASSETS.portraits || {}).length}`);
         }
 
         if (!DEV_BUILD) {
@@ -2802,6 +2901,7 @@
           console.log(`[VERIFY_LOG] autoScroll=${eventLogAutoScroll} scrollTop=${Math.round(st)}`);
         }, { passive: true });
         dialogNextBtn.addEventListener("click", onDialogNext);
+        dialogBarNextBtn.addEventListener("click", onDialogNext);
         tutorialDialogNextBtn.addEventListener("click", onTutorialDialogNext);
         stageSelect.addEventListener("change", () => {
           const option = stageSelect.selectedOptions[0];
@@ -3170,6 +3270,59 @@
           if (id === "nyangsan" || id.includes("냥산")) return "nyangsan";
           if (unit?.faction === "enemy") return "guard";
           return null;
+        }
+
+        function portraitImageByKey(key, face = "idle") {
+          if (!key) return null;
+          const pack = ASSETS?.portraits?.[key];
+          if (!pack) return null;
+          if (pack instanceof Image) return pack;
+          return pack[face] || pack.idle || pack.talk || pack.sleep || null;
+        }
+
+        function portraitImageBySpeakerToken(speakerToken, face = "idle") {
+          const key = unitAssetKey({ id: speakerToken, faction: "player" });
+          return portraitImageByKey(key, face);
+        }
+
+        function renderDialogBar() {
+          if (!dialogBarEl) return;
+          if (!dialogState.open) {
+            dialogBarEl.style.display = "none";
+            return;
+          }
+          dialogBarEl.style.display = "flex";
+          dialogNamePillEl.textContent = dialogState.speakerName || dialogState.speakerId || "";
+          dialogTextBodyEl.textContent = dialogState.text || "";
+          const p = portraitImageBySpeakerToken(dialogState.speakerId, dialogState.face);
+          if (p) {
+            dialogBarPortraitImgEl.src = p.src;
+            dialogBarPortraitImgEl.alt = dialogState.speakerName || dialogState.speakerId || "";
+            dialogBarPortraitEl.style.display = "flex";
+          } else {
+            dialogBarPortraitImgEl.removeAttribute("src");
+            dialogBarPortraitImgEl.alt = "";
+            dialogBarPortraitEl.style.display = "none";
+          }
+          console.log(`[VERIFY_DIALOG] open=${dialogState.open} speaker=${dialogState.speakerId} face=${dialogState.face} hasPortrait=${!!p}`);
+        }
+
+        function showDialog(speakerId, speakerName, text, face = "talk") {
+          dialogState.open = true;
+          dialogState.speakerId = String(speakerId || "");
+          dialogState.speakerName = String(speakerName || speakerId || "");
+          dialogState.face = face || "talk";
+          dialogState.text = String(text || "");
+          renderDialogBar();
+        }
+
+        function closeDialog() {
+          dialogState.open = false;
+          dialogState.speakerId = "";
+          dialogState.speakerName = "";
+          dialogState.face = "idle";
+          dialogState.text = "";
+          renderDialogBar();
         }
 
         function drawUnits(ctx) {
@@ -5109,7 +5262,7 @@
               : "VS - : HIT -  EVA -";
             console.log(`[VERIFY_VS] unit=${target.id} vs=${opp?.id || "none"} hitP=${vs?.hitP ?? "NA"} evaP=${vs?.evaP ?? "NA"}`);
             const portraitKey = unitAssetKey(target);
-            const portrait = portraitKey ? ASSETS?.portraits?.[portraitKey] : null;
+            const portrait = portraitImageByKey(portraitKey, "idle");
             const portraitHtml = portrait
               ? `<div class="portraitBox"><img src="${escapeHtml(portrait.src)}" alt="${escapeHtml(target.name)}" /></div>`
               : "";
@@ -6100,9 +6253,8 @@
           else if (effect.type === "openDoor") openDoorTag(effect.doorTag || effect.doorId);
         }
 
-        function updateDialogPortrait(speakerToken) {
-          const key = unitAssetKey({ id: speakerToken, faction: "player" });
-          const seasonPortrait = key ? ASSETS?.portraits?.[key] : null;
+        function updateDialogPortrait(speakerToken, face = "talk") {
+          const seasonPortrait = portraitImageBySpeakerToken(speakerToken, face);
           if (seasonPortrait) {
             dialogPortraitImgEl.src = seasonPortrait.src;
             dialogPortraitImgEl.alt = String(speakerToken || "");
@@ -6140,12 +6292,13 @@
           return new Promise((resolve) => {
             const textLines = normalizeDialogueLines(speakers || [], lines);
             if (!textLines.length) textLines.push({ text: "...", speaker: speakers?.[0] || "" });
-            activeDialog = { speakers: (speakers || []).join(" ↔ "), lines: textLines, index: 0, resolve };
+            activeDialog = { speakers: (speakers || []).join(" ↔ "), lines: textLines, index: 0, resolve, speakerName: (speakers || [])[0] || "" };
             dialogSpeakersEl.textContent = activeDialog.speakers;
             dialogLineEl.textContent = activeDialog.lines[0].text;
             updateDialogPortrait(activeDialog.lines[0].speaker);
+            showDialog(activeDialog.lines[0].speaker, activeDialog.lines[0].speaker || activeDialog.speakerName, activeDialog.lines[0].text, "talk");
             dialogNextBtn.textContent = activeDialog.lines.length > 1 ? "다음" : "닫기";
-            dialogOverlay.classList.add("show");
+            dialogOverlay.classList.remove("show");
           });
         }
 
@@ -6154,6 +6307,7 @@
           const done = activeDialog.resolve;
           activeDialog = null;
           dialogOverlay.classList.remove("show");
+          closeDialog();
           dialogPortraitWrapEl.style.display = "none";
           dialogPortraitImgEl.removeAttribute("src");
           dialogPortraitImgEl.alt = "";
@@ -6169,6 +6323,12 @@
           }
           dialogLineEl.textContent = activeDialog.lines[activeDialog.index].text;
           updateDialogPortrait(activeDialog.lines[activeDialog.index].speaker);
+          showDialog(
+            activeDialog.lines[activeDialog.index].speaker,
+            activeDialog.lines[activeDialog.index].speaker || activeDialog.speakerName,
+            activeDialog.lines[activeDialog.index].text,
+            "talk"
+          );
           dialogNextBtn.textContent = activeDialog.index >= activeDialog.lines.length - 1 ? "닫기" : "다음";
         }
 
@@ -6702,6 +6862,7 @@
           closeCommandMenu();
           dialogOverlay.classList.remove("show");
           activeDialog = null;
+          closeDialog();
           followSelected = false;
           camera.xPx = 0;
           camera.yPx = 0;
