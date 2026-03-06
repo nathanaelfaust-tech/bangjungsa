@@ -5009,10 +5009,17 @@
                 }
               }
             }
+            const opp = pickOpponent(target);
+            const vs = computeVsHitEva(target, opp);
+            const vsText = opp && vs
+              ? `VS ${opp.name}: HIT ${vs.hitP}%  EVA ${vs.evaP}%`
+              : "VS - : HIT -  EVA -";
+            console.log(`[VERIFY_VS] unit=${target.id} vs=${opp?.id || "none"} hitP=${vs?.hitP ?? "NA"} evaP=${vs?.evaP ?? "NA"}`);
             unitInfo.innerHTML =
               `<div><b>${target.name}</b> [${target.faction}]</div>` +
               `<div class="small">직업: ${escapeHtml(classLabel)}${escapeHtml(role)} | 무기: ${escapeHtml(target.weaponType || "-")}</div>` +
               `<div class="small">HP ${target.hp}/${target.maxHp} | MOV ${target.mov} | ${actedText}</div>` +
+              `<div class="small">${escapeHtml(vsText)}</div>` +
               `<div class="small">Active: ${escapeHtml(activeText)}</div>` +
               `<div class="small" title="${escapeHtml(passiveText)}">Passive: ${escapeHtml(passiveText)}</div>` +
               extraLine;
@@ -5029,6 +5036,34 @@
             if (visualSkin === "flat_v1") hpFill.style.background = FLAT_PALETTE.hpGreen;
             else hpFill.style.background = "";
           }
+        }
+
+        function pickOpponent(defender) {
+          if (!defender) return null;
+          if (defender.lastAttackerId) {
+            const last = unitById(defender.lastAttackerId);
+            if (last && last.hp > 0) return last;
+          }
+          let best = null;
+          let bestDist = Infinity;
+          for (const u of units) {
+            if (u.faction === defender.faction || u.hp <= 0) continue;
+            const d = Math.abs(defender.x - u.x) + Math.abs(defender.y - u.y);
+            if (d < bestDist) {
+              best = u;
+              bestDist = d;
+            }
+          }
+          return best;
+        }
+
+        function computeVsHitEva(defender, opponent) {
+          if (!defender || !opponent) return null;
+          const tri = triangleResult(opponent, defender);
+          const hitP = Math.max(0, Math.min(100, Math.round(
+            statWithEffects(opponent, "hit") + tri.hit + (opponent.nextAttackBonus?.hit || 0) - kimwearEvasionBonus(defender)
+          )));
+          return { hitP, evaP: Math.max(0, Math.min(100, 100 - hitP)) };
         }
 
         function computeMoveRange(unit, moveCapOverride = null) {
@@ -7351,6 +7386,7 @@
 
         async function resolveAttack(attacker, target, { actionMode = "attack", contextTag = "normal", logPrefix = "", damageMult = 1, onHitEffect = null, forceHit = false, minDamageOnHit = 0, fixedDamage = null } = {}) {
           if (!attacker || !target || battleOver) return { resolved: false };
+          target.lastAttackerId = attacker.id;
           const dist = Math.abs(attacker.x - target.x) + Math.abs(attacker.y - target.y);
           const payload = { unit: attacker, attacker, target, dist, mods: { hit: 0, atk: 0, crit: 0 }, heal: 0, purify: false };
           triggerPerkEvent("attack", payload);
