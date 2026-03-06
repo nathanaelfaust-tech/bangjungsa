@@ -412,9 +412,9 @@
       }
 
       .portraitBox {
-        width: clamp(96px, 12vw, 128px);
-        aspect-ratio: 1 / 1;
-        border-radius: 10px;
+        width: clamp(140px, 18vw, 200px);
+        aspect-ratio: 4 / 5;
+        border-radius: 14px;
         overflow: hidden;
         background: rgba(255, 255, 255, 0.04);
         display: flex;
@@ -430,6 +430,12 @@
         object-fit: contain;
         image-rendering: auto;
         display: block;
+      }
+
+      .unitInfoSection {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
       }
 
       #dialogBar {
@@ -5274,14 +5280,16 @@
               ? `<div class="portraitBox"><img src="${escapeHtml(portrait.src)}" alt="${escapeHtml(target.name)}" /></div>`
               : "";
             unitInfo.innerHTML =
-              `<div><b>${target.name}</b> [${target.faction}]</div>` +
+              `<div class="unitInfoSection">` +
               portraitHtml +
+              `<div><b>${target.name}</b> [${target.faction}]</div>` +
               `<div class="small">직업: ${escapeHtml(classLabel)}${escapeHtml(role)} | 무기: ${escapeHtml(target.weaponType || "-")}</div>` +
               `<div class="small">HP ${target.hp}/${target.maxHp} | MOV ${target.mov} | ${actedText}</div>` +
               `<div class="small">${escapeHtml(vsText)}</div>` +
               `<div class="small">Active: ${escapeHtml(activeText)}</div>` +
               `<div class="small" title="${escapeHtml(passiveText)}">Passive: ${escapeHtml(passiveText)}</div>` +
-              extraLine;
+              extraLine +
+              `</div>`;
             hpFill.style.width = `${(target.hp / target.maxHp) * 100}%`;
             if (visualSkin === "flat_v1") {
               const ratio = target.maxHp > 0 ? target.hp / target.maxHp : 0;
