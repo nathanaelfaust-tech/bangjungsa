@@ -1626,6 +1626,55 @@
         minimapTerrainCache.width = MINI_W;
         minimapTerrainCache.height = MINI_H;
         const miniTerrainCtx = minimapTerrainCache.getContext("2d");
+        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, ready: false, manifest: null };
+
+        async function loadManifest(season) {
+          try {
+            const res = await fetch(`assets/${season}/manifest.json`, { cache: "no-store" });
+            if (!res.ok) throw new Error("manifest http " + res.status);
+            return await res.json();
+          } catch (e) {
+            console.log("[VERIFY_ASSET] manifest load FAIL", e);
+            return null;
+          }
+        }
+
+        function preloadImage(url) {
+          return new Promise((resolve) => {
+            if (!url) return resolve(null);
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = url;
+          });
+        }
+
+        async function loadAssetsForSeason(season = "s1") {
+          ASSETS.season = season;
+          ASSETS.ready = false;
+          const mj = await loadManifest(season);
+          ASSETS.manifest = mj;
+          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, missing: 0 };
+
+          if (!mj) {
+            ASSETS.ready = true;
+            console.log(`[VERIFY_ASSET] season=${season} ready=true manifest=null`);
+            return;
+          }
+
+          for (const group of ["units", "icons", "vfx", "ui"]) {
+            ASSETS[group] = {};
+            const entries = mj[group] || {};
+            for (const k of Object.keys(entries)) {
+              const url = entries[k];
+              const img = await preloadImage(url);
+              ASSETS[group][k] = img;
+              if (img) counts[group]++; else counts.missing++;
+            }
+          }
+          ASSETS.ready = true;
+          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} missing=${counts.missing}`);
+        }
 
         if (!DEV_BUILD) {
           devMode = false;
@@ -2658,6 +2707,7 @@
         }
 
         loadVisualSkin();
+        loadAssetsForSeason("s1");
         initializeCampaignSystem();
         ensureDevMenuOverlay();
         updateDevStatusLabel();
@@ -3090,10 +3140,45 @@
           }
         }
 
+        function unitAssetKey(unit) {
+          const id = String(unit?.id || "").toLowerCase();
+          if (id === "hero" || id.includes("뉴비리더")) return "hero";
+          if (id === "jeong2" || id === "정2") return "jeong2";
+          if (id === "abel" || id === "애블") return "abel";
+          if (id === "kimwear" || id === "김웨어") return "kimwear";
+          if (id === "nyangsan" || id.includes("냥산")) return "nyangsan";
+          if (unit?.faction === "enemy") return "guard";
+          return null;
+        }
+
+        function drawUnitAsset(ctx, unit, px, py) {
+          const key = unitAssetKey(unit);
+          const img = key ? ASSETS?.units?.[key] : null;
+          if (!img) return false;
+          const bob = Math.round(Math.sin((renderClock + unit.x * 17 + unit.y * 31) * 0.008));
+          const w = TILE;
+          const h = TILE;
+          const dx = Math.round(px + (TILE - w) * 0.5);
+          const dy = Math.round(py + TILE - h + bob);
+          ctx.save();
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(img, dx, dy, w, h);
+          if (unit?.faction === "player" && unit.acted && phase === PHASE.PLAYER) {
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+            ctx.fillStyle = "#d8e1eb";
+            ctx.font = "8px monospace";
+            ctx.fillText("ACT", px + 3, py + 10);
+          }
+          ctx.restore();
+          return true;
+        }
+
         function drawUnits(ctx) {
           for (const u of units) {
             const px = (u.px != null ? u.px : u.x * TILE);
             const py = (u.py != null ? u.py : u.y * TILE);
+            if (drawUnitAsset(ctx, u, px, py)) continue;
             if (visualSkin === "flat_v1") {
               if (Tier1CharIds.has(u.charId)) drawUnitSD_Tier1(ctx, u, px, py);
               else drawUnitFlat(ctx, u, px, py);
