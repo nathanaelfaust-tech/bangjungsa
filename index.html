@@ -3977,6 +3977,7 @@
           const u = unitById(commandMenuUnitId);
           if (!u) return;
           normalizeUnitSkillContract(u);
+          u.actionMode = "BASIC";
           const mode = basicCommandMode(u);
           if (!canUseAttackNow(mode)) {
             nudgeTutorial("지금은 공격할 단계가 아니구여");
@@ -3997,12 +3998,21 @@
           const u = unitById(commandMenuUnitId);
           if (!u) return;
           normalizeUnitSkillContract(u);
+          u.actionMode = "SKILL";
+          if (isAbelUnit(u)) {
+            selectedUnitId = u.id;
+            moveRange = computeMoveRange(u, moveCapForSelection(u));
+          }
           const sid = getUnitActiveSkillId(u);
-          if (!sid) return;
+          if (!sid) {
+            u.actionMode = "MOVE";
+            return;
+          }
           const cdNow = u.skillCooldowns?.[sid] || 0;
           if (cdNow > 0) {
             addLog(`스킬 쿨다운 ${cdNow}턴`);
             console.log(`[VERIFY_SKILL] unit=${u.id} skill=${u.activeSkill?.name || "none"} cdNow=${cdNow} target=none`);
+            u.actionMode = "MOVE";
             return;
           }
           const mode = activeSkillMode(u);
@@ -4021,6 +4031,11 @@
           const targetFaction = getCommandTargetFaction(u, mode);
           if (getAttackTargets(u, targetFaction, mode).length === 0) {
             addLog(targetFaction === u.faction ? "사거리 내 아군이 없음" : "사거리 내 적이 없음");
+          }
+          if (isAbelUnit(u)) {
+            const showHealRange = !(u.attackMode === "heal" && u.actionMode === "SKILL");
+            const showMoveRange = !!(moveRange && selectedUnitId === u.id);
+            console.log(`[VERIFY_OVERLAY] unit=abel actionMode=${u.actionMode} showHealRange=${showHealRange} showMoveRange=${showMoveRange}`);
           }
         }
 
@@ -4201,6 +4216,7 @@
           }
           u.endedTurn = true;
           if (isAbelUnit(u)) u.activeSkillDisabledThisTurn = true;
+          u.actionMode = "MOVE";
           triggerPerkEvent("wait", { unit: u });
           finalizePlayerAction(u);
         }
@@ -4427,6 +4443,8 @@
 
         function cancelTargetingToMenu() {
           if (!targetingUnitId) return;
+          const u = unitById(targetingUnitId);
+          if (u) u.actionMode = "MOVE";
           targetingUnitId = null;
           targetingMode = null;
           refreshRangePreview(true);
@@ -4446,6 +4464,7 @@
               unit.cantoGrantedThisTurn = true;
               unit.cantoMoveRemaining = remain;
               unit.actionState = "canto_ready";
+              unit.actionMode = "MOVE";
               selectedUnitId = unit.id;
               moveRange = computeMoveRange(unit, remain);
               refreshRangePreview(true);
@@ -4457,6 +4476,7 @@
           pendingActionUnitId = null;
           unit.acted = true;
           unit.actionState = "committed";
+          unit.actionMode = "MOVE";
           unit.preMove = null;
           unit.canCanto = false;
           unit.cantoMoveRemaining = 0;
@@ -4852,6 +4872,7 @@
             p.acted = p.controllable === false;
             p.movedThisTurn = false;
             p.actionState = "idle";
+            p.actionMode = "MOVE";
             p.preMove = null;
             p.endedTurn = false;
             p.activeSkillDisabledThisTurn = false;
@@ -5471,6 +5492,10 @@
         }
 
         function commandRangeForMode(attacker, mode = "attack") {
+          if (mode === "heal" && isAbelUnit(attacker)) {
+            const maxR = attacker.maxRange ?? (attacker.atkRange || 1);
+            return { min: 0, max: maxR };
+          }
           if (mode === "strike") return { min: 1, max: 1 };
           if (mode === "sniper_long") return { min: 2, max: 5 };
           if (mode === "jeong2_jabdori") return { min: 3, max: 5 };
@@ -5565,8 +5590,13 @@
           return phase === PHASE.PLAYER && !!selectedUnit() && !targetingUnitId && !inputLocked;
         }
 
+        function shouldShowHealRangeOverlay(unit) {
+          return !(isAbelUnit(unit) && unit.attackMode === "heal" && unit.actionMode === "SKILL");
+        }
+
         function buildRangePreview(unit) {
           const mode = basicCommandMode(unit);
+          if (mode === "heal" && !shouldShowHealRangeOverlay(unit)) return null;
           const cfg = targetingConfig(unit, mode, true);
           const cells = [];
           for (let y = 0; y < MAP_H; y++) {
@@ -5603,6 +5633,11 @@
             return;
           }
           rangePreview = buildRangePreview(unit);
+          if (isAbelUnit(unit)) {
+            const showHealRange = !!rangePreview && basicCommandMode(unit) === "heal";
+            const showMoveRange = !!(moveRange && selectedUnitId === unit.id);
+            console.log(`[VERIFY_OVERLAY] unit=abel actionMode=${unit.actionMode || "MOVE"} showHealRange=${showHealRange} showMoveRange=${showMoveRange}`);
+          }
         }
 
         function canUndoMovedUnit(unit) {
@@ -7024,6 +7059,7 @@
           unit.moveSpentThisTurn = Number(unit.moveSpentThisTurn) || 0;
           unit.cantoMoveRemaining = Number(unit.cantoMoveRemaining) || 0;
           unit.cantoGrantedThisTurn = !!unit.cantoGrantedThisTurn;
+          unit.actionMode = unit.actionMode || "MOVE";
           unit.endedTurn = !!unit.endedTurn;
           unit.activeSkillDisabledThisTurn = !!unit.activeSkillDisabledThisTurn;
           unit.canCanto = !!unit.canCanto;
