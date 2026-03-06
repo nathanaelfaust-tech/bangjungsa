@@ -1798,7 +1798,7 @@
           SK_STRIKE_BASIC: { uiName: "공격" },
           SK_STRIKE: { uiName: "공격" },
           SK_ATTACK: { uiName: "공격" },
-          SK_NEWBIE_SPIRIT: { uiName: "스킬", desc: "3턴 동안 공격/방어 상승", type: "SELF_BUFF", cooldown: 2 },
+          SK_NEWBIE_SPIRIT: { uiName: "뉴비의 패기", desc: "3턴 동안 공격/방어 상승", type: "SELF_BUFF", cooldown: 5 },
           SK_JEONG2_JABDORI: { uiName: "스킬", desc: "사거리 3~5 필중 + 1턴 이동불가", type: "SPECIAL_ATTACK", cooldown: 2 },
           SK_ABEL_REACT: { uiName: "스킬", desc: "아군 즉시 재행동", type: "SUPPORT", cooldown: 2 },
           SK_KIMWEAR_FLU: { uiName: "스킬", desc: "다음 적턴 회피 대폭 상승", type: "SELF_BUFF", cooldown: 2 },
@@ -3646,7 +3646,6 @@
             refreshRangePreview(true);
             triggerPerkEvent("select", { unit: u });
             emitBubble(u, "select");
-            console.log(`[VERIFY_UI] hasAttack=true hasSkillBtn=${hasSeparateActiveSkill(u)}`);
             return;
           }
 
@@ -3903,15 +3902,17 @@
           normalizeUnitSkillContract(unit);
           const sid = getUnitActiveSkillId(unit);
           cmdAttackBtn.style.display = "inline-block";
-          cmdAttackBtn.textContent = "공격";
           const basicMode = basicCommandMode(unit);
+          const attackLabel = basicMode === "heal" ? "치유" : "공격";
+          cmdAttackBtn.textContent = attackLabel;
           cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, basicMode), basicMode).length === 0;
           const hasSkillBtn = hasSeparateActiveSkill(unit);
           cmdSkillBtn.style.display = hasSkillBtn ? "inline-block" : "none";
           cmdSkillBtn.disabled = false;
           if (hasSkillBtn) {
             const cd = unit.skillCooldowns?.[sid] || 0;
-            cmdSkillBtn.textContent = cd > 0 ? `스킬 CD:${cd}` : "스킬";
+            const skillLabel = unit.activeSkill?.name || getActiveSkillUiName(unit) || "스킬";
+            cmdSkillBtn.textContent = cd > 0 ? `${skillLabel} CD:${cd}` : skillLabel;
             const skillMode = activeSkillMode(unit);
             if (!skillMode) cmdSkillBtn.disabled = cd > 0;
             else cmdSkillBtn.disabled = cd > 0 || getAttackTargets(unit, getCommandTargetFaction(unit, skillMode), skillMode).length === 0;
@@ -3919,6 +3920,7 @@
             cmdSkillBtn.textContent = "스킬";
             cmdSkillBtn.disabled = true;
           }
+          console.log(`[VERIFY_UI] unit=${unit.id} attackMode=${unit.attackMode || "attack"} attackLabel=${attackLabel} skillLabel=${unit.activeSkill?.name || "none"}`);
           cmdHeroBoltBtn.style.display = "none";
           cmdHeroDashBtn.style.display = "none";
           cmdHeroArcBtn.style.display = "none";
@@ -4001,6 +4003,10 @@
           unit.skillCooldowns = unit.skillCooldowns || {};
           const cd = Number(SkillCatalog[sid]?.cooldown || 0);
           unit.skillCooldowns[sid] = Math.max(0, cd);
+          if (unit.activeSkill && unit.activeSkill.id === sid) {
+            unit.activeSkill.cdMax = cd;
+            unit.activeSkill.cdNow = unit.skillCooldowns[sid];
+          }
         }
 
         function upsertTimedEntry(list, entry, key = "id") {
@@ -4026,6 +4032,7 @@
             upsertTimedEntry(user.buffs, { id: "NEWBIE_SPIRIT", turns: 3, atkDelta: 2, defDelta: 2 });
             setSkillCooldown(user, sid);
             console.log(`[VERIFY_BUFF] unit=hero buff=NEWBIE_SPIRIT turns=3`);
+            console.log(`[VERIFY_CD] unit=hero skill=뉴비의 패기 cdNow=${user.skillCooldowns[sid] || 0} cdMax=5`);
             console.log(`[VERIFY_SKILL] unit=${user.id} skill=${user.activeSkill?.name || "none"} cdNow=${user.skillCooldowns[sid] || 0} target=none`);
             return true;
           }
@@ -4401,7 +4408,8 @@
         function finalizePlayerAction(unit) {
           if (isAbelUnit(unit) && unit.passivePerk?.id === "PK_ABEL_CANTO" && !unit.canCanto && !unit.cantoGrantedThisTurn) {
             const remain = Math.max(0, (Number(unit.mov) || 0) - (Number(unit.moveSpentThisTurn) || 0));
-            console.log(`[VERIFY_CANTO] unit=abel remainingMove=${remain}`);
+            const canMove = remain > 0;
+            console.log(`[VERIFY_CANTO] unit=abel afterAction=true moveRemaining=${remain} canMove=${canMove}`);
             if (remain > 0) {
               closeCommandMenu();
               pendingActionUnitId = null;
@@ -4434,7 +4442,18 @@
 
         async function executePlayerMove(unit, path) {
           inputLocked = true;
-          if (path.length > 1 && consumeImmobileOnMoveAttempt(unit)) {
+          let effectivePath = Array.isArray(path) ? path.slice() : [{ x: unit.x, y: unit.y }];
+          let endOnAlly = false;
+          while (effectivePath.length > 1) {
+            const last = effectivePath[effectivePath.length - 1];
+            const occ = getUnitAt(last.x, last.y);
+            if (!occ || occ.id === unit.id || occ.faction !== unit.faction) break;
+            endOnAlly = true;
+            effectivePath.pop();
+          }
+          const pathLen = effectivePath.length;
+          console.log(`[VERIFY_MOVE] unit=${unit.id} pathLen=${pathLen} passThroughAllies=true endOnAlly=${endOnAlly}`);
+          if (effectivePath.length > 1 && consumeImmobileOnMoveAttempt(unit)) {
             addLog(`${unit.name} 이동 불가(이동봉쇄)`);
             pendingActionUnitId = unit.id;
             selectedUnitId = unit.id;
@@ -4448,12 +4467,12 @@
           if (!unit.preMove) {
             unit.preMove = { x0: unit.x, y0: unit.y, px0: unit.px, py0: unit.py, hadMoved: !!unit.movedThisTurn };
           }
-          unit.movedThisTurn = path.length > 1;
-          unit.moveSpentThisTurn = (Number(unit.moveSpentThisTurn) || 0) + estimatePathCost(unit, path);
+          unit.movedThisTurn = effectivePath.length > 1;
+          unit.moveSpentThisTurn = (Number(unit.moveSpentThisTurn) || 0) + estimatePathCost(unit, effectivePath);
 
-          if (path.length > 1) {
-            await animateUnitAlongPath(unit, path);
-            addLog(`${unit.name} 이동: (${path[path.length - 1].x},${path[path.length - 1].y})`);
+          if (effectivePath.length > 1) {
+            await animateUnitAlongPath(unit, effectivePath);
+            addLog(`${unit.name} 이동: (${effectivePath[effectivePath.length - 1].x},${effectivePath[effectivePath.length - 1].y})`);
             emitUnitEnterTile(unit);
             if (isStg1TutorialStage() && stg1TutorialState.active) {
               const rec = stg1TutorialState.recommendedMoveTile;
@@ -4724,6 +4743,11 @@
             for (const sid of Object.keys(p.skillCooldowns)) {
               p.skillCooldowns[sid] = Math.max(0, (p.skillCooldowns[sid] || 0) - 1);
             }
+            if (p.activeSkill && p.activeSkill.id) {
+              const sid = p.activeSkill.id;
+              p.activeSkill.cdMax = Number(SkillCatalog[sid]?.cooldown || p.activeSkill.cdMax || 0);
+              p.activeSkill.cdNow = Math.max(0, p.skillCooldowns[sid] || 0);
+            }
             p.statuses = p.statuses.filter((st) => (Number(st?.turns) || 0) > 0);
             if (isHeroUnit(p)) {
               let turnsLeft = 0;
@@ -4735,6 +4759,7 @@
                 return nextTurns > 0;
               });
               if (turnsLeft > 0) console.log(`[VERIFY_BUFF] unit=hero buff=NEWBIE_SPIRIT turns=${turnsLeft}`);
+              console.log(`[VERIFY_CD] unit=hero skill=뉴비의 패기 cdNow=${p.activeSkill?.cdNow || 0} cdMax=5`);
             }
             if (isKimwearUnit(p)) {
               p.buffs = p.buffs.filter((b) => {
@@ -4907,7 +4932,9 @@
 
             for (const n of neighbors(cur.x, cur.y)) {
               if (!inBounds(n.x, n.y)) continue;
-              if (isOccupied(n.x, n.y, unit.id)) continue;
+              const occ = getUnitAt(n.x, n.y);
+              const passThroughAlly = !!(occ && occ.id !== unit.id && unit.faction === "player" && occ.faction === unit.faction);
+              if (occ && occ.id !== unit.id && !passThroughAlly) continue;
 
               const stepBase = terrainAt(n.x, n.y).moveCost;
               let zocAdd = 0;
@@ -4939,9 +4966,12 @@
           const reachable = new Map();
           for (const [pk, c] of bestByPos.entries()) {
             const [x, y] = parseKey(pk);
-            if ((x === start.x && y === start.y) || !isOccupied(x, y, unit.id)) {
+            if (x === start.x && y === start.y) {
               reachable.set(pk, c);
+              continue;
             }
+            const occ = getUnitAt(x, y);
+            if (!occ || occ.id === unit.id) reachable.set(pk, c);
           }
           if (DEV_BUILD && unit.faction === "player" && zocTypesSeen.size > 0) {
             const seen = ["enemy", "nyangsan"].filter((k) => zocTypesSeen.has(k)).join("/");
@@ -5166,6 +5196,8 @@
           if (isHeroUnit(unit)) {
             unit.activeSkill = { id: "SK_NEWBIE_SPIRIT", type: "SELF_BUFF", name: "뉴비의 패기", dmgMult: 0 };
             unit.activeSkillId = "SK_NEWBIE_SPIRIT";
+            unit.activeSkill.cdMax = 5;
+            unit.activeSkill.cdNow = Math.max(0, unit.skillCooldowns?.SK_NEWBIE_SPIRIT || 0);
             unit.passivePerk = { id: "PK_HERO_NEWBIE_PERK", name: "뉴비 특혜 1회" };
             unit.attackMode = "attack";
             unit.newbiePerkUsed = !!unit.newbiePerkUsed;
@@ -5179,6 +5211,13 @@
             unit.skillCooldowns = unit.skillCooldowns || {};
             unit.rangeMin = unit.rangeMin ?? unit.minRange ?? 2;
             unit.rangeMax = unit.rangeMax ?? unit.maxRange ?? 2;
+            if (!unit.jeong2RangeBuffApplied) {
+              unit.rangeMax = unit.rangeMax + 1;
+              unit.jeong2RangeBuffApplied = true;
+            }
+            unit.minRange = unit.rangeMin;
+            unit.maxRange = unit.rangeMax;
+            console.log(`[VERIFY_RANGE] unit=jeong2 basicRange=${unit.rangeMin}-${unit.rangeMax}`);
           } else if (isAbelUnit(unit)) {
             unit.activeSkillId = "SK_ABEL_REACT";
             unit.activeSkill = { id: "SK_ABEL_REACT", type: "SUPPORT", name: "재행동", dmgMult: 0 };
@@ -7083,7 +7122,8 @@
           if (isHeroUnit(target) && !target.newbiePerkUsed && dmg > 0) {
             dmg = 0;
             target.newbiePerkUsed = true;
-            console.log("[VERIFY_PASSIVE] unit=hero passive=뉴비 특혜 1회 consumed=true");
+            spawnFloatingText(target.x, target.y, "뉴비 특혜!", "#ffeaa7");
+            console.log(`[VERIFY_PASSIVE] unit=hero passive=뉴비 특혜 1회 consumed=${target.newbiePerkUsed} dmgAfter=${dmg}`);
           }
           if (crit) dmg *= 2;
           dmg = Math.max(0, Math.round(dmg));
@@ -7215,14 +7255,13 @@
           if (jung2.id === attacker.id) return;
           const liveTarget = unitById(target.id);
           if (!liveTarget || liveTarget.hp <= 0) return;
-          const supportMode = "jeong2_jabdori";
-          const inRange = isInAttackRange(jung2, liveTarget.x, liveTarget.y, supportMode);
+          const inRangeBasic = isTargetValidForMode(jung2, liveTarget, "attack");
           const tri = triangleResult(jung2, liveTarget);
           const base = (statWithEffects(jung2, "atk") + tri.atk + (jung2.nextAttackBonus?.atk || 0)) - statWithEffects(liveTarget, "def");
           const raw = Math.round(Math.max(0, base) * 0.25);
           const final = raw > 0 ? Math.max(2, raw) : 0;
-          console.log(`[VERIFY_SUPPORT] src=jeong2 target=${liveTarget.id} inRange=${inRange} raw=${raw} final=${final}`);
-          if (!inRange || final <= 0) return;
+          console.log(`[VERIFY_SUPPORT] src=jeong2 target=${liveTarget.id} inRangeBasic=${inRangeBasic} basicRange=${jung2.rangeMin}-${jung2.rangeMax} final=${final}`);
+          if (!inRangeBasic || final <= 0) return;
           await resolveAttack(jung2, liveTarget, {
             actionMode: "attack",
             contextTag: "support_shot",
