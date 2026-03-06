@@ -1778,16 +1778,20 @@
           for (const k of Object.keys(portraitEntries)) {
             const entry = portraitEntries[k];
             if (entry && typeof entry === "object" && !Array.isArray(entry)) {
-              const idle = await preloadImage(entry.idle || "");
-              const talk = await preloadImage(entry.talk || entry.idle || "");
-              const sleep = await preloadImage(entry.sleep || entry.idle || "");
-              ASSETS.portraits[k] = { idle, talk, sleep };
-              if (idle) counts.portraits++; else counts.missing++;
-              if (talk) counts.portraits++; else counts.missing++;
-              if (sleep) counts.portraits++; else counts.missing++;
+              const pack = {};
+              for (const sk of Object.keys(entry)) {
+                const img = await preloadImage(entry[sk] || "");
+                pack[sk] = img;
+                if (img) counts.portraits++; else counts.missing++;
+              }
+              const idle = pack.idle || null;
+              if (!pack.talk) pack.talk = idle;
+              if (!pack.sleep) pack.sleep = idle;
+              if (!pack.card) pack.card = idle;
+              ASSETS.portraits[k] = pack;
             } else {
               const img = await preloadImage(entry || "");
-              ASSETS.portraits[k] = { idle: img, talk: img, sleep: img };
+              ASSETS.portraits[k] = { card: img, idle: img, talk: img, sleep: img };
               if (img) counts.portraits++; else counts.missing++;
             }
           }
@@ -3272,17 +3276,20 @@
           return null;
         }
 
-        function portraitImageByKey(key, face = "idle") {
+        function portraitImageByKey(key, face = "idle", idForLog = null) {
           if (!key) return null;
           const pack = ASSETS?.portraits?.[key];
           if (!pack) return null;
-          if (pack instanceof Image) return pack;
-          return pack[face] || pack.idle || pack.talk || pack.sleep || null;
+          const p = (pack instanceof Image)
+            ? pack
+            : (pack.card || pack[face] || pack.idle || pack.talk || pack.sleep || null);
+          console.log(`[VERIFY_PORTRAIT_PICK] id=${idForLog || key} face=${face} picked=${p ? "img" : "none"} prefer=card`);
+          return p;
         }
 
         function portraitImageBySpeakerToken(speakerToken, face = "idle") {
           const key = unitAssetKey({ id: speakerToken, faction: "player" });
-          return portraitImageByKey(key, face);
+          return portraitImageByKey(key, face, speakerToken);
         }
 
         function renderDialogBar() {
@@ -5262,7 +5269,7 @@
               : "VS - : HIT -  EVA -";
             console.log(`[VERIFY_VS] unit=${target.id} vs=${opp?.id || "none"} hitP=${vs?.hitP ?? "NA"} evaP=${vs?.evaP ?? "NA"}`);
             const portraitKey = unitAssetKey(target);
-            const portrait = portraitImageByKey(portraitKey, "idle");
+            const portrait = portraitImageByKey(portraitKey, "idle", target.id);
             const portraitHtml = portrait
               ? `<div class="portraitBox"><img src="${escapeHtml(portrait.src)}" alt="${escapeHtml(target.name)}" /></div>`
               : "";
