@@ -3928,7 +3928,8 @@
           const attackLabel = basicMode === "heal" ? "치유" : "공격";
           cmdAttackBtn.textContent = attackLabel;
           cmdAttackBtn.disabled = getAttackTargets(unit, getCommandTargetFaction(unit, basicMode), basicMode).length === 0;
-          const hasSkillBtn = hasSeparateActiveSkill(unit);
+          const abelSkillLocked = isAbelUnit(unit) && (unit.endedTurn || unit.activeSkillDisabledThisTurn);
+          const hasSkillBtn = hasSeparateActiveSkill(unit) && !abelSkillLocked;
           cmdSkillBtn.style.display = hasSkillBtn ? "inline-block" : "none";
           cmdSkillBtn.disabled = false;
           if (hasSkillBtn) {
@@ -3943,6 +3944,9 @@
             cmdSkillBtn.disabled = true;
           }
           console.log(`[VERIFY_UI] unit=${unit.id} attackMode=${unit.attackMode || "attack"} attackLabel=${attackLabel} skillLabel=${unit.activeSkill?.name || "none"}`);
+          if (isAbelUnit(unit)) {
+            console.log(`[VERIFY_UI] unit=abel endedTurn=${!!unit.endedTurn} hasSkillBtn=${!!unit.activeSkill && !unit.activeSkillDisabledThisTurn}`);
+          }
           cmdHeroBoltBtn.style.display = "none";
           cmdHeroDashBtn.style.display = "none";
           cmdHeroArcBtn.style.display = "none";
@@ -4195,6 +4199,8 @@
             nudgeTutorial(stg1TutorialState.step === STG1_TUTOR_STEP.ENDTURN_HINT ? "지금은 턴 종료 버튼을 눌러여" : "지금은 지정된 행동부터 해여");
             return;
           }
+          u.endedTurn = true;
+          if (isAbelUnit(u)) u.activeSkillDisabledThisTurn = true;
           triggerPerkEvent("wait", { unit: u });
           finalizePlayerAction(u);
         }
@@ -4535,6 +4541,11 @@
           pendingActionUnitId = null;
           targetingMode = null;
           setPhase(PHASE.ENEMY);
+          const hero = units.find((u) => isHeroUnit(u));
+          if (hero) {
+            hero.newbieBlockUsedThisEnemyTurn = false;
+            console.log("[VERIFY_NEWBIE_RESET] phase=ENEMY_START used=false");
+          }
           dispatchStageTrigger("onTurnStart", { side: PHASE.ENEMY, turn: turnCounter });
           await runTriggeredEvents("turnStart", { phase: PHASE.ENEMY, turn: turnCounter });
 
@@ -4554,6 +4565,7 @@
 
         async function enemyAct(enemy) {
           if (!unitById(enemy.id)) return;
+          const fallbackPos = { x: enemy.x, y: enemy.y };
           let verifyMoved = false;
           let verifyAttacked = false;
           if (consumeImmobileOnMoveAttempt(enemy)) {
@@ -4567,6 +4579,7 @@
               const t = blockedTarget || nearestFactionUnit(enemy, "player");
               console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=${t?.id || "none"} path=NONE usedBFS=true fallback=F2 moved=${verifyMoved}`);
             }
+            finalizeEnemyPosition(enemy, fallbackPos);
             return;
           }
           const players = units.filter(u => u.faction === "player");
@@ -4582,6 +4595,7 @@
             }
             if (!huntTarget) {
               console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=none path=NONE usedBFS=true fallback=F2 moved=false`);
+              finalizeEnemyPosition(enemy, fallbackPos);
               return;
             }
 
@@ -4594,6 +4608,11 @@
               bfsPath = findHuntPathBFS(enemy, huntTarget);
               if (bfsPath && bfsPath.length > 1) {
                 const capped = bfsPath.slice(0, Math.min(bfsPath.length, (enemy.mov || 0) + 1));
+                while (capped.length > 1) {
+                  const last = capped[capped.length - 1];
+                  if (!isOccupied(last.x, last.y, enemy.id)) break;
+                  capped.pop();
+                }
                 if (capped.length > 1) {
                   await animateUnitAlongPath(enemy, capped);
                   emitUnitEnterTile(enemy);
@@ -4633,6 +4652,7 @@
             }
             const live = unitById(enemy.huntTargetId) || nearestFactionUnit(enemy, "player");
             console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=${live?.id || "none"} path=${bfsPath ? bfsPath.length : "NONE"} usedBFS=true fallback=${fallbackCode} moved=${verifyMoved}`);
+            finalizeEnemyPosition(enemy, fallbackPos);
             return;
           }
 
@@ -4673,6 +4693,7 @@
               if (Math.abs(enemy.x - goal.x) + Math.abs(enemy.y - goal.y) === 0) {
                 st.patrolIndexByGuard[enemy.id] = (idx + 1) % points.length;
               }
+              finalizeEnemyPosition(enemy, fallbackPos);
               return;
             }
           }
@@ -4680,6 +4701,7 @@
           let target = pickAttackTarget(enemy, "player");
           if (target) {
             await executeCombat(enemy, target);
+            finalizeEnemyPosition(enemy, fallbackPos);
             return;
           }
 
@@ -4707,7 +4729,10 @@
             addLog(`${enemy.name} 이동: (${best.x},${best.y})`);
             emitUnitEnterTile(enemy);
           }
-          if (battleOver) return;
+          if (battleOver) {
+            finalizeEnemyPosition(enemy, fallbackPos);
+            return;
+          }
           target = pickAttackTarget(enemy, "player");
           if (target) {
             await executeCombat(enemy, target);
@@ -4715,6 +4740,7 @@
             spawnFloatingText(enemy.x, enemy.y, "ENGAGE!", "#ffd38f");
             addLog(`${enemy.name}이(가) 아군에 접근`);
           }
+          finalizeEnemyPosition(enemy, fallbackPos);
         }
 
         async function allyGuestAct(guest) {
@@ -4827,6 +4853,8 @@
             p.movedThisTurn = false;
             p.actionState = "idle";
             p.preMove = null;
+            p.endedTurn = false;
+            p.activeSkillDisabledThisTurn = false;
             p.canCanto = false;
             p.cantoMoveRemaining = 0;
             p.moveSpentThisTurn = 0;
@@ -4985,7 +5013,8 @@
         function computeMoveRange(unit, moveCapOverride = null) {
           const start = { x: unit.x, y: unit.y };
           const startK = key(start.x, start.y);
-          const usesZocPenalty = unit.faction === "player" && !isKimwearUnit(unit);
+          const usesZocPenalty = (unit.faction === "player" && !isKimwearUnit(unit)) || unit.faction === "enemy";
+          const moverTeam = unit.faction === "player" ? "ALLY" : (unit.faction === "enemy" ? "ENEMY" : "OTHER");
           const moveCap = moveCapOverride == null ? unit.mov : Math.max(0, Number(moveCapOverride) || 0);
           const dist = new Map();
           const cameFrom = new Map();
@@ -4999,7 +5028,10 @@
           }
 
           function isZocSourceUnit(source) {
-            return !!source && source.hp > 0 && (source.faction === "enemy" || isNyangsanUnit(source));
+            if (!source || source.hp <= 0) return false;
+            if (unit.faction === "player") return source.faction === "enemy" || isNyangsanUnit(source);
+            if (unit.faction === "enemy") return source.faction === "player";
+            return source.faction === "enemy" || isNyangsanUnit(source);
           }
 
           function zocPressureTypesAt(tx, ty, moverId) {
@@ -5009,8 +5041,12 @@
               if (src.id === moverId) continue;
               const d = Math.abs(src.x - tx) + Math.abs(src.y - ty);
               if (d !== 1) continue;
-              if (src.faction === "enemy") out.add("enemy");
-              else if (isNyangsanUnit(src)) out.add("nyangsan");
+              if (unit.faction === "player") {
+                if (src.faction === "enemy") out.add("enemy");
+                else if (isNyangsanUnit(src)) out.add("nyangsan");
+              } else if (unit.faction === "enemy") {
+                if (src.faction === "player") out.add("ally");
+              }
             }
             return out;
           }
@@ -5069,9 +5105,12 @@
             const occ = getUnitAt(x, y);
             if (!occ || occ.id === unit.id) reachable.set(pk, c);
           }
-          if (DEV_BUILD && unit.faction === "player" && zocTypesSeen.size > 0) {
-            const seen = ["enemy", "nyangsan"].filter((k) => zocTypesSeen.has(k)).join("/");
-            console.log(`[VERIFY_ZOC] appliedFrom=enemy/nyangsan only (${seen})`);
+          if (unit.faction === "player" && zocTypesSeen.size > 0) {
+            const seen = ["enemy", "nyangsan", "ally"].filter((k) => zocTypesSeen.has(k));
+            console.log(`[VERIFY_ZOC] moverTeam=${moverTeam} appliedFrom=${seen.join(",")}`);
+          } else if (unit.faction === "enemy" && zocTypesSeen.size > 0) {
+            const seen = ["ally"].filter((k) => zocTypesSeen.has(k));
+            console.log(`[VERIFY_ZOC] moverTeam=${moverTeam} appliedFrom=${seen.join(",")}`);
           }
 
           return { dist: bestByPos, cameFrom, reachable, pathEndStateByPos: endStateByPos };
@@ -5245,7 +5284,7 @@
           for (let y = 0; y < MAP_H; y++) {
             for (let x = 0; x < MAP_W; x++) {
               const occ = getUnitAt(x, y);
-              if (occ && occ.id !== enemy.id && occ.faction !== enemy.faction) continue;
+              if (occ && occ.id !== enemy.id) continue;
               const d = Math.abs(x - huntTarget.x) + Math.abs(y - huntTarget.y);
               const minR = enemy.minRange ?? 1;
               const maxR = enemy.maxRange ?? (enemy.atkRange || 1);
@@ -5256,6 +5295,25 @@
             }
           }
           return best;
+        }
+
+        function finalizeEnemyPosition(unit, fallback) {
+          if (!unit) return;
+          let occupied = !!units.find((u) => u.id !== unit.id && u.x === unit.x && u.y === unit.y);
+          if (occupied) {
+            if (fallback && !isOccupied(fallback.x, fallback.y, unit.id)) {
+              unit.x = fallback.x;
+              unit.y = fallback.y;
+            } else {
+              const safe = findFreeSpawnTile(unit.x, unit.y, 8) || fallback;
+              if (safe) {
+                unit.x = safe.x;
+                unit.y = safe.y;
+              }
+            }
+          }
+          occupied = !!units.find((u) => u.id !== unit.id && u.x === unit.x && u.y === unit.y);
+          console.log(`[VERIFY_OCC] unit=${unit.id} end=(${unit.x},${unit.y}) occupied=${occupied}`);
         }
 
         function isAdjacentToFaction(unit, faction) {
@@ -5370,7 +5428,7 @@
             unit.activeSkill.cdNow = Math.max(0, unit.skillCooldowns?.SK_NEWBIE_SPIRIT || 0);
             unit.passivePerk = { id: "PK_HERO_NEWBIE_PERK", name: "뉴비 특혜 1회" };
             unit.attackMode = "attack";
-            unit.newbiePerkUsed = !!unit.newbiePerkUsed;
+            unit.newbieBlockUsedThisEnemyTurn = !!unit.newbieBlockUsedThisEnemyTurn;
             unit.buffs = unit.buffs || [];
           } else if (isJung2Unit(unit)) {
             unit.activeSkillId = "SK_JEONG2_JABDORI";
@@ -6966,6 +7024,8 @@
           unit.moveSpentThisTurn = Number(unit.moveSpentThisTurn) || 0;
           unit.cantoMoveRemaining = Number(unit.cantoMoveRemaining) || 0;
           unit.cantoGrantedThisTurn = !!unit.cantoGrantedThisTurn;
+          unit.endedTurn = !!unit.endedTurn;
+          unit.activeSkillDisabledThisTurn = !!unit.activeSkillDisabledThisTurn;
           unit.canCanto = !!unit.canCanto;
           unit.reactionSource = unit.reactionSource || null;
           if (isS1RosterCoreUnit(unit) && !unit.verifyUiLogged) {
@@ -7306,11 +7366,11 @@
             target.heroState.instinctGuardActive = false;
             addLog(`${target.name}: 본능 방어로 피해 감소`);
           }
-          if (phase === PHASE.ENEMY && isHeroUnit(target) && !target.newbiePerkUsed && dmg > 0) {
+          if (phase === PHASE.ENEMY && isHeroUnit(target) && !target.newbieBlockUsedThisEnemyTurn && dmg > 0) {
             dmg = 0;
-            target.newbiePerkUsed = true;
+            target.newbieBlockUsedThisEnemyTurn = true;
             spawnFloatingText(target.x, target.y, "뉴비 특혜!", "#ffeaa7");
-            console.log("[VERIFY_NEWBIE] consumed=true phase=ENEMY dmgAfter=0");
+            console.log("[VERIFY_NEWBIE] phase=ENEMY blocked=true dmgAfter=0");
           }
           if (crit) dmg *= 2;
           dmg = Math.max(0, Math.round(dmg));
