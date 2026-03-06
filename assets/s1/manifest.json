@@ -3,10 +3,13 @@
   "units": {
     "hero": "",
     "jeong2": "",
-    "abel": "",
+    "mender": "",
     "kimwear": "",
     "guard": "",
     "nyangsan": ""
+  },
+  "sprites": {
+    "mender_idle": ""
   },
   "icons": {
     "buff": "",
@@ -24,7 +27,12 @@
   "portraits": {
     "hero": "",
     "jeong2": "",
-    "abel": "",
+    "mender": {
+      "card": "",
+      "idle": "",
+      "talk": "",
+      "sleep": ""
+    },
     "kimwear": "",
     "guard": "",
     "nyangsan": {
