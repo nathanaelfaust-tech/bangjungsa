@@ -411,6 +411,27 @@
         display: block;
       }
 
+      .portraitBox {
+        width: clamp(72px, 10vw, 96px);
+        aspect-ratio: 1 / 1;
+        border-radius: 10px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.04);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 6px 0;
+        border: 1px solid rgba(168, 210, 255, 0.45);
+      }
+
+      .portraitBox img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        image-rendering: auto;
+        display: block;
+      }
+
       .dialog-content {
         min-width: 0;
         flex: 1;
@@ -5090,7 +5111,7 @@
             const portraitKey = unitAssetKey(target);
             const portrait = portraitKey ? ASSETS?.portraits?.[portraitKey] : null;
             const portraitHtml = portrait
-              ? `<div style="margin:6px 0;"><img src="${escapeHtml(portrait.src)}" alt="${escapeHtml(target.name)}" style="display:block;width:100%;max-width:120px;height:auto;border:1px solid rgba(168,210,255,0.45);border-radius:6px;" /></div>`
+              ? `<div class="portraitBox"><img src="${escapeHtml(portrait.src)}" alt="${escapeHtml(target.name)}" /></div>`
               : "";
             unitInfo.innerHTML =
               `<div><b>${target.name}</b> [${target.faction}]</div>` +
