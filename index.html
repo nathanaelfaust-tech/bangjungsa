@@ -181,8 +181,14 @@
         padding-left: 18px;
         font-size: 13px;
         color: #c8d6e6;
-        display: grid;
-        gap: 4px;
+        display: block;
+        max-height: 28vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .logs li {
+        margin-bottom: 4px;
       }
 
       .minimap {
@@ -1586,6 +1592,8 @@
         let renderClock = 0;
         let visualSkin = "legacy";
         const eventLog = [];
+        const EVENT_LOG_MAX = 200;
+        let eventLogAutoScroll = true;
         const camera = { xPx: 0, yPx: 0 };
         const keyPan = { left: false, right: false, up: false, down: false };
         const edgePan = { x: 0, y: 0 };
@@ -2248,7 +2256,7 @@
               classId: "CL_SWD_GUARD",
               weaponType: "sword",
               perks: [],
-              aiHint: "CHASE_PLAYER",
+              aiHint: "HUNT",
               maxHp: 16,
               hp: 16,
               atk: 7,
@@ -2256,7 +2264,15 @@
               hit: 76,
               crit: 0
             });
-            if (ok) spawned++;
+            if (ok) {
+              spawned++;
+              const reinf = unitById(spawnId);
+              if (reinf) {
+                reinf.aiMode = "HUNT";
+                const nearest = nearestFactionUnit(reinf, "player");
+                reinf.huntTargetId = nearest?.id || null;
+              }
+            }
           }
           if (spawned > 0) {
             if (!st.reinforcementsActiveLogged) {
@@ -2705,6 +2721,12 @@
         cmdNyangBtn.addEventListener("click", onCommandNyangInteract);
         cmdTalkBtn.addEventListener("click", onCommandTalk);
         cmdWaitBtn.addEventListener("click", onCommandWait);
+        eventLogEl.addEventListener("scroll", () => {
+          const st = eventLogEl.scrollTop;
+          const nearBottom = (eventLogEl.scrollHeight - (st + eventLogEl.clientHeight)) <= 24;
+          eventLogAutoScroll = nearBottom;
+          console.log(`[VERIFY_LOG] autoScroll=${eventLogAutoScroll} scrollTop=${Math.round(st)}`);
+        }, { passive: true });
         dialogNextBtn.addEventListener("click", onDialogNext);
         tutorialDialogNextBtn.addEventListener("click", onTutorialDialogNext);
         stageSelect.addEventListener("change", () => {
@@ -4532,15 +4554,76 @@
 
         async function enemyAct(enemy) {
           if (!unitById(enemy.id)) return;
+          let verifyMoved = false;
+          let verifyAttacked = false;
           if (consumeImmobileOnMoveAttempt(enemy)) {
             addLog(`${enemy.name} 이동 불가(이동봉쇄)`);
             const blockedTarget = pickAttackTarget(enemy, "player");
-            if (blockedTarget) await executeCombat(enemy, blockedTarget);
+            if (blockedTarget) {
+              await executeCombat(enemy, blockedTarget);
+              verifyAttacked = true;
+            }
+            if (enemy.aiMode === "HUNT" || enemy.aiHint === "HUNT") {
+              const t = blockedTarget || nearestFactionUnit(enemy, "player");
+              const d = t ? Math.abs(enemy.x - t.x) + Math.abs(enemy.y - t.y) : -1;
+              console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=${t?.id || "none"} dist=${d} moved=${verifyMoved} attacked=${verifyAttacked}`);
+            }
             return;
           }
-          const range = computeMoveRange(enemy);
           const players = units.filter(u => u.faction === "player");
           if (players.length === 0) return;
+
+          if (enemy.aiMode === "HUNT" || enemy.aiHint === "HUNT") {
+            let huntTarget = unitById(enemy.huntTargetId);
+            let dist = huntTarget ? Math.abs(enemy.x - huntTarget.x) + Math.abs(enemy.y - huntTarget.y) : Infinity;
+            if (!huntTarget || huntTarget.hp <= 0 || dist > 12) {
+              huntTarget = nearestFactionUnit(enemy, "player");
+              enemy.huntTargetId = huntTarget?.id || null;
+              dist = huntTarget ? Math.abs(enemy.x - huntTarget.x) + Math.abs(enemy.y - huntTarget.y) : Infinity;
+            }
+            if (!huntTarget) {
+              console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=none dist=-1 moved=false attacked=false`);
+              return;
+            }
+
+            if (isTargetValidForMode(enemy, huntTarget, "attack")) {
+              await executeCombat(enemy, huntTarget, "attack");
+              verifyAttacked = true;
+            } else {
+              const huntRange = computeMoveRange(enemy);
+              let best = { x: enemy.x, y: enemy.y };
+              let bestDist = Infinity;
+              let bestCost = huntRange.dist.get(key(enemy.x, enemy.y)) || 0;
+              for (const k of huntRange.reachable.keys()) {
+                const [x, y] = parseKey(k);
+                const d = Math.abs(huntTarget.x - x) + Math.abs(huntTarget.y - y);
+                const cost = huntRange.dist.get(k) || 0;
+                const better = d < bestDist || (d === bestDist && cost > bestCost);
+                if (better) {
+                  bestDist = d;
+                  best = { x, y };
+                  bestCost = cost;
+                }
+              }
+              const path = reconstructPath(huntRange.cameFrom, { x: enemy.x, y: enemy.y }, best, huntRange.pathEndStateByPos) || [{ x: enemy.x, y: enemy.y }];
+              if (path.length > 1) {
+                await animateUnitAlongPath(enemy, path);
+                emitUnitEnterTile(enemy);
+                verifyMoved = true;
+              }
+              const liveTarget = unitById(huntTarget.id);
+              if (liveTarget && liveTarget.hp > 0 && isTargetValidForMode(enemy, liveTarget, "attack")) {
+                await executeCombat(enemy, liveTarget, "attack");
+                verifyAttacked = true;
+              }
+            }
+            const live = unitById(enemy.huntTargetId) || nearestFactionUnit(enemy, "player");
+            const finalDist = live ? Math.abs(enemy.x - live.x) + Math.abs(enemy.y - live.y) : -1;
+            console.log(`[VERIFY_AI] unit=${enemy.id} mode=HUNT target=${live?.id || "none"} dist=${finalDist} moved=${verifyMoved} attacked=${verifyAttacked}`);
+            return;
+          }
+
+          const range = computeMoveRange(enemy);
 
           if (isStg2Stage()) {
             const st = ensureStg2RuntimeState();
@@ -5084,6 +5167,21 @@
             if (p.faction !== "player") continue;
             const d = Math.abs(x - p.x) + Math.abs(y - p.y);
             if (d < best) best = d;
+          }
+          return best;
+        }
+
+        function nearestFactionUnit(from, faction) {
+          if (!from) return null;
+          let best = null;
+          let bestDist = Infinity;
+          for (const u of units) {
+            if (u.faction !== faction || u.hp <= 0) continue;
+            const d = Math.abs(from.x - u.x) + Math.abs(from.y - u.y);
+            if (d < bestDist) {
+              bestDist = d;
+              best = u;
+            }
           }
           return best;
         }
@@ -6270,6 +6368,7 @@
           firedEvents.clear();
           for (const key of Object.keys(inventory)) delete inventory[key];
           eventLog.length = 0;
+          eventLogAutoScroll = true;
           selectedUnitId = null;
           hoveredUnitId = null;
           hoverTile = null;
@@ -6993,6 +7092,20 @@
         }
 
         function checkBattleEnd() {
+          if (isStg2Stage()) {
+            const hero = units.find((u) => isHeroUnit(u));
+            if (!hero || hero.hp <= 0) {
+              console.log(`[VERIFY_DEFEAT] stg=STG2 reason=KEY_ALLY_DEAD unit=${hero?.id || "hero"}`);
+              setBattleResult("DEFEAT");
+              return true;
+            }
+            const kimwear = units.find((u) => isKimwearUnit(u));
+            if (!kimwear || kimwear.hp <= 0) {
+              console.log(`[VERIFY_DEFEAT] stg=STG2 reason=KEY_ALLY_DEAD unit=${kimwear?.id || "kimwear"}`);
+              setBattleResult("DEFEAT");
+              return true;
+            }
+          }
           const leader = getLeaderUnit();
           if (!leader || leader.hp <= 0) {
             setBattleResult("DEFEAT");
@@ -7119,11 +7232,11 @@
             target.heroState.instinctGuardActive = false;
             addLog(`${target.name}: 본능 방어로 피해 감소`);
           }
-          if (isHeroUnit(target) && !target.newbiePerkUsed && dmg > 0) {
+          if (phase === PHASE.ENEMY && isHeroUnit(target) && !target.newbiePerkUsed && dmg > 0) {
             dmg = 0;
             target.newbiePerkUsed = true;
             spawnFloatingText(target.x, target.y, "뉴비 특혜!", "#ffeaa7");
-            console.log(`[VERIFY_PASSIVE] unit=hero passive=뉴비 특혜 1회 consumed=${target.newbiePerkUsed} dmgAfter=${dmg}`);
+            console.log("[VERIFY_NEWBIE] consumed=true phase=ENEMY dmgAfter=0");
           }
           if (crit) dmg *= 2;
           dmg = Math.max(0, Math.round(dmg));
@@ -7260,8 +7373,9 @@
           const base = (statWithEffects(jung2, "atk") + tri.atk + (jung2.nextAttackBonus?.atk || 0)) - statWithEffects(liveTarget, "def");
           const raw = Math.round(Math.max(0, base) * 0.25);
           const final = raw > 0 ? Math.max(2, raw) : 0;
-          console.log(`[VERIFY_SUPPORT] src=jeong2 target=${liveTarget.id} inRangeBasic=${inRangeBasic} basicRange=${jung2.rangeMin}-${jung2.rangeMax} final=${final}`);
+          console.log(`[VERIFY_SUPPORT] src=jeong2 target=${liveTarget.id} inRangeBasic=${inRangeBasic} final=${final}`);
           if (!inRangeBasic || final <= 0) return;
+          spawnFloatingText(liveTarget.x, liveTarget.y, "지원사격!", "#9ed1ff");
           await resolveAttack(jung2, liveTarget, {
             actionMode: "attack",
             contextTag: "support_shot",
@@ -7313,9 +7427,10 @@
         }
 
         function addLog(line) {
-          eventLog.unshift(line);
-          while (eventLog.length > 5) eventLog.pop();
+          eventLog.push(line);
+          while (eventLog.length > EVENT_LOG_MAX) eventLog.shift();
           eventLogEl.innerHTML = eventLog.map(v => `<li>${escapeHtml(v)}</li>`).join("");
+          if (eventLogAutoScroll) eventLogEl.scrollTop = eventLogEl.scrollHeight;
         }
 
         function shuffledDirs() {
