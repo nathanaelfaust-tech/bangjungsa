@@ -1808,6 +1808,7 @@
           ASSETS.ready = true;
           console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} sprites=${counts.sprites} portraits=${counts.portraits} missing=${counts.missing}`);
           console.log(`[VERIFY_ASSET] season=${season} portraits=${Object.keys(ASSETS.portraits || {}).length}`);
+          console.log(`[VERIFY_ASSET_SPRITES] keys=${Object.keys(ASSETS.sprites || {}).slice(0, 20).join(",")}`);
         }
 
         if (!DEV_BUILD) {
@@ -3079,6 +3080,12 @@
             mv.unit.py = lerp(a.y * TILE, b.y * TILE, e);
 
             if (t >= 1) {
+              const dx = b.x - a.x;
+              const dy = b.y - a.y;
+              if (dx > 0) mv.unit.facing = "R";
+              else if (dx < 0) mv.unit.facing = "L";
+              else if (dy > 0) mv.unit.facing = "F";
+              else if (dy < 0) mv.unit.facing = "B";
               mv.unit.x = b.x;
               mv.unit.y = b.y;
               mv.stepIndex++;
@@ -3353,16 +3360,22 @@
 
         function drawUnits(ctx) {
           for (const u of units) {
+            if (!u.facing) u.facing = "F";
             const px = (u.px != null ? u.px : u.x * TILE);
             const py = (u.py != null ? u.py : u.y * TILE);
-            let spriteKey = null;
-            if (u.id === "nyangsan" || String(u.id || "").includes("냥산")) spriteKey = "nyangsan_idle";
-            if (u.id === "jeong2" || u.id === "정2") spriteKey = "jeong2_idle";
+            const spriteKey = getMapSpriteKey(u);
             const spriteImg = spriteKey ? ASSETS.sprites?.[spriteKey] : null;
             if (spriteImg) {
               const pxCenter = px + TILE * 0.5;
               const pyCenter = py + TILE;
+              const prevSmooth = ctx.imageSmoothingEnabled;
+              ctx.imageSmoothingEnabled = false;
               ctx.drawImage(spriteImg, pxCenter - 16, pyCenter - 32, 32, 32);
+              ctx.imageSmoothingEnabled = prevSmooth;
+              if (!u.__spriteLogged) {
+                console.log(`[VERIFY_MAPSPRITE] id=${u.id} facing=${u.facing || "F"} key=${spriteKey} loaded=true`);
+                u.__spriteLogged = true;
+              }
               continue;
             }
             if (visualSkin === "flat_v1") {
@@ -7415,6 +7428,15 @@
           unit.movedThisTurn = !!unit.movedThisTurn;
           unit.preMove = unit.preMove || null;
           unit.actionState = unit.actionState || "idle";
+          unit.facing = (unit.facing === "B" || unit.facing === "L" || unit.facing === "R") ? unit.facing : "F";
+        }
+
+        function getMapSpriteKey(u) {
+          if (!u) return null;
+          const f = (u.facing === "B" || u.facing === "L" || u.facing === "R") ? u.facing : "F";
+          if (u.id === "nyangsan" || String(u.id || "").includes("냥산")) return `nyangsan_${f}`;
+          if (u.id === "jeong2" || u.id === "정2") return `jeong2_${f}`;
+          return null;
         }
 
         function tickTurnState() {
