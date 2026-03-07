@@ -3442,17 +3442,15 @@
           const list = units.slice().sort((a, b) => (a.y - b.y) || (a.x - b.x));
           for (const u of list) {
             if (!u.facing) u.facing = "F";
-            const hitStopped = Number(u.hitStopUntil || 0) > tNow;
-            const px = hitStopped
-              ? (u.hitStopPx != null ? u.hitStopPx : (u.px != null ? u.px : u.x * TILE))
-              : (u.px != null ? u.px : u.x * TILE);
-            const py = hitStopped
-              ? (u.hitStopPy != null ? u.hitStopPy : (u.py != null ? u.py : u.y * TILE))
-              : (u.py != null ? u.py : u.y * TILE);
-            if (!hitStopped) {
-              u.hitStopPx = null;
-              u.hitStopPy = null;
-            }
+            if (u.renderOffsetX) u.renderOffsetX = 0;
+            if (u.renderOffsetY) u.renderOffsetY = 0;
+            if (u.nudgeX) u.nudgeX = 0;
+            if (u.nudgeY) u.nudgeY = 0;
+            if (u.sepX) u.sepX = 0;
+            if (u.sepY) u.sepY = 0;
+            const tile = TILE;
+            const px = u.x * tile;
+            const py = u.y * tile;
             const blinkActive = Number(u.hitFlashUntil || 0) > tNow;
             const blink = blinkActive ? (Math.floor((u.hitFlashUntil - tNow) / 35) % 2) : 1;
             const blinkAlpha = blinkActive && blink === 0 ? 0.35 : 1.0;
@@ -3484,10 +3482,12 @@
             }
             const hasValidSprite = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
             if (hasValidSprite) {
-              const pxCenter = px + TILE * 0.5;
-              const pyCenter = py + TILE;
-              const dx = Math.round(pxCenter - (S / 2));
-              const dy = Math.round(pyCenter - S);
+              const pxCenter = (u.x * tile) + (tile / 2);
+              const pyBottom = (u.y * tile) + tile;
+              let dx = Math.round(pxCenter - (S / 2));
+              let dy = Math.round(pyBottom - S);
+              const _dx0 = dx;
+              const _dy0 = dy;
               ctx.imageSmoothingEnabled = false;
 
               if (USE_UNIT_BACKPLATE) {
@@ -3498,7 +3498,7 @@
                 const bw = Math.round(S * 1.20);
                 const bh = Math.round(S * 1.15);
                 const bx = Math.round(pxCenter - (bw / 2));
-                const by = Math.round(pyCenter - S - (bh * 0.05));
+                const by = Math.round(pyBottom - S - (bh * 0.05));
                 const r = 6;
                 ctx.beginPath();
                 ctx.moveTo(bx + r, by);
@@ -3519,9 +3519,12 @@
                 ctx.globalAlpha = 0.35;
                 ctx.fillStyle = "black";
                 ctx.beginPath();
-                ctx.ellipse(pxCenter, pyCenter - 3, S * 0.38, S * 0.18, 0, 0, Math.PI * 2);
+                ctx.ellipse(pxCenter, pyBottom - 3, S * 0.38, S * 0.18, 0, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.restore();
+              }
+              if (dx !== _dx0 || dy !== _dy0) {
+                console.log("[VERIFY_PUSH_BUG] dxdy mutated", { id: u.id, x: u.x, y: u.y, from: [_dx0, _dy0], to: [dx, dy] });
               }
 
               ctx.save();
