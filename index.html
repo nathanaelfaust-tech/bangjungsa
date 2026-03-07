@@ -1741,6 +1741,19 @@
         minimapTerrainCache.height = MINI_H;
         const miniTerrainCtx = minimapTerrainCache.getContext("2d");
         const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, sprites: {}, sprites_clean: {}, sprites_raw: {}, sprites_raw_alpha: {}, portraits: {}, ready: false, manifest: null };
+        const __ASSET_BUSTER__ = (() => {
+          try {
+            const q = new URLSearchParams(location.search);
+            return q.get("v") || String(Date.now());
+          } catch (e) {
+            return String(Date.now());
+          }
+        })();
+
+        function __bust(url) {
+          if (!url) return url;
+          return url + (url.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(__ASSET_BUSTER__);
+        }
 
         async function loadManifest(season) {
           try {
@@ -1759,7 +1772,7 @@
             const img = new Image();
             img.onload = () => resolve(img);
             img.onerror = () => resolve(null);
-            img.src = url;
+            img.src = __bust(url);
           });
         }
 
@@ -1820,6 +1833,7 @@
           console.log(`[VERIFY_ASSET_SPRITES] keys=${Object.keys(ASSETS.sprites || {}).slice(0, 20).join(",")}`);
           console.log("[VERIFY_SPRITES_KEYS]", Object.keys(ASSETS.sprites || {}).filter((k) => k.startsWith("jeong2_") || k.startsWith("nyangsan_")).join(","));
           console.log(`[VERIFY_BANK] bank=${USE_SPRITES_BANK} rawA=${Object.keys(ASSETS.sprites_raw_alpha || {}).length} raw=${Object.keys(ASSETS.sprites_raw || {}).length} clean=${Object.keys(ASSETS.sprites_clean || {}).length}`);
+          console.log("[VERIFY_ASSET_SRC]", Object.entries(ASSETS.sprites_raw_alpha || {}).slice(0, 8).map(([k, img]) => `${k}=${img ? img.src : "null"}`).join(" | "));
         }
 
         if (!DEV_BUILD) {
