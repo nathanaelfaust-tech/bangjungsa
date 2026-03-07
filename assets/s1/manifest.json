@@ -11,7 +11,11 @@
   "sprites": {
     "mender_idle": "",
     "nyangsan_idle": "assets/s1/sprites/nyangsan_idle_32.png",
-    "jeong2_idle": "assets/s1/sprites/jeong2_idle_32.png"
+    "jeong2_idle": "assets/s1/sprites/jeong2_idle_32.png",
+    "nyangsan_F": "assets/s1/sprites/nyangsan_F.png",
+    "nyangsan_B": "assets/s1/sprites/nyangsan_B.png",
+    "nyangsan_L": "assets/s1/sprites/nyangsan_L.png",
+    "nyangsan_R": "assets/s1/sprites/nyangsan_R.png"
   },
   "icons": {
     "buff": "",
