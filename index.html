@@ -911,7 +911,7 @@
         const CAMERA_FOLLOW_MARGIN = TILE * 3;
         const INTERNAL_W = VIEW_W * TILE;
         const INTERNAL_H = VIEW_H * TILE;
-        const CAMERA_ZOOM = 1.35;
+        const CAMERA_ZOOM = 1.0;
         const USE_SPRITES_BANK = "raw_alpha"; // "raw_alpha" | "raw" | "clean" | "current"
         const MAP_SPRITE_RES = 32; // 32 or 48
         const SWAP_FB = true; // true => F<->B swap at render time
@@ -3145,7 +3145,7 @@
 
           octx.save();
           octx.setTransform(1, 0, 0, 1, 0, 0);
-          octx.scale(CAMERA_ZOOM, CAMERA_ZOOM);
+          octx.scale(1, 1);
           octx.translate(-Math.floor(camera.xPx), -Math.floor(camera.yPx));
           octx.drawImage(mapCache, 0, 0);
           drawOverlays(octx);
@@ -3916,8 +3916,8 @@
           const scaledY = (my / rect.height) * canvas.height;
           const ix = Math.max(0, Math.min(INTERNAL_W - 1, Math.floor(scaledX / SCALE)));
           const iy = Math.max(0, Math.min(INTERNAL_H - 1, Math.floor(scaledY / SCALE)));
-          const wx = Math.floor(camera.xPx + (ix / CAMERA_ZOOM));
-          const wy = Math.floor(camera.yPx + (iy / CAMERA_ZOOM));
+          const wx = Math.floor(camera.xPx + ix);
+          const wy = Math.floor(camera.yPx + iy);
           return { x: Math.floor(wx / TILE), y: Math.floor(wy / TILE) };
         }
 
@@ -8189,8 +8189,8 @@
 
         function getVisibleWorldSize() {
           return {
-            w: INTERNAL_W / CAMERA_ZOOM,
-            h: INTERNAL_H / CAMERA_ZOOM
+            w: INTERNAL_W,
+            h: INTERNAL_H
           };
         }
 
