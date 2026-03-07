@@ -914,6 +914,8 @@
         const CAMERA_ZOOM = 1.35;
         const USE_SPRITES_BANK = "raw_alpha"; // "raw_alpha" | "raw" | "clean" | "current"
         const MAP_SPRITE_RES = 32; // 32 or 48
+        const SWAP_FB = true; // true => F<->B swap at render time
+        const SWAP_LR = true; // true => L<->R swap at render time
         const USE_UNIT_BACKPLATE = false; // backplate + shadow
         const HERO_MELEE_DMG_BASE = 1.0;
         const HERO_BOLT_DMG_MULT = 0.65;
@@ -3464,6 +3466,13 @@
               }
 
               ctx.drawImage(spriteImg, dx, dy, S, S);
+              ctx.save();
+              ctx.imageSmoothingEnabled = false;
+              ctx.globalAlpha = 0.9;
+              ctx.fillStyle = "white";
+              ctx.font = "10px monospace";
+              ctx.fillText((u.facing || "F") + "->" + __renderFace(u.facing || "F"), dx, dy - 2);
+              ctx.restore();
               if (!u.__spriteDrawLogged) {
                 console.log(`[VERIFY_MAPSPRITE_DRAW] id=${u.id} key=${spriteKey} size=${spriteImg ? (spriteImg.naturalWidth + "x" + spriteImg.naturalHeight) : "null"} drawn=${S}x${S}`);
                 console.log(`[VERIFY_PIXEL] S=${S} smoothing=${ctx.imageSmoothingEnabled} dxdy=${dx},${dy}`);
@@ -7530,10 +7539,23 @@
 
         function getMapSpriteKey(u) {
           if (!u) return null;
-          const face = u.facing || "F";
+          const face = __renderFace(u.facing || "F");
           if (u.id === "nyangsan") return `nyangsan_${face}`;
           if (u.id === "jeong2" || u.id === "정2" || u.id === "J2") return `jeong2_${face}`;
           return null;
+        }
+
+        function __renderFace(face) {
+          let f = (face === "B" || face === "L" || face === "R") ? face : "F";
+          if (SWAP_FB) {
+            if (f === "F") f = "B";
+            else if (f === "B") f = "F";
+          }
+          if (SWAP_LR) {
+            if (f === "L") f = "R";
+            else if (f === "R") f = "L";
+          }
+          return f;
         }
 
         function tickTurnState() {
