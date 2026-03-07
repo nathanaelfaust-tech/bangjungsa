@@ -911,6 +911,7 @@
         const CAMERA_FOLLOW_MARGIN = TILE * 3;
         const INTERNAL_W = VIEW_W * TILE;
         const INTERNAL_H = VIEW_H * TILE;
+        const CAMERA_ZOOM = 1.35;
         const HERO_MELEE_DMG_BASE = 1.0;
         const HERO_BOLT_DMG_MULT = 0.65;
         const HERO_DASH_DMG_MULT = 1.20;
@@ -2843,6 +2844,7 @@
 
         loadVisualSkin();
         loadAssetsForSeason("s1");
+        console.log(`[VERIFY_ZOOM] zoom=${CAMERA_ZOOM}`);
         initializeCampaignSystem();
         ensureDevMenuOverlay();
         updateDevStatusTag();
@@ -3112,15 +3114,21 @@
             : 0;
           octx.clearRect(0, 0, offscreen.width, offscreen.height);
 
+          octx.save();
+          octx.setTransform(1, 0, 0, 1, 0, 0);
+          octx.scale(CAMERA_ZOOM, CAMERA_ZOOM);
+          const worldViewW = offscreen.width / CAMERA_ZOOM;
+          const worldViewH = offscreen.height / CAMERA_ZOOM;
           octx.drawImage(
             mapCache,
-            Math.floor(camera.xPx), Math.floor(camera.yPx), offscreen.width, offscreen.height,
-            0, 0, offscreen.width, offscreen.height
+            Math.floor(camera.xPx), Math.floor(camera.yPx), worldViewW, worldViewH,
+            0, 0, worldViewW, worldViewH
           );
           octx.save();
           octx.translate(-Math.floor(camera.xPx), -Math.floor(camera.yPx));
           drawOverlays(octx);
           drawUnits(octx);
+          octx.restore();
           octx.restore();
           drawCanvasUi(octx);
 
@@ -3812,8 +3820,8 @@
           const scaledY = (my / rect.height) * canvas.height;
           const ix = Math.max(0, Math.min(INTERNAL_W - 1, Math.floor(scaledX / SCALE)));
           const iy = Math.max(0, Math.min(INTERNAL_H - 1, Math.floor(scaledY / SCALE)));
-          const wx = ix + Math.floor(camera.xPx);
-          const wy = iy + Math.floor(camera.yPx);
+          const wx = Math.floor(camera.xPx + (ix / CAMERA_ZOOM));
+          const wy = Math.floor(camera.yPx + (iy / CAMERA_ZOOM));
           return { x: Math.floor(wx / TILE), y: Math.floor(wy / TILE) };
         }
 
