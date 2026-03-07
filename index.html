@@ -1737,7 +1737,7 @@
         minimapTerrainCache.width = MINI_W;
         minimapTerrainCache.height = MINI_H;
         const miniTerrainCtx = minimapTerrainCache.getContext("2d");
-        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, portraits: {}, ready: false, manifest: null };
+        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, sprites: {}, portraits: {}, ready: false, manifest: null };
 
         async function loadManifest(season) {
           try {
@@ -1765,7 +1765,7 @@
           ASSETS.ready = false;
           const mj = await loadManifest(season);
           ASSETS.manifest = mj;
-          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, portraits: 0, missing: 0 };
+          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, sprites: 0, portraits: 0, missing: 0 };
 
           if (!mj) {
             ASSETS.ready = true;
@@ -1773,7 +1773,7 @@
             return;
           }
 
-          for (const group of ["units", "icons", "vfx", "ui"]) {
+          for (const group of ["units", "icons", "vfx", "ui", "sprites"]) {
             ASSETS[group] = {};
             const entries = mj[group] || {};
             for (const k of Object.keys(entries)) {
@@ -1806,7 +1806,7 @@
             }
           }
           ASSETS.ready = true;
-          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} portraits=${counts.portraits} missing=${counts.missing}`);
+          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} sprites=${counts.sprites} portraits=${counts.portraits} missing=${counts.missing}`);
           console.log(`[VERIFY_ASSET] season=${season} portraits=${Object.keys(ASSETS.portraits || {}).length}`);
         }
 
@@ -3355,6 +3355,16 @@
           for (const u of units) {
             const px = (u.px != null ? u.px : u.x * TILE);
             const py = (u.py != null ? u.py : u.y * TILE);
+            let spriteKey = null;
+            if (u.id === "nyangsan" || String(u.id || "").includes("냥산")) spriteKey = "nyangsan_idle";
+            if (u.id === "jeong2" || u.id === "정2") spriteKey = "jeong2_idle";
+            const spriteImg = spriteKey ? ASSETS.sprites?.[spriteKey] : null;
+            if (spriteImg) {
+              const pxCenter = px + TILE * 0.5;
+              const pyCenter = py + TILE;
+              ctx.drawImage(spriteImg, pxCenter - 16, pyCenter - 32, 32, 32);
+              continue;
+            }
             if (visualSkin === "flat_v1") {
               if (Tier1CharIds.has(u.charId)) drawUnitSD_Tier1(ctx, u, px, py);
               else drawUnitFlat(ctx, u, px, py);

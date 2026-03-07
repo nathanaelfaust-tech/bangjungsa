@@ -9,7 +9,9 @@
     "nyangsan": ""
   },
   "sprites": {
-    "mender_idle": ""
+    "mender_idle": "",
+    "nyangsan_idle": "assets/s1/sprites/nyangsan_idle_32.png",
+    "jeong2_idle": "assets/s1/sprites/jeong2_idle_32.png"
   },
   "icons": {
     "buff": "",
