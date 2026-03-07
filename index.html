@@ -1698,6 +1698,10 @@
         let phaseBanner = { text: "PLAYER PHASE", life: 0, max: PHASE_BANNER_MS };
         let floatingTexts = [];
         const bubbles = [];
+        const VFX = []; // {type,t0,dur,ax,ay,tx,ty}
+        let camShakeT = 0;
+        let camShakePow = 0;
+        let lastFrameDt = 16;
         let commandMenuUnitId = null;
         let targetingUnitId = null;
         let targetingMode = null;
@@ -1755,6 +1759,13 @@
         function __bust(url) {
           if (!url) return url;
           return url + (url.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(__ASSET_BUSTER__);
+        }
+
+        function now() { return performance.now(); }
+        function addVfx(o) { VFX.push(o); }
+        function triggerShake(pow = 1, dur = 90) {
+          camShakePow = Math.max(camShakePow, pow);
+          camShakeT = Math.max(camShakeT, dur);
         }
 
         async function loadManifest(season) {
@@ -3057,6 +3068,7 @@
           renderClock = ts;
           const dt = Math.min(50, ts - last);
           last = ts;
+          lastFrameDt = dt;
 
           update(dt);
           render();
@@ -3138,16 +3150,26 @@
           const critShake = (visualSkin === "flat_v1" && hitFlash && hitFlash.kind === "crit")
             ? Math.round(Math.sin(renderClock * 0.2) * 2)
             : 0;
+          let shakeX = 0;
+          let shakeY = 0;
+          if (camShakeT > 0) {
+            const s = Math.round((Math.random() * 2 - 1) * camShakePow);
+            shakeX = s;
+            shakeY = s;
+            camShakeT = Math.max(0, camShakeT - lastFrameDt);
+            if (camShakeT === 0) camShakePow = 0;
+          }
           octx.clearRect(0, 0, offscreen.width, offscreen.height);
           octx.imageSmoothingEnabled = false;
 
           octx.save();
           octx.setTransform(1, 0, 0, 1, 0, 0);
           octx.scale(1, 1);
-          octx.translate(-Math.floor(camera.xPx), -Math.floor(camera.yPx));
+          octx.translate(-Math.floor(camera.xPx) + shakeX, -Math.floor(camera.yPx) + shakeY);
           octx.drawImage(mapCache, 0, 0);
           drawOverlays(octx);
           drawUnits(octx);
+          drawVfx(octx);
           octx.restore();
           drawCanvasUi(octx);
 
@@ -3481,6 +3503,7 @@
               ctx.font = "10px monospace";
               ctx.fillText((u.facing || "F") + "->" + renderFace(u.facing || "F"), dx, dy - 2);
               ctx.restore();
+              drawUnitFlashOverlay(ctx, u, px, py);
               if (!u.__spriteVerifyLogged) {
                 console.log("[VERIFY_SPRITE_OK]", { id: u.id, face, key, src: spriteImg?.src, w: spriteImg?.naturalWidth, h: spriteImg?.naturalHeight });
                 u.__spriteVerifyLogged = true;
@@ -3499,6 +3522,7 @@
             if (visualSkin === "flat_v1") {
               if (Tier1CharIds.has(u.charId)) drawUnitSD_Tier1(ctx, u, px, py);
               else drawUnitFlat(ctx, u, px, py);
+              drawUnitFlashOverlay(ctx, u, px, py);
               continue;
             }
             const c = palette[u.paletteKey];
@@ -3526,7 +3550,64 @@
               ctx.font = "8px monospace";
               ctx.fillText("ACT", px + 3, py + 10);
             }
+            drawUnitFlashOverlay(ctx, u, px, py);
             ctx.restore();
+          }
+        }
+
+        function drawUnitFlashOverlay(ctx, unit, px, py) {
+          const until = Number(unit?.flashUntil || 0);
+          const t = now();
+          if (until <= t) return;
+          const u = 1 - Math.min(1, Math.max(0, (until - t) / 120));
+          ctx.save();
+          ctx.globalAlpha = 0.16 + (0.28 * (1 - u));
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
+          ctx.restore();
+        }
+
+        function drawVfx(ctx) {
+          const t = now();
+          for (const e of VFX) {
+            const u = Math.min(1, Math.max(0, (t - e.t0) / e.dur));
+            if (u >= 1) continue;
+            if (e.type === "trail") {
+              const ax = e.ax * TILE;
+              const ay = e.ay * TILE;
+              const tx = e.tx * TILE;
+              const ty = e.ty * TILE;
+              ctx.save();
+              ctx.globalAlpha = 0.55 * (1 - u);
+              ctx.lineWidth = 2;
+              ctx.strokeStyle = "#fff1a8";
+              ctx.beginPath();
+              ctx.moveTo(ax, ay);
+              ctx.lineTo(tx, ty);
+              ctx.stroke();
+              ctx.restore();
+            } else if (e.type === "spark") {
+              const cx = e.x * TILE;
+              const cy = e.y * TILE;
+              ctx.save();
+              ctx.globalAlpha = 0.9 * (1 - u);
+              ctx.strokeStyle = "#fff7d1";
+              ctx.lineWidth = 1.6;
+              const len = lerp(2, 8, u);
+              for (let i = 0; i < 8; i++) {
+                const a = (Math.PI * 2 * i / 8) + (u * 0.9);
+                const x2 = cx + Math.cos(a) * len;
+                const y2 = cy + Math.sin(a) * len;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+              }
+              ctx.restore();
+            }
+          }
+          for (let i = VFX.length - 1; i >= 0; i--) {
+            if ((t - VFX[i].t0) >= VFX[i].dur) VFX.splice(i, 1);
           }
         }
 
@@ -7901,6 +7982,17 @@
             if (attacker.turnFlags) attacker.turnFlags.firstAttackUsed = true;
             return { resolved: true, hit: false, triText, targetDefeated: false };
           }
+
+          const t = now();
+          const ax = attacker.x + 0.5;
+          const ay = attacker.y + 0.5;
+          const tx = target.x + 0.5;
+          const ty = target.y + 0.5;
+          addVfx({ type: "trail", t0: t, dur: 110, ax, ay, tx, ty });
+          addVfx({ type: "spark", t0: t + 70, dur: 180, x: tx, y: ty });
+          triggerShake(1, 90);
+          target.flashUntil = t + 120;
+          console.log("[VERIFY_VFX]", { type: "atk", a: attacker.id, t: target.id });
 
           const critChance = statWithEffects(attacker, "crit") + payload.mods.crit + (attacker.nextAttackBonus.crit || 0);
           const crit = fixedDamage == null && (Math.floor(rng() * 100) < critChance);
