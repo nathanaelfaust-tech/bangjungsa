@@ -3425,8 +3425,8 @@
               const pxCenter = px + TILE * 0.5;
               const pyCenter = py + TILE;
               let nudgeX = 0;
-              if (hasUnitAt(u.x - 1, u.y)) nudgeX += 6;
-              if (hasUnitAt(u.x + 1, u.y)) nudgeX -= 6;
+              if (hasUnitAt(u.x - 1, u.y)) nudgeX += 8;
+              if (hasUnitAt(u.x + 1, u.y)) nudgeX -= 8;
               const dx = Math.round(pxCenter - (S / 2) + nudgeX);
               const dy = Math.round(pyCenter - S);
               ctx.imageSmoothingEnabled = false;
@@ -3473,6 +3473,9 @@
               ctx.font = "10px monospace";
               ctx.fillText((u.facing || "F") + "->" + __renderFace(u.facing || "F"), dx, dy - 2);
               ctx.restore();
+              if (selectedUnitId === u.id) {
+                console.log(`[VERIFY_ZORDER] drew=${u.id} y=${u.y} nudgeX=${nudgeX}`);
+              }
               if (!u.__spriteDrawLogged) {
                 console.log(`[VERIFY_MAPSPRITE_DRAW] id=${u.id} key=${spriteKey} size=${spriteImg ? (spriteImg.naturalWidth + "x" + spriteImg.naturalHeight) : "null"} drawn=${S}x${S}`);
                 console.log(`[VERIFY_PIXEL] S=${S} smoothing=${ctx.imageSmoothingEnabled} dxdy=${dx},${dy}`);
