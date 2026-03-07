@@ -3402,6 +3402,39 @@
               const pyCenter = py + TILE;
               const S = 24;
               ctx.imageSmoothingEnabled = false;
+
+              // Ground shadow to separate feet from terrain.
+              ctx.save();
+              ctx.globalAlpha = 0.35;
+              ctx.fillStyle = "black";
+              ctx.beginPath();
+              ctx.ellipse(pxCenter, pyCenter - 4, S * 0.35, S * 0.18, 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+
+              // Backplate behind torso/head for readability on busy tiles.
+              ctx.save();
+              ctx.globalAlpha = 0.30;
+              ctx.fillStyle = "black";
+              const bw = Math.round(S * 0.95);
+              const bh = Math.round(S * 0.85);
+              const bx = Math.round(pxCenter - (bw / 2));
+              const by = Math.round(pyCenter - S - (bh * 0.10));
+              const r = 4;
+              ctx.beginPath();
+              ctx.moveTo(bx + r, by);
+              ctx.lineTo(bx + bw - r, by);
+              ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + r);
+              ctx.lineTo(bx + bw, by + bh - r);
+              ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - r, by + bh);
+              ctx.lineTo(bx + r, by + bh);
+              ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - r);
+              ctx.lineTo(bx, by + r);
+              ctx.quadraticCurveTo(bx, by, bx + r, by);
+              ctx.closePath();
+              ctx.fill();
+              ctx.restore();
+
               ctx.drawImage(spriteImg, pxCenter - (S / 2), pyCenter - S, S, S);
               if (!u.__spriteDrawLogged) {
                 console.log(`[VERIFY_MAPSPRITE_DRAW] id=${u.id} key=${spriteKey} size=${spriteImg ? (spriteImg.naturalWidth + "x" + spriteImg.naturalHeight) : "null"} drawn=${S}x${S}`);
