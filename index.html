@@ -912,7 +912,7 @@
         const INTERNAL_W = VIEW_W * TILE;
         const INTERNAL_H = VIEW_H * TILE;
         const CAMERA_ZOOM = 1.35;
-        const USE_CLEAN_SPRITES = true;
+        const USE_SPRITES_BANK = "raw"; // "raw" | "clean" | "current"
         const HERO_MELEE_DMG_BASE = 1.0;
         const HERO_BOLT_DMG_MULT = 0.65;
         const HERO_DASH_DMG_MULT = 1.20;
@@ -1740,7 +1740,7 @@
         minimapTerrainCache.width = MINI_W;
         minimapTerrainCache.height = MINI_H;
         const miniTerrainCtx = minimapTerrainCache.getContext("2d");
-        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, sprites: {}, sprites_clean: {}, portraits: {}, ready: false, manifest: null };
+        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, sprites: {}, sprites_clean: {}, sprites_raw: {}, portraits: {}, ready: false, manifest: null };
 
         async function loadManifest(season) {
           try {
@@ -1768,7 +1768,7 @@
           ASSETS.ready = false;
           const mj = await loadManifest(season);
           ASSETS.manifest = mj;
-          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, sprites: 0, sprites_clean: 0, portraits: 0, missing: 0 };
+          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, sprites: 0, sprites_clean: 0, sprites_raw: 0, portraits: 0, missing: 0 };
 
           if (!mj) {
             ASSETS.ready = true;
@@ -1776,13 +1776,13 @@
             return;
           }
 
-          for (const group of ["units", "icons", "vfx", "ui", "sprites", "sprites_clean"]) {
+          for (const group of ["units", "icons", "vfx", "ui", "sprites", "sprites_clean", "sprites_raw"]) {
             ASSETS[group] = {};
             const entries = mj[group] || {};
             for (const k of Object.keys(entries)) {
               const url = entries[k];
               const img = await preloadImage(url);
-              if ((group === "sprites" || group === "sprites_clean") && img && (img.naturalWidth !== 32 || img.naturalHeight !== 32)) {
+              if ((group === "sprites" || group === "sprites_clean" || group === "sprites_raw") && img && (img.naturalWidth !== 32 || img.naturalHeight !== 32)) {
                 console.log(`[VERIFY_SPRITE_BADSIZE] key=${k} size=${img.naturalWidth}x${img.naturalHeight} -> null`);
                 ASSETS[group][k] = null;
                 counts.missing++;
@@ -1815,11 +1815,11 @@
             }
           }
           ASSETS.ready = true;
-          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} sprites=${counts.sprites} sprites_clean=${counts.sprites_clean} portraits=${counts.portraits} missing=${counts.missing}`);
+          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} sprites=${counts.sprites} sprites_clean=${counts.sprites_clean} sprites_raw=${counts.sprites_raw} portraits=${counts.portraits} missing=${counts.missing}`);
           console.log(`[VERIFY_ASSET] season=${season} portraits=${Object.keys(ASSETS.portraits || {}).length}`);
           console.log(`[VERIFY_ASSET_SPRITES] keys=${Object.keys(ASSETS.sprites || {}).slice(0, 20).join(",")}`);
           console.log("[VERIFY_SPRITES_KEYS]", Object.keys(ASSETS.sprites || {}).filter((k) => k.startsWith("jeong2_") || k.startsWith("nyangsan_")).join(","));
-          console.log(`[VERIFY_SPRITE_BANK] clean=${USE_CLEAN_SPRITES} keys_clean=${Object.keys(ASSETS.sprites_clean || {}).length} keys_raw=${Object.keys(ASSETS.sprites || {}).length}`);
+          console.log(`[VERIFY_SPRITE_BANK] bank=${USE_SPRITES_BANK} raw=${Object.keys(ASSETS.sprites_raw || {}).length} clean=${Object.keys(ASSETS.sprites_clean || {}).length} cur=${Object.keys(ASSETS.sprites || {}).length}`);
         }
 
         if (!DEV_BUILD) {
@@ -3386,7 +3386,10 @@
             const px = (u.px != null ? u.px : u.x * TILE);
             const py = (u.py != null ? u.py : u.y * TILE);
             const spriteKey = getMapSpriteKey(u);
-            const bank = (USE_CLEAN_SPRITES && ASSETS.sprites_clean) ? ASSETS.sprites_clean : ASSETS.sprites;
+            let bank = ASSETS.sprites;
+            if (USE_SPRITES_BANK === "raw") bank = ASSETS.sprites_raw || ASSETS.sprites;
+            if (USE_SPRITES_BANK === "clean") bank = ASSETS.sprites_clean || ASSETS.sprites;
+            if (USE_SPRITES_BANK === "current") bank = ASSETS.sprites;
             let spriteImg = spriteKey ? bank?.[spriteKey] : null;
             spriteImg = __MAP_SPRITES_ONLY_GUARD__(spriteImg, spriteKey);
             if ((u.id === "nyangsan" || u.id === "jeong2" || u.id === "정2" || u.id === "J2") && !u.__unitIdLogged) {
