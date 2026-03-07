@@ -7567,8 +7567,12 @@
           return key;
         }
 
-        function renderFace(face) {
-          return (face === "B" || face === "L" || face === "R") ? face : "F";
+        function renderFace(face){
+          let f = (face==="B"||face==="L"||face==="R") ? face : "F";
+          // L/R만 스왑
+          if(f==="L") return "R";
+          if(f==="R") return "L";
+          return f; // F,B 그대로
         }
 
         function tickTurnState() {
