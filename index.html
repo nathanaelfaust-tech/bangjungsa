@@ -3372,6 +3372,17 @@
           renderDialogBar();
         }
 
+        function __MAP_SPRITES_ONLY_GUARD__(img, key = "") {
+          if (!img) return null;
+          const w = img.naturalWidth || img.width || 0;
+          const h = img.naturalHeight || img.height || 0;
+          if (w !== 32 || h !== 32) {
+            console.log(`[VERIFY_SPRITE_BADSIZE] key=${key} ${w}x${h} -> blocked`);
+            return null;
+          }
+          return img;
+        }
+
         function drawUnits(ctx) {
           for (const u of units) {
             if (!u.facing) u.facing = "F";
@@ -3379,10 +3390,7 @@
             const py = (u.py != null ? u.py : u.y * TILE);
             const spriteKey = getMapSpriteKey(u);
             let spriteImg = spriteKey ? ASSETS.sprites?.[spriteKey] : null;
-            if (spriteImg && (spriteImg.naturalWidth !== 32 || spriteImg.naturalHeight !== 32)) {
-              console.log(`[VERIFY_SPRITE_BADSIZE] key=${spriteKey} ${spriteImg.naturalWidth}x${spriteImg.naturalHeight}`);
-              spriteImg = null;
-            }
+            spriteImg = __MAP_SPRITES_ONLY_GUARD__(spriteImg, spriteKey);
             if (spriteImg) {
               const pxCenter = px + TILE * 0.5;
               const pyCenter = py + TILE;
@@ -7452,8 +7460,8 @@
         function getMapSpriteKey(u) {
           if (!u) return null;
           const f = (u.facing === "B" || u.facing === "L" || u.facing === "R") ? u.facing : "F";
-          if (u.id === "nyangsan" || String(u.id || "").includes("냥산")) return `nyangsan_${f}`;
-          if (u.id === "jeong2" || u.id === "정2") return `jeong2_${f}`;
+          if (u.id === "nyangsan") return `nyangsan_${f}`;
+          if (u.id === "jeong2") return `jeong2_${f}`;
           return null;
         }
 
