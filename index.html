@@ -3112,10 +3112,8 @@
             if (t >= 1) {
               const dx = b.x - a.x;
               const dy = b.y - a.y;
-              if (dx > 0) mv.unit.facing = "R";
-              else if (dx < 0) mv.unit.facing = "L";
-              else if (dy > 0) mv.unit.facing = "F";
-              else if (dy < 0) mv.unit.facing = "B";
+              if (dx !== 0 || dy !== 0) mv.unit.facing = faceFromDelta(dx, dy);
+              console.log(`[VERIFY_FACE_MOVE] id=${mv.unit.id} from=${a.x},${a.y} to=${b.x},${b.y} dxdy=${dx},${dy} facing=${mv.unit.facing || "F"}`);
               mv.unit.x = b.x;
               mv.unit.y = b.y;
               mv.stepIndex++;
@@ -7809,6 +7807,10 @@
 
         async function resolveAttack(attacker, target, { actionMode = "attack", contextTag = "normal", logPrefix = "", damageMult = 1, onHitEffect = null, forceHit = false, minDamageOnHit = 0, fixedDamage = null } = {}) {
           if (!attacker || !target || battleOver) return { resolved: false };
+          const fdx = target.x - attacker.x;
+          const fdy = target.y - attacker.y;
+          if (fdx !== 0 || fdy !== 0) attacker.facing = faceFromDelta(fdx, fdy);
+          console.log(`[VERIFY_FACE_ATK] id=${attacker.id} a=${attacker.x},${attacker.y} t=${target.x},${target.y} dxdy=${fdx},${fdy} facing=${attacker.facing || "F"}`);
           target.lastAttackerId = attacker.id;
           if (attacker.faction !== target.faction) {
             attacker.engaged = true;
@@ -8108,6 +8110,13 @@
 
         function easeOutCubic(t) {
           return 1 - Math.pow(1 - t, 3);
+        }
+
+        function faceFromDelta(dx, dy) {
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            return dx >= 0 ? "R" : "L";
+          }
+          return dy >= 0 ? "F" : "B";
         }
 
         function mulberry32(seed) {
