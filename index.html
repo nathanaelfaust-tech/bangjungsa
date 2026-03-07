@@ -3496,13 +3496,6 @@
               }
 
               ctx.drawImage(spriteImg, dx, dy, S, S);
-              ctx.save();
-              ctx.imageSmoothingEnabled = false;
-              ctx.globalAlpha = 0.9;
-              ctx.fillStyle = "white";
-              ctx.font = "10px monospace";
-              ctx.fillText((u.facing || "F") + "->" + renderFace(u.facing || "F"), dx, dy - 2);
-              ctx.restore();
               drawUnitFlashOverlay(ctx, u, px, py);
               if (!u.__spriteVerifyLogged) {
                 console.log("[VERIFY_SPRITE_OK]", { id: u.id, face, key, src: spriteImg?.src, w: spriteImg?.naturalWidth, h: spriteImg?.naturalHeight });
