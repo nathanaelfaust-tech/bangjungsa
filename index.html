@@ -3113,7 +3113,7 @@
               const dx = b.x - a.x;
               const dy = b.y - a.y;
               if (dx !== 0 || dy !== 0) mv.unit.facing = faceFromDelta(dx, dy);
-              console.log(`[VERIFY_FACE_MOVE] id=${mv.unit.id} from=${a.x},${a.y} to=${b.x},${b.y} dxdy=${dx},${dy} facing=${mv.unit.facing || "F"}`);
+              console.log(`[VERIFY_FACE_MOVE] ${mv.unit.id} from=${a.x},${a.y} to=${b.x},${b.y} dxdy=${dx},${dy} face=${mv.unit.facing || "F"}`);
               mv.unit.x = b.x;
               mv.unit.y = b.y;
               mv.stepIndex++;
@@ -7523,9 +7523,9 @@
 
         function getMapSpriteKey(u) {
           if (!u) return null;
-          const f = (u.facing === "B" || u.facing === "L" || u.facing === "R") ? u.facing : "F";
-          if (u.id === "nyangsan") return `nyangsan_${f}`;
-          if (u.id === "jeong2" || u.id === "정2" || u.id === "J2") return `jeong2_${f}`;
+          const face = u.facing || "F";
+          if (u.id === "nyangsan") return `nyangsan_${face}`;
+          if (u.id === "jeong2" || u.id === "정2" || u.id === "J2") return `jeong2_${face}`;
           return null;
         }
 
@@ -7810,7 +7810,7 @@
           const fdx = target.x - attacker.x;
           const fdy = target.y - attacker.y;
           if (fdx !== 0 || fdy !== 0) attacker.facing = faceFromDelta(fdx, fdy);
-          console.log(`[VERIFY_FACE_ATK] id=${attacker.id} a=${attacker.x},${attacker.y} t=${target.x},${target.y} dxdy=${fdx},${fdy} facing=${attacker.facing || "F"}`);
+          console.log(`[VERIFY_FACE_ATK] ${attacker.id} a=${attacker.x},${attacker.y} t=${target.x},${target.y} dxdy=${fdx},${fdy} face=${attacker.facing || "F"}`);
           target.lastAttackerId = attacker.id;
           if (attacker.faction !== target.faction) {
             attacker.engaged = true;
