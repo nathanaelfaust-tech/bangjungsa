@@ -914,8 +914,8 @@
         const CAMERA_ZOOM = 1.0;
         const USE_SPRITES_BANK = "raw_alpha"; // "raw_alpha" | "raw" | "clean" | "current"
         const MAP_SPRITE_RES = 32; // 32 or 48
-        const SWAP_FB = true; // true => F<->B swap at render time
-        const SWAP_LR = true; // true => L<->R swap at render time
+        const SWAP_FB = true; // true면 F<->B 스왑
+        const SWAP_LR = false; // true면 L<->R 스왑
         const USE_UNIT_BACKPLATE = false; // backplate + shadow
         const HERO_MELEE_DMG_BASE = 1.0;
         const HERO_BOLT_DMG_MULT = 0.65;
@@ -3115,7 +3115,7 @@
               const dx = b.x - a.x;
               const dy = b.y - a.y;
               if (dx !== 0 || dy !== 0) mv.unit.facing = faceFromDelta(dx, dy);
-              console.log(`[VERIFY_FACE_MOVE] ${mv.unit.id} from=${a.x},${a.y} to=${b.x},${b.y} dxdy=${dx},${dy} face=${mv.unit.facing || "F"}`);
+              console.log(`[VERIFY_FACE] id=${mv.unit.id} raw=${mv.unit.facing || "F"} render=${renderFace(mv.unit.facing || "F")}`);
               mv.unit.x = b.x;
               mv.unit.y = b.y;
               mv.stepIndex++;
@@ -3471,7 +3471,7 @@
               ctx.globalAlpha = 0.9;
               ctx.fillStyle = "white";
               ctx.font = "10px monospace";
-              ctx.fillText((u.facing || "F") + "->" + __renderFace(u.facing || "F"), dx, dy - 2);
+              ctx.fillText((u.facing || "F") + "->" + renderFace(u.facing || "F"), dx, dy - 2);
               ctx.restore();
               if (selectedUnitId === u.id) {
                 console.log(`[VERIFY_ZORDER] drew=${u.id} y=${u.y} nudgeX=${nudgeX}`);
@@ -7542,13 +7542,12 @@
 
         function getMapSpriteKey(u) {
           if (!u) return null;
-          const face = __renderFace(u.facing || "F");
-          if (u.id === "nyangsan") return `nyangsan_${face}`;
-          if (u.id === "jeong2" || u.id === "정2" || u.id === "J2") return `jeong2_${face}`;
-          return null;
+          const face = renderFace(u.facing || "F");
+          const key = `${u.id}_${face}`;
+          return key;
         }
 
-        function __renderFace(face) {
+        function renderFace(face) {
           let f = (face === "B" || face === "L" || face === "R") ? face : "F";
           if (SWAP_FB) {
             if (f === "F") f = "B";
@@ -7842,7 +7841,7 @@
           const fdx = target.x - attacker.x;
           const fdy = target.y - attacker.y;
           if (fdx !== 0 || fdy !== 0) attacker.facing = faceFromDelta(fdx, fdy);
-          console.log(`[VERIFY_FACE_ATK] ${attacker.id} a=${attacker.x},${attacker.y} t=${target.x},${target.y} dxdy=${fdx},${fdy} face=${attacker.facing || "F"}`);
+          console.log(`[VERIFY_FACE] id=${attacker.id} raw=${attacker.facing || "F"} render=${renderFace(attacker.facing || "F")}`);
           target.lastAttackerId = attacker.id;
           if (attacker.faction !== target.faction) {
             attacker.engaged = true;
@@ -8146,7 +8145,7 @@
 
         function faceFromDelta(dx, dy) {
           if (Math.abs(dx) >= Math.abs(dy)) {
-            return dx >= 0 ? "L" : "R";
+            return dx >= 0 ? "R" : "L";
           }
           return dy >= 0 ? "F" : "B";
         }
