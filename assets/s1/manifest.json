@@ -26,7 +26,13 @@
   },
   "portraits": {
     "hero": "",
-    "jeong2": "",
+    "jeong2": {
+      "card": "assets/s1/units/jeong2_card.png",
+      "idle": "assets/s1/units/jeong2_idle.png",
+      "talk": "assets/s1/units/jeong2_talk.png",
+      "focus": "assets/s1/units/jeong2_focus.png",
+      "sleep": "assets/s1/units/jeong2_focus.png"
+    },
     "mender": {
       "card": "",
       "idle": "",
