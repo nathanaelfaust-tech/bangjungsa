@@ -913,6 +913,7 @@
         const INTERNAL_H = VIEW_H * TILE;
         const CAMERA_ZOOM = 1.35;
         const USE_SPRITES_BANK = "raw_alpha"; // "raw_alpha" | "raw" | "clean" | "current"
+        const MAP_SPRITE_RES = 48; // 32 or 48
         const USE_UNIT_BACKPLATE = false; // backplate + shadow
         const HERO_MELEE_DMG_BASE = 1.0;
         const HERO_BOLT_DMG_MULT = 0.65;
@@ -1741,7 +1742,7 @@
         minimapTerrainCache.width = MINI_W;
         minimapTerrainCache.height = MINI_H;
         const miniTerrainCtx = minimapTerrainCache.getContext("2d");
-        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, sprites: {}, sprites_clean: {}, sprites_raw: {}, sprites_raw_alpha: {}, portraits: {}, ready: false, manifest: null };
+        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, sprites: {}, sprites_clean: {}, sprites_raw: {}, sprites_raw_alpha: {}, sprites_raw_alpha_48: {}, portraits: {}, ready: false, manifest: null };
         const __ASSET_BUSTER__ = (() => {
           try {
             const q = new URLSearchParams(location.search);
@@ -1782,7 +1783,7 @@
           ASSETS.ready = false;
           const mj = await loadManifest(season);
           ASSETS.manifest = mj;
-          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, sprites: 0, sprites_clean: 0, sprites_raw: 0, sprites_raw_alpha: 0, portraits: 0, missing: 0 };
+          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, sprites: 0, sprites_clean: 0, sprites_raw: 0, sprites_raw_alpha: 0, sprites_raw_alpha_48: 0, portraits: 0, missing: 0 };
 
           if (!mj) {
             ASSETS.ready = true;
@@ -1790,13 +1791,15 @@
             return;
           }
 
-          for (const group of ["units", "icons", "vfx", "ui", "sprites", "sprites_clean", "sprites_raw", "sprites_raw_alpha"]) {
+          for (const group of ["units", "icons", "vfx", "ui", "sprites", "sprites_clean", "sprites_raw", "sprites_raw_alpha", "sprites_raw_alpha_48"]) {
             ASSETS[group] = {};
             const entries = mj[group] || {};
             for (const k of Object.keys(entries)) {
               const url = entries[k];
               const img = await preloadImage(url);
-              if ((group === "sprites" || group === "sprites_clean" || group === "sprites_raw" || group === "sprites_raw_alpha") && img && (img.naturalWidth !== 32 || img.naturalHeight !== 32)) {
+              const isSpriteGroup = group === "sprites" || group === "sprites_clean" || group === "sprites_raw" || group === "sprites_raw_alpha" || group === "sprites_raw_alpha_48";
+              const expectedSize = group === "sprites_raw_alpha_48" ? 48 : 32;
+              if (isSpriteGroup && img && (img.naturalWidth !== expectedSize || img.naturalHeight !== expectedSize)) {
                 console.log(`[VERIFY_SPRITE_BADSIZE] key=${k} size=${img.naturalWidth}x${img.naturalHeight} -> null`);
                 ASSETS[group][k] = null;
                 counts.missing++;
@@ -1829,7 +1832,7 @@
             }
           }
           ASSETS.ready = true;
-          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} sprites=${counts.sprites} sprites_clean=${counts.sprites_clean} sprites_raw=${counts.sprites_raw} sprites_raw_alpha=${counts.sprites_raw_alpha} portraits=${counts.portraits} missing=${counts.missing}`);
+          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} sprites=${counts.sprites} sprites_clean=${counts.sprites_clean} sprites_raw=${counts.sprites_raw} sprites_raw_alpha=${counts.sprites_raw_alpha} sprites_raw_alpha_48=${counts.sprites_raw_alpha_48} portraits=${counts.portraits} missing=${counts.missing}`);
           console.log(`[VERIFY_ASSET] season=${season} portraits=${Object.keys(ASSETS.portraits || {}).length}`);
           console.log(`[VERIFY_ASSET_SPRITES] keys=${Object.keys(ASSETS.sprites || {}).slice(0, 20).join(",")}`);
           console.log("[VERIFY_SPRITES_KEYS]", Object.keys(ASSETS.sprites || {}).filter((k) => k.startsWith("jeong2_") || k.startsWith("nyangsan_")).join(","));
@@ -3384,11 +3387,11 @@
           renderDialogBar();
         }
 
-        function __MAP_SPRITES_ONLY_GUARD__(img, key = "") {
+        function __MAP_SPRITES_ONLY_GUARD__(img, key = "", expected = 32) {
           if (!img) return null;
           const w = img.naturalWidth || img.width || 0;
           const h = img.naturalHeight || img.height || 0;
-          if (w !== 32 || h !== 32) {
+          if (w !== expected || h !== expected) {
             console.log(`[VERIFY_SPRITE_BADSIZE] key=${key} ${w}x${h} -> blocked`);
             return null;
           }
@@ -3401,13 +3404,15 @@
             const px = (u.px != null ? u.px : u.x * TILE);
             const py = (u.py != null ? u.py : u.y * TILE);
             const spriteKey = getMapSpriteKey(u);
-            let bank = ASSETS.sprites;
+            const S = (MAP_SPRITE_RES === 48 ? 48 : 32);
+            let bank = ASSETS.sprites_raw_alpha || ASSETS.sprites;
             if (USE_SPRITES_BANK === "raw_alpha") bank = ASSETS.sprites_raw_alpha || ASSETS.sprites_raw || ASSETS.sprites;
             if (USE_SPRITES_BANK === "raw") bank = ASSETS.sprites_raw || ASSETS.sprites;
             if (USE_SPRITES_BANK === "clean") bank = ASSETS.sprites_clean || ASSETS.sprites;
             if (USE_SPRITES_BANK === "current") bank = ASSETS.sprites;
+            if (MAP_SPRITE_RES === 48 && ASSETS.sprites_raw_alpha_48) bank = ASSETS.sprites_raw_alpha_48;
             let spriteImg = spriteKey ? bank?.[spriteKey] : null;
-            spriteImg = __MAP_SPRITES_ONLY_GUARD__(spriteImg, spriteKey);
+            spriteImg = __MAP_SPRITES_ONLY_GUARD__(spriteImg, spriteKey, S);
             if ((u.id === "nyangsan" || u.id === "jeong2" || u.id === "정2" || u.id === "J2") && !u.__unitIdLogged) {
               console.log(`[VERIFY_UNIT_ID] id=${u.id} key=${spriteKey} hasSprite=${!!spriteImg}`);
               u.__unitIdLogged = true;
@@ -3415,7 +3420,6 @@
             if (spriteImg) {
               const pxCenter = px + TILE * 0.5;
               const pyCenter = py + TILE;
-              const S = 32;
               const dx = Math.round(pxCenter - (S / 2));
               const dy = Math.round(pyCenter - S);
               ctx.imageSmoothingEnabled = false;
@@ -3458,6 +3462,7 @@
               if (!u.__spriteDrawLogged) {
                 console.log(`[VERIFY_MAPSPRITE_DRAW] id=${u.id} key=${spriteKey} size=${spriteImg ? (spriteImg.naturalWidth + "x" + spriteImg.naturalHeight) : "null"} drawn=${S}x${S}`);
                 console.log(`[VERIFY_PIXEL] S=${S} smoothing=${ctx.imageSmoothingEnabled} dxdy=${dx},${dy}`);
+                console.log(`[VERIFY_MAP_SPRITE] RES=${MAP_SPRITE_RES} bank48=${!!ASSETS.sprites_raw_alpha_48} key=${spriteKey}`);
                 u.__spriteDrawLogged = true;
               }
               continue;
