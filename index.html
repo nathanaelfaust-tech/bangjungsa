@@ -914,8 +914,6 @@
         const CAMERA_ZOOM = 1.0;
         const USE_SPRITES_BANK = "raw_alpha"; // "raw_alpha" | "raw" | "clean" | "current"
         const MAP_SPRITE_RES = 32; // 32 or 48
-        const SWAP_FB = true; // true면 F<->B 스왑
-        const SWAP_LR = false; // true면 L<->R 스왑
         const USE_UNIT_BACKPLATE = false; // backplate + shadow
         const HERO_MELEE_DMG_BASE = 1.0;
         const HERO_BOLT_DMG_MULT = 0.65;
@@ -3407,21 +3405,29 @@
             if (!u.facing) u.facing = "F";
             const px = (u.px != null ? u.px : u.x * TILE);
             const py = (u.py != null ? u.py : u.y * TILE);
-            const spriteKey = getMapSpriteKey(u);
+            const face = renderFace(u.facing);
+            const key = `${u.id}_${face}`;
             const S = (MAP_SPRITE_RES === 48 ? 48 : 32);
-            let bank = ASSETS.sprites_raw_alpha || ASSETS.sprites;
-            if (USE_SPRITES_BANK === "raw_alpha") bank = ASSETS.sprites_raw_alpha || ASSETS.sprites_raw || ASSETS.sprites;
-            if (USE_SPRITES_BANK === "raw") bank = ASSETS.sprites_raw || ASSETS.sprites;
-            if (USE_SPRITES_BANK === "clean") bank = ASSETS.sprites_clean || ASSETS.sprites;
-            if (USE_SPRITES_BANK === "current") bank = ASSETS.sprites;
-            if (MAP_SPRITE_RES === 48 && ASSETS.sprites_raw_alpha_48) bank = ASSETS.sprites_raw_alpha_48;
-            let spriteImg = spriteKey ? bank?.[spriteKey] : null;
-            spriteImg = __MAP_SPRITES_ONLY_GUARD__(spriteImg, spriteKey, S);
-            if ((u.id === "nyangsan" || u.id === "jeong2" || u.id === "정2" || u.id === "J2") && !u.__unitIdLogged) {
-              console.log(`[VERIFY_UNIT_ID] id=${u.id} key=${spriteKey} hasSprite=${!!spriteImg}`);
-              u.__unitIdLogged = true;
+            const bank = (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[key]) ? ASSETS.sprites_raw_alpha
+              : (ASSETS.sprites && ASSETS.sprites[key]) ? ASSETS.sprites
+                : null;
+            let spriteImg = bank ? bank[key] : null;
+            if (!spriteImg || !spriteImg.complete || spriteImg.naturalWidth === 0) {
+              console.log("[VERIFY_SPRITE_MISS]", {
+                id: u.id,
+                face,
+                key,
+                hasRawAlpha: !!ASSETS.sprites_raw_alpha,
+                hasSprites: !!ASSETS.sprites,
+                rawAlphaKeys: ASSETS.sprites_raw_alpha ? Object.keys(ASSETS.sprites_raw_alpha).filter((k) => k.startsWith(u.id + "_")).slice(0, 8) : [],
+                spriteKeys: ASSETS.sprites ? Object.keys(ASSETS.sprites).filter((k) => k.startsWith(u.id + "_")).slice(0, 8) : []
+              });
+              const k2 = `${u.id}_F`;
+              if (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[k2]) spriteImg = ASSETS.sprites_raw_alpha[k2];
+              else if (ASSETS.sprites && ASSETS.sprites[k2]) spriteImg = ASSETS.sprites[k2];
             }
-            if (spriteImg) {
+            const hasValidSprite = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
+            if (hasValidSprite) {
               const pxCenter = px + TILE * 0.5;
               const pyCenter = py + TILE;
               let nudgeX = 0;
@@ -3473,13 +3479,17 @@
               ctx.font = "10px monospace";
               ctx.fillText((u.facing || "F") + "->" + renderFace(u.facing || "F"), dx, dy - 2);
               ctx.restore();
+              if (!u.__spriteVerifyLogged) {
+                console.log("[VERIFY_SPRITE_OK]", { id: u.id, face, key, src: spriteImg?.src, w: spriteImg?.naturalWidth, h: spriteImg?.naturalHeight });
+                u.__spriteVerifyLogged = true;
+              }
               if (selectedUnitId === u.id) {
                 console.log(`[VERIFY_ZORDER] drew=${u.id} y=${u.y} nudgeX=${nudgeX}`);
               }
               if (!u.__spriteDrawLogged) {
-                console.log(`[VERIFY_MAPSPRITE_DRAW] id=${u.id} key=${spriteKey} size=${spriteImg ? (spriteImg.naturalWidth + "x" + spriteImg.naturalHeight) : "null"} drawn=${S}x${S}`);
+                console.log(`[VERIFY_MAPSPRITE_DRAW] id=${u.id} key=${key} size=${spriteImg ? (spriteImg.naturalWidth + "x" + spriteImg.naturalHeight) : "null"} drawn=${S}x${S}`);
                 console.log(`[VERIFY_PIXEL] S=${S} smoothing=${ctx.imageSmoothingEnabled} dxdy=${dx},${dy}`);
-                console.log(`[VERIFY_MAP_SPRITE] RES=${MAP_SPRITE_RES} bank48=${!!ASSETS.sprites_raw_alpha_48} key=${spriteKey}`);
+                console.log(`[VERIFY_MAP_SPRITE] RES=${MAP_SPRITE_RES} bank48=${!!ASSETS.sprites_raw_alpha_48} key=${key}`);
                 u.__spriteDrawLogged = true;
               }
               continue;
@@ -6968,6 +6978,10 @@
           spawnEnemiesAndNeutralsFromStage(stage);
           spawnPlayersFromCampaignRoster(stage);
           enforceStg1SingleUyangsan();
+          for (const u of units) {
+            if (!u.facing) u.facing = "F";
+            if (u.id === "nyangsan") u.facing = "F";
+          }
           if (stage.stageId === "STG2" || currentCampaignStageId === "STG2") {
             const stg2 = ensureStg2RuntimeState();
             console.log("[VERIFY_ALARM] alarm=", !!stg2.alarm);
@@ -7538,6 +7552,7 @@
           unit.preMove = unit.preMove || null;
           unit.actionState = unit.actionState || "idle";
           unit.facing = (unit.facing === "B" || unit.facing === "L" || unit.facing === "R") ? unit.facing : "F";
+          if (unit.id === "nyangsan") unit.facing = "F";
         }
 
         function getMapSpriteKey(u) {
@@ -7548,16 +7563,7 @@
         }
 
         function renderFace(face) {
-          let f = (face === "B" || face === "L" || face === "R") ? face : "F";
-          if (SWAP_FB) {
-            if (f === "F") f = "B";
-            else if (f === "B") f = "F";
-          }
-          if (SWAP_LR) {
-            if (f === "L") f = "R";
-            else if (f === "R") f = "L";
-          }
-          return f;
+          return (face === "B" || face === "L" || face === "R") ? face : "F";
         }
 
         function tickTurnState() {
