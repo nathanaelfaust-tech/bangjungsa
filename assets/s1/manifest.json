@@ -57,5 +57,17 @@
       "talk": "assets/s1/units/nyangsan_talk.png",
       "sleep": "assets/s1/units/nyangsan_sleep.png"
     }
+  },
+  "sprites_clean": {
+    "nyangsan_R": "assets/s1/sprites_clean/nyangsan_R.png",
+    "nyangsan_F": "assets/s1/sprites_clean/nyangsan_F.png",
+    "nyangsan_B": "assets/s1/sprites_clean/nyangsan_B.png",
+    "jeong2_idle_32": "assets/s1/sprites_clean/jeong2_idle_32.png",
+    "jeong2_L": "assets/s1/sprites_clean/jeong2_L.png",
+    "jeong2_B": "assets/s1/sprites_clean/jeong2_B.png",
+    "jeong2_F": "assets/s1/sprites_clean/jeong2_F.png",
+    "jeong2_R": "assets/s1/sprites_clean/jeong2_R.png",
+    "nyangsan_L": "assets/s1/sprites_clean/nyangsan_L.png",
+    "nyangsan_idle_32": "assets/s1/sprites_clean/nyangsan_idle_32.png"
   }
 }
