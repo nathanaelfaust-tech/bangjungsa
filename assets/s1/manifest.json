@@ -79,5 +79,15 @@
     "jeong2_F": "assets/s1/sprites_raw/jeong2_F.png",
     "jeong2_R": "assets/s1/sprites_raw/jeong2_R.png",
     "nyangsan_L": "assets/s1/sprites_raw/nyangsan_L.png"
+  },
+  "sprites_raw_alpha": {
+    "jeong2_B": "assets/s1/sprites_raw_alpha/jeong2_B.png",
+    "jeong2_F": "assets/s1/sprites_raw_alpha/jeong2_F.png",
+    "jeong2_L": "assets/s1/sprites_raw_alpha/jeong2_L.png",
+    "jeong2_R": "assets/s1/sprites_raw_alpha/jeong2_R.png",
+    "nyangsan_B": "assets/s1/sprites_raw_alpha/nyangsan_B.png",
+    "nyangsan_F": "assets/s1/sprites_raw_alpha/nyangsan_F.png",
+    "nyangsan_L": "assets/s1/sprites_raw_alpha/nyangsan_L.png",
+    "nyangsan_R": "assets/s1/sprites_raw_alpha/nyangsan_R.png"
   }
 }
