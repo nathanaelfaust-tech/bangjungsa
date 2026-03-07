@@ -1780,6 +1780,12 @@
             for (const k of Object.keys(entries)) {
               const url = entries[k];
               const img = await preloadImage(url);
+              if (group === "sprites" && img && (img.naturalWidth !== 32 || img.naturalHeight !== 32)) {
+                console.log(`[VERIFY_SPRITE_BADSIZE] key=${k} size=${img.naturalWidth}x${img.naturalHeight} -> null`);
+                ASSETS[group][k] = null;
+                counts.missing++;
+                continue;
+              }
               ASSETS[group][k] = img;
               if (img) counts[group]++; else counts.missing++;
             }
@@ -3372,7 +3378,11 @@
             const px = (u.px != null ? u.px : u.x * TILE);
             const py = (u.py != null ? u.py : u.y * TILE);
             const spriteKey = getMapSpriteKey(u);
-            const spriteImg = spriteKey ? ASSETS.sprites?.[spriteKey] : null;
+            let spriteImg = spriteKey ? ASSETS.sprites?.[spriteKey] : null;
+            if (spriteImg && (spriteImg.naturalWidth !== 32 || spriteImg.naturalHeight !== 32)) {
+              console.log(`[VERIFY_SPRITE_BADSIZE] key=${spriteKey} ${spriteImg.naturalWidth}x${spriteImg.naturalHeight}`);
+              spriteImg = null;
+            }
             if (spriteImg) {
               const pxCenter = px + TILE * 0.5;
               const pyCenter = py + TILE;
@@ -3380,9 +3390,9 @@
               ctx.imageSmoothingEnabled = false;
               ctx.drawImage(spriteImg, pxCenter - 16, pyCenter - 32, 32, 32);
               ctx.imageSmoothingEnabled = prevSmooth;
-              if (!u.__spriteLogged) {
-                console.log(`[VERIFY_MAPSPRITE] id=${u.id} facing=${u.facing || "F"} key=${spriteKey} loaded=true`);
-                u.__spriteLogged = true;
+              if (!u.__spriteDrawLogged) {
+                console.log(`[VERIFY_MAPSPRITE_DRAW] id=${u.id} key=${spriteKey} size=${spriteImg ? (spriteImg.naturalWidth + "x" + spriteImg.naturalHeight) : "null"} drawn=32x32`);
+                u.__spriteDrawLogged = true;
               }
               continue;
             }
