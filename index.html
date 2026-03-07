@@ -1702,6 +1702,7 @@
         let battleOver = false;
         let hitFlash = null;
         let renderClock = 0;
+        let lastCamVerifyLogAt = 0;
         let visualSkin = "legacy";
         const eventLog = [];
         const EVENT_LOG_MAX = 200;
@@ -3124,18 +3125,10 @@
           octx.save();
           octx.setTransform(1, 0, 0, 1, 0, 0);
           octx.scale(CAMERA_ZOOM, CAMERA_ZOOM);
-          const worldViewW = offscreen.width / CAMERA_ZOOM;
-          const worldViewH = offscreen.height / CAMERA_ZOOM;
-          octx.drawImage(
-            mapCache,
-            Math.floor(camera.xPx), Math.floor(camera.yPx), worldViewW, worldViewH,
-            0, 0, worldViewW, worldViewH
-          );
-          octx.save();
           octx.translate(-Math.floor(camera.xPx), -Math.floor(camera.yPx));
+          octx.drawImage(mapCache, 0, 0);
           drawOverlays(octx);
           drawUnits(octx);
-          octx.restore();
           octx.restore();
           drawCanvasUi(octx);
 
@@ -3812,8 +3805,9 @@
 
           const vx = (camera.xPx / (MAP_W * TILE)) * MINI_W;
           const vy = (camera.yPx / (MAP_H * TILE)) * MINI_H;
-          const vw = (INTERNAL_W / (MAP_W * TILE)) * MINI_W;
-          const vh = (INTERNAL_H / (MAP_H * TILE)) * MINI_H;
+          const vis = getVisibleWorldSize();
+          const vw = (vis.w / (MAP_W * TILE)) * MINI_W;
+          const vh = (vis.h / (MAP_H * TILE)) * MINI_H;
           miniCtx.strokeStyle = "#dbeeff";
           miniCtx.lineWidth = 1;
           miniCtx.strokeRect(
@@ -4157,8 +4151,9 @@
           const tx = Math.floor((sx / MINI_W) * MAP_W);
           const ty = Math.floor((sy / MINI_H) * MAP_H);
 
-          camera.xPx = tx * TILE - INTERNAL_W / 2;
-          camera.yPx = ty * TILE - INTERNAL_H / 2;
+          const vis = getVisibleWorldSize();
+          camera.xPx = tx * TILE - vis.w / 2;
+          camera.yPx = ty * TILE - vis.h / 2;
           clampCamera();
         }
 
@@ -4166,8 +4161,9 @@
           if (!unit) return;
           const ux = (unit.px != null ? unit.px : unit.x * TILE) + TILE / 2;
           const uy = (unit.py != null ? unit.py : unit.y * TILE) + TILE / 2;
-          camera.xPx = ux - INTERNAL_W / 2;
-          camera.yPx = uy - INTERNAL_H / 2;
+          const vis = getVisibleWorldSize();
+          camera.xPx = ux - vis.w / 2;
+          camera.yPx = uy - vis.h / 2;
           clampCamera();
         }
 
@@ -8074,8 +8070,9 @@
           if (followSelected && su) {
             const ux = (su.px != null ? su.px : su.x * TILE) + TILE / 2;
             const uy = (su.py != null ? su.py : su.y * TILE) + TILE / 2;
-            const targetX = ux - INTERNAL_W / 2;
-            const targetY = uy - INTERNAL_H / 2;
+            const vis = getVisibleWorldSize();
+            const targetX = ux - vis.w / 2;
+            const targetY = uy - vis.h / 2;
             camera.xPx += (targetX - camera.xPx) * 0.12;
             camera.yPx += (targetY - camera.yPx) * 0.12;
           }
@@ -8083,11 +8080,26 @@
           clampCamera();
         }
 
+        function getVisibleWorldSize() {
+          return {
+            w: INTERNAL_W / CAMERA_ZOOM,
+            h: INTERNAL_H / CAMERA_ZOOM
+          };
+        }
+
         function clampCamera() {
-          const maxX = Math.max(0, MAP_W * TILE - INTERNAL_W);
-          const maxY = Math.max(0, MAP_H * TILE - INTERNAL_H);
+          const worldW = MAP_W * TILE;
+          const worldH = MAP_H * TILE;
+          const vis = getVisibleWorldSize();
+          const maxX = Math.max(0, worldW - vis.w);
+          const maxY = Math.max(0, worldH - vis.h);
           camera.xPx = Math.max(0, Math.min(maxX, camera.xPx));
           camera.yPx = Math.max(0, Math.min(maxY, camera.yPx));
+          const now = performance.now();
+          if (now - lastCamVerifyLogAt > 1000) {
+            lastCamVerifyLogAt = now;
+            console.log(`[VERIFY_CAM] zoom=${CAMERA_ZOOM} cam=${camera.xPx.toFixed(1)},${camera.yPx.toFixed(1)} vis=${vis.w.toFixed(1)}x${vis.h.toFixed(1)} world=${worldW}x${worldH}`);
+          }
         }
 
         function mapCodeFromPaletteToken(token) {
