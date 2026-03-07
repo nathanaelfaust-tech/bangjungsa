@@ -3405,25 +3405,27 @@
             if (!u.facing) u.facing = "F";
             const px = (u.px != null ? u.px : u.x * TILE);
             const py = (u.py != null ? u.py : u.y * TILE);
+            const ID_ALIAS = {
+              "정2": "jeong2",
+              "jeong2_player": "jeong2",
+              "jeong2_ranger": "jeong2",
+              "U2_JEONG2": "jeong2"
+            };
+            let spriteId = ID_ALIAS[u.id] || u.id;
+            if (u.name === "정2") spriteId = "jeong2";
             const face = renderFace(u.facing);
-            const key = `${u.id}_${face}`;
+            const key = `${spriteId}_${face}`;
             const S = (MAP_SPRITE_RES === 48 ? 48 : 32);
-            const bank = (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[key]) ? ASSETS.sprites_raw_alpha
+            const bank = (ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[key]) ? ASSETS.sprites_raw_alpha_48
+              : (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[key]) ? ASSETS.sprites_raw_alpha
               : (ASSETS.sprites && ASSETS.sprites[key]) ? ASSETS.sprites
                 : null;
             let spriteImg = bank ? bank[key] : null;
             if (!spriteImg || !spriteImg.complete || spriteImg.naturalWidth === 0) {
-              console.log("[VERIFY_SPRITE_MISS]", {
-                id: u.id,
-                face,
-                key,
-                hasRawAlpha: !!ASSETS.sprites_raw_alpha,
-                hasSprites: !!ASSETS.sprites,
-                rawAlphaKeys: ASSETS.sprites_raw_alpha ? Object.keys(ASSETS.sprites_raw_alpha).filter((k) => k.startsWith(u.id + "_")).slice(0, 8) : [],
-                spriteKeys: ASSETS.sprites ? Object.keys(ASSETS.sprites).filter((k) => k.startsWith(u.id + "_")).slice(0, 8) : []
-              });
-              const k2 = `${u.id}_F`;
-              if (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[k2]) spriteImg = ASSETS.sprites_raw_alpha[k2];
+              console.log("[VERIFY_SPRITE_MISS]", { uId: u.id, spriteId, face, key });
+              const k2 = `${spriteId}_F`;
+              if (ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k2]) spriteImg = ASSETS.sprites_raw_alpha_48[k2];
+              else if (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[k2]) spriteImg = ASSETS.sprites_raw_alpha[k2];
               else if (ASSETS.sprites && ASSETS.sprites[k2]) spriteImg = ASSETS.sprites[k2];
             }
             const hasValidSprite = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
@@ -6982,6 +6984,9 @@
             if (!u.facing) u.facing = "F";
             if (u.id === "nyangsan") u.facing = "F";
           }
+          console.log("[VERIFY_ASSET_KEYS_RAW_ALPHA]", ASSETS.sprites_raw_alpha ? Object.keys(ASSETS.sprites_raw_alpha).slice(0, 200) : null);
+          console.log("[VERIFY_ASSET_KEYS_48]", ASSETS.sprites_raw_alpha_48 ? Object.keys(ASSETS.sprites_raw_alpha_48).slice(0, 200) : null);
+          console.log("[VERIFY_UNITS_IDS]", units.map((u) => ({ id: u.id, name: u.name, team: u.team, cls: u.classId })));
           if (stage.stageId === "STG2" || currentCampaignStageId === "STG2") {
             const stg2 = ensureStg2RuntimeState();
             console.log("[VERIFY_ALARM] alarm=", !!stg2.alarm);
