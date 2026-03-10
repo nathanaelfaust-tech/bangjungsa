@@ -1,0 +1,9 @@
+[QA_ENTRY_SHORTCUT] stage=STG2 roster=leader,jeong2,mender,kimware
+[VERIFY_PUSH_BUG] no_mutation_detected
+[QA_ENTRY_SHORTCUT] keep_kimware=true
+[VERIFY_STG2_VISUAL] id=김웨어 mode=TEMP_UPSCALE size=32 anchor=tile_bottom_center
+[TEMP_UPSCALE] id=김웨어 reason=legacy_shape_path
+[VERIFY_STG2_VISUAL] id=정2 mode=TEMP_UPSCALE size=32 anchor=tile_bottom_center
+[TEMP_UPSCALE] id=정2 reason=legacy_shape_path
+[VERIFY_STG2_VISUAL] id=뉴비리더 mode=TEMP_UPSCALE size=32 anchor=tile_bottom_center
+[TEMP_UPSCALE] id=뉴비리더 reason=legacy_shape_path
