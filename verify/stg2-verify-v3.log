@@ -1,0 +1,12 @@
+[QA_ENTRY_SHORTCUT] stage=STG2 roster=leader,jeong2,mender,kimware
+[VERIFY_PUSH_BUG] no_mutation_detected
+[QA_ENTRY_SHORTCUT] keep_kimware=true
+[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes
+[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=HIGHER_SOURCE key=jeong2_F
+[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes reason=assets_not_ready
+[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=HIGHER_SOURCE key=jeong2_F
+[UNIT_FRAME] name=정2 face=F sourcePx=48 cropBox=34x43 trimmedMargin=L9,R5,T5,B0 fillRatioBefore=0.34 fillRatioAfter=0.53 anchor=tile_bottom_center
+[UNIT_RENDER] qaStage=STG2 name=정2 path=HIGHER_SOURCE sourcePx=48 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes
