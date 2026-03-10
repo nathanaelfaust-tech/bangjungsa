@@ -1,0 +1,66 @@
+=== SCALE32_BASELINE ===
+3583:          console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${isStg2Stage() ? "STG2" : currentCampaignStageId} name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS`);
+3693:          console.log(`[UNIT_ARTIFACT_FIX] qaStage=${isStg2Stage() ? "STG2" : currentCampaignStageId} name=정2 action=FRINGE_SUPPRESS result=${removed > 0 ? "clean" : "no_change"} removedPx=${removed}`);
+3740:          const base = `[UNIT_RENDER] qaStage=${info.qaStage} name=${info.name} path=${info.path} tileScale=${info.tileScale || BOARD_TILE_SCALE} sourcePx=${info.sourcePx} drawBoxPx=${info.drawBoxPx} displayPx=${info.displayPx} anchor=${info.anchor} alpha=${info.alpha} sheetRow=${info.sheetRow || "-"} sheetCol=${info.sheetCol || "-"}`;
+3868:                    `[UNIT_SCALE_TRIAL] qaStage=${qaStage} name=${unitRenderName(u)} tileScale=${BOARD_TILE_SCALE} trial=${jeong2TrialPx} drawBoxPx=${drawBoxInternal} displayPx=${drawBoxInternal} path=${renderPath} anchor=tile_bottom_center`
+3941:                console.log("[VERIFY_PUSH_BUG] dxdy mutated", { id: u.id, x: u.x, y: u.y, from: [_dx0, _dy0], to: [dx, dy] });
+3957:                    `[UNIT_FOOTPRINT] qaStage=${qaStage} name=${unitRenderName(u)} tileScale=${BOARD_TILE_SCALE} sourcePx=${sourcePx} drawBoxPx=${drawBoxInternal} displayPx=${drawBoxInternal} anchor=tile_bottom_center ` +
+7453:              console.log(`[BOARD_SCALE_BASELINE] qaStage=STG2 tileScale=32 name=정2 path=SHEET_SSOT`);
+7455:              console.log(`[BOARD_SCALE_TRIAL] qaStage=STG2 tileScale=${BOARD_TILE_SCALE} scope=jeong2_only`);
+7459:              console.log("[VERIFY_PUSH_BUG] no_mutation_detected");
+9099:[BOARD_SCALE_BASELINE] qaStage=STG2 tileScale=32 name=정2 path=SHEET_SSOT
+9100:[VERIFY_PUSH_BUG] no_mutation_detected
+9102:[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9103:[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9104:[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9106:[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=32 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+9108:[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+9110:[UNIT_ARTIFACT_TRACE] qaStage=STG2 name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS
+9111:[UNIT_ARTIFACT_FIX] qaStage=STG2 name=정2 action=FRINGE_SUPPRESS result=clean removedPx=41
+9112:[UNIT_SCALE_TRIAL] qaStage=STG2 name=정2 tileScale=32 trial=48 drawBoxPx=48 displayPx=48 path=SHEET_SSOT anchor=tile_bottom_center
+9113:[UNIT_RENDER] qaStage=STG2 name=정2 path=SHEET_SSOT tileScale=32 sourcePx=64 drawBoxPx=48 displayPx=48 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+9114:[UNIT_FOOTPRINT] qaStage=STG2 name=정2 tileScale=32 sourcePx=64 drawBoxPx=48 displayPx=48 anchor=tile_bottom_center visualWidthTiles=2.39 visualHeightTiles=2.86 overhangLeftPx=11 overhangRightPx=12</pre><div class="dev-menu-overlay"><div class="dev-menu-panel" role="dialog" aria-modal="true">
+=== SCALE40_TRIAL ===
+3583:          console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${isStg2Stage() ? "STG2" : currentCampaignStageId} name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS`);
+3693:          console.log(`[UNIT_ARTIFACT_FIX] qaStage=${isStg2Stage() ? "STG2" : currentCampaignStageId} name=정2 action=FRINGE_SUPPRESS result=${removed > 0 ? "clean" : "no_change"} removedPx=${removed}`);
+3740:          const base = `[UNIT_RENDER] qaStage=${info.qaStage} name=${info.name} path=${info.path} tileScale=${info.tileScale || BOARD_TILE_SCALE} sourcePx=${info.sourcePx} drawBoxPx=${info.drawBoxPx} displayPx=${info.displayPx} anchor=${info.anchor} alpha=${info.alpha} sheetRow=${info.sheetRow || "-"} sheetCol=${info.sheetCol || "-"}`;
+3868:                    `[UNIT_SCALE_TRIAL] qaStage=${qaStage} name=${unitRenderName(u)} tileScale=${BOARD_TILE_SCALE} trial=${jeong2TrialPx} drawBoxPx=${drawBoxInternal} displayPx=${drawBoxInternal} path=${renderPath} anchor=tile_bottom_center`
+3941:                console.log("[VERIFY_PUSH_BUG] dxdy mutated", { id: u.id, x: u.x, y: u.y, from: [_dx0, _dy0], to: [dx, dy] });
+3957:                    `[UNIT_FOOTPRINT] qaStage=${qaStage} name=${unitRenderName(u)} tileScale=${BOARD_TILE_SCALE} sourcePx=${sourcePx} drawBoxPx=${drawBoxInternal} displayPx=${drawBoxInternal} anchor=tile_bottom_center ` +
+7453:              console.log(`[BOARD_SCALE_BASELINE] qaStage=STG2 tileScale=32 name=정2 path=SHEET_SSOT`);
+7455:              console.log(`[BOARD_SCALE_TRIAL] qaStage=STG2 tileScale=${BOARD_TILE_SCALE} scope=jeong2_only`);
+7459:              console.log("[VERIFY_PUSH_BUG] no_mutation_detected");
+9099:[BOARD_SCALE_TRIAL] qaStage=STG2 tileScale=40 scope=jeong2_only
+9100:[VERIFY_PUSH_BUG] no_mutation_detected
+9102:[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=40 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9103:[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=40 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9104:[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=40 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9106:[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=40 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+9108:[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=40 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+9110:[UNIT_ARTIFACT_TRACE] qaStage=STG2 name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS
+9111:[UNIT_ARTIFACT_FIX] qaStage=STG2 name=정2 action=FRINGE_SUPPRESS result=clean removedPx=41
+9112:[UNIT_SCALE_TRIAL] qaStage=STG2 name=정2 tileScale=40 trial=48 drawBoxPx=48 displayPx=48 path=SHEET_SSOT anchor=tile_bottom_center
+9113:[UNIT_RENDER] qaStage=STG2 name=정2 path=SHEET_SSOT tileScale=40 sourcePx=64 drawBoxPx=48 displayPx=48 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+9114:[UNIT_FOOTPRINT] qaStage=STG2 name=정2 tileScale=40 sourcePx=64 drawBoxPx=48 displayPx=48 anchor=tile_bottom_center visualWidthTiles=1.91 visualHeightTiles=2.29 overhangLeftPx=9 overhangRightPx=10</pre><div class="dev-menu-overlay"><div class="dev-menu-panel" role="dialog" aria-modal="true">
+=== SCALE48_TRIAL ===
+3583:          console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${isStg2Stage() ? "STG2" : currentCampaignStageId} name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS`);
+3693:          console.log(`[UNIT_ARTIFACT_FIX] qaStage=${isStg2Stage() ? "STG2" : currentCampaignStageId} name=정2 action=FRINGE_SUPPRESS result=${removed > 0 ? "clean" : "no_change"} removedPx=${removed}`);
+3740:          const base = `[UNIT_RENDER] qaStage=${info.qaStage} name=${info.name} path=${info.path} tileScale=${info.tileScale || BOARD_TILE_SCALE} sourcePx=${info.sourcePx} drawBoxPx=${info.drawBoxPx} displayPx=${info.displayPx} anchor=${info.anchor} alpha=${info.alpha} sheetRow=${info.sheetRow || "-"} sheetCol=${info.sheetCol || "-"}`;
+3868:                    `[UNIT_SCALE_TRIAL] qaStage=${qaStage} name=${unitRenderName(u)} tileScale=${BOARD_TILE_SCALE} trial=${jeong2TrialPx} drawBoxPx=${drawBoxInternal} displayPx=${drawBoxInternal} path=${renderPath} anchor=tile_bottom_center`
+3941:                console.log("[VERIFY_PUSH_BUG] dxdy mutated", { id: u.id, x: u.x, y: u.y, from: [_dx0, _dy0], to: [dx, dy] });
+3957:                    `[UNIT_FOOTPRINT] qaStage=${qaStage} name=${unitRenderName(u)} tileScale=${BOARD_TILE_SCALE} sourcePx=${sourcePx} drawBoxPx=${drawBoxInternal} displayPx=${drawBoxInternal} anchor=tile_bottom_center ` +
+7453:              console.log(`[BOARD_SCALE_BASELINE] qaStage=STG2 tileScale=32 name=정2 path=SHEET_SSOT`);
+7455:              console.log(`[BOARD_SCALE_TRIAL] qaStage=STG2 tileScale=${BOARD_TILE_SCALE} scope=jeong2_only`);
+7459:              console.log("[VERIFY_PUSH_BUG] no_mutation_detected");
+9098:          <div class="tutorial-dialog-actions"><button id="tutorialDialogNextBtn" class="btnSmall" type="button">다음</button></div></div><pre id="qaVerifyDump" style="position: fixed; left: 8px; bottom: 8px; z-index: 99; margin: 0px; padding: 6px 8px; max-width: 95vw; max-height: 40vh; overflow: auto; background: rgba(0, 0, 0, 0.72); color: rgb(216, 251, 226); border: 1px solid rgba(120, 220, 180, 0.85); font: 11px / 1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">[VERIFY_PUSH_BUG] no_mutation_detected
+9100:[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=48 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9101:[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=48 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9102:[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=48 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9104:[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=48 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+9106:[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=48 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+9110:[UNIT_RENDER] qaStage=STG2 name=정2 path=HIGHER_SOURCE tileScale=48 sourcePx=48 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+9111:[UNIT_ARTIFACT_TRACE] qaStage=STG2 name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS
+9112:[UNIT_ARTIFACT_FIX] qaStage=STG2 name=정2 action=FRINGE_SUPPRESS result=clean removedPx=41
+9113:[UNIT_SCALE_TRIAL] qaStage=STG2 name=정2 tileScale=48 trial=48 drawBoxPx=48 displayPx=48 path=SHEET_SSOT anchor=tile_bottom_center
+9114:[UNIT_RENDER] qaStage=STG2 name=정2 path=SHEET_SSOT tileScale=48 sourcePx=64 drawBoxPx=48 displayPx=48 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+9115:[UNIT_FOOTPRINT] qaStage=STG2 name=정2 tileScale=48 sourcePx=64 drawBoxPx=48 displayPx=48 anchor=tile_bottom_center visualWidthTiles=1.59 visualHeightTiles=1.91 overhangLeftPx=7 overhangRightPx=8</pre><div class="dev-menu-overlay"><div class="dev-menu-panel" role="dialog" aria-modal="true">
