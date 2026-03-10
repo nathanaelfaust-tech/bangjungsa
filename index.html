@@ -3465,19 +3465,32 @@
             };
             let spriteId = ID_ALIAS[u.id] || u.id;
             if (u.name === "정2") spriteId = "jeong2";
+            const stg2AllyVisual = isStg2AllyVisualUnit(u);
             const face = renderFace(u.facing);
             const key = `${spriteId}_${face}`;
-            const S = (MAP_SPRITE_RES === 48 ? 48 : 32);
-            const bank = (ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[key]) ? ASSETS.sprites_raw_alpha_48
-              : (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[key]) ? ASSETS.sprites_raw_alpha
-              : (ASSETS.sprites && ASSETS.sprites[key]) ? ASSETS.sprites
-                : null;
-            let spriteImg = bank ? bank[key] : null;
+            const prefer48 = stg2AllyVisual || MAP_SPRITE_RES === 48;
+            let spriteImg = null;
+            let S = 32;
+            if (prefer48 && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[key]) {
+              spriteImg = ASSETS.sprites_raw_alpha_48[key];
+              S = 48;
+            } else if (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[key]) {
+              spriteImg = ASSETS.sprites_raw_alpha[key];
+              S = 32;
+            } else if (ASSETS.sprites && ASSETS.sprites[key]) {
+              spriteImg = ASSETS.sprites[key];
+              S = 32;
+            }
             if (!spriteImg || !spriteImg.complete || spriteImg.naturalWidth === 0) {
               console.log("[VERIFY_SPRITE_MISS]", { uId: u.id, spriteId, face, key });
               const k2 = `${spriteId}_F`;
-              if (ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k2]) spriteImg = ASSETS.sprites_raw_alpha_48[k2];
-              else if (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[k2]) spriteImg = ASSETS.sprites_raw_alpha[k2];
+              if (prefer48 && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k2]) {
+                spriteImg = ASSETS.sprites_raw_alpha_48[k2];
+                S = 48;
+              } else if (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[k2]) {
+                spriteImg = ASSETS.sprites_raw_alpha[k2];
+                S = 32;
+              }
               else if (ASSETS.sprites && ASSETS.sprites[k2]) spriteImg = ASSETS.sprites[k2];
             }
             const hasValidSprite = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
@@ -3537,6 +3550,12 @@
               ctx.drawImage(spriteImg, dx, dy, S, S);
               ctx.restore();
               if (!u.dead) drawUnitFlashOverlay(ctx, u, px, py);
+              if (stg2AllyVisual && !u.__stg2VisualLogged) {
+                const mode = (S === 48) ? "HIGHER_SOURCE" : "TEMP_UPSCALE";
+                console.log(`[VERIFY_STG2_VISUAL] id=${u.id} mode=${mode} size=${S} anchor=tile_bottom_center`);
+                if (mode === "TEMP_UPSCALE") console.log(`[TEMP_UPSCALE] id=${u.id} reason=missing_48_source`);
+                u.__stg2VisualLogged = true;
+              }
               if (!u.__spriteVerifyLogged) {
                 console.log("[VERIFY_SPRITE_OK]", { id: u.id, face, key, src: spriteImg?.src, w: spriteImg?.naturalWidth, h: spriteImg?.naturalHeight });
                 u.__spriteVerifyLogged = true;
@@ -3551,30 +3570,39 @@
               continue;
             }
             if (visualSkin === "flat_v1") {
+              const extraScale = stg2AllyVisual ? 2 : 1;
+              const totalScale = deadScale * extraScale;
               ctx.save();
               ctx.globalAlpha *= (blinkAlpha * deadAlpha);
-              if (u.dead) {
+              if (u.dead || extraScale !== 1) {
                 const pivotX = px + (TILE / 2);
                 const pivotY = py + TILE;
                 ctx.translate(pivotX, pivotY);
-                ctx.scale(deadScale, deadScale);
+                ctx.scale(totalScale, totalScale);
                 ctx.translate(-pivotX, -pivotY);
               }
               if (Tier1CharIds.has(u.charId)) drawUnitSD_Tier1(ctx, u, px, py);
               else drawUnitFlat(ctx, u, px, py);
               ctx.restore();
               if (!u.dead) drawUnitFlashOverlay(ctx, u, px, py);
+              if (stg2AllyVisual && !u.__stg2VisualLogged) {
+                console.log(`[VERIFY_STG2_VISUAL] id=${u.id} mode=TEMP_UPSCALE size=${TILE * 2} anchor=tile_bottom_center`);
+                console.log(`[TEMP_UPSCALE] id=${u.id} reason=vector_or_missing_highres`);
+                u.__stg2VisualLogged = true;
+              }
               continue;
             }
             const c = palette[u.paletteKey];
+            const extraScale = stg2AllyVisual ? 2 : 1;
+            const totalScale = deadScale * extraScale;
 
             ctx.save();
             ctx.globalAlpha *= (blinkAlpha * deadAlpha);
-            if (u.dead) {
+            if (u.dead || extraScale !== 1) {
               const pivotX = px + (TILE / 2);
               const pivotY = py + TILE;
               ctx.translate(pivotX, pivotY);
-              ctx.scale(deadScale, deadScale);
+              ctx.scale(totalScale, totalScale);
               ctx.translate(-pivotX, -pivotY);
             }
             ctx.fillStyle = c.body;
@@ -3600,6 +3628,11 @@
               ctx.fillText("ACT", px + 3, py + 10);
             }
             if (!u.dead) drawUnitFlashOverlay(ctx, u, px, py);
+            if (stg2AllyVisual && !u.__stg2VisualLogged) {
+              console.log(`[VERIFY_STG2_VISUAL] id=${u.id} mode=TEMP_UPSCALE size=${TILE * 2} anchor=tile_bottom_center`);
+              console.log(`[TEMP_UPSCALE] id=${u.id} reason=legacy_shape_path`);
+              u.__stg2VisualLogged = true;
+            }
             ctx.restore();
           }
         }
@@ -6018,6 +6051,11 @@
 
         function isKimwearUnit(unit) {
           return !!unit && (unit.id === "kimwear" || unit.id === "김웨어" || unit.unitId === "kimwear" || unit.charId === "kim_ware");
+        }
+
+        function isStg2AllyVisualUnit(unit) {
+          return !!unit && isStg2Stage() && unit.faction === "player" &&
+            (isHeroUnit(unit) || isJung2Unit(unit) || isKimwearUnit(unit));
         }
 
         function isS1RosterCoreUnit(unit) {
