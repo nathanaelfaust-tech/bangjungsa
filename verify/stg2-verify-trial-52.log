@@ -1,0 +1,27 @@
+2177:            console.log("[QA_ENTRY_SHORTCUT] keep_kimware=true");
+3572:          console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${isStg2Stage() ? "STG2" : currentCampaignStageId} name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS`);
+3682:          console.log(`[UNIT_ARTIFACT_FIX] qaStage=${isStg2Stage() ? "STG2" : currentCampaignStageId} name=정2 action=FRINGE_SUPPRESS result=${removed > 0 ? "clean" : "no_change"} removedPx=${removed}`);
+3728:          const base = `[UNIT_RENDER] qaStage=${info.qaStage} name=${info.name} path=${info.path} sourcePx=${info.sourcePx} drawBoxPx=${info.drawBoxPx} displayPx=${info.displayPx} anchor=${info.anchor} alpha=${info.alpha} sheetRow=${info.sheetRow || "-"} sheetCol=${info.sheetCol || "-"}`;
+3847:                console.log(`[UNIT_RENDER_FAIL] qaStage=${qaStage} name=${unitRenderName(u)} reason=${renderReason} expected=SHEET_SSOT key=${key}`);
+3856:                    `[UNIT_SCALE_TRIAL] qaStage=${qaStage} name=${unitRenderName(u)} trial=${jeong2TrialPx} drawBoxPx=${drawBoxInternal} displayPx=${drawBoxInternal} path=${renderPath} anchor=tile_bottom_center`
+3929:                console.log("[VERIFY_PUSH_BUG] dxdy mutated", { id: u.id, x: u.x, y: u.y, from: [_dx0, _dy0], to: [dx, dy] });
+3945:                    `[UNIT_FOOTPRINT] qaStage=${qaStage} name=${unitRenderName(u)} sourcePx=${sourcePx} drawBoxPx=${drawBoxInternal} displayPx=${drawBoxInternal} anchor=tile_bottom_center ` +
+7439:            console.log("[QA_ENTRY_SHORTCUT] stage=STG2 roster=" + campaign.rosterIds.join(","));
+7442:              console.log("[VERIFY_PUSH_BUG] no_mutation_detected");
+7449:                console.log("[QA_ENTRY_SHORTCUT] focus=jeong2_camera_center");
+9081:          <div class="tutorial-dialog-actions"><button id="tutorialDialogNextBtn" class="btnSmall" type="button">다음</button></div></div><pre id="qaVerifyDump" style="position: fixed; left: 8px; bottom: 8px; z-index: 99; margin: 0px; padding: 6px 8px; max-width: 95vw; max-height: 40vh; overflow: auto; background: rgba(0, 0, 0, 0.72); color: rgb(216, 251, 226); border: 1px solid rgba(120, 220, 180, 0.85); font: 11px / 1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">[QA_ENTRY_SHORTCUT] stage=STG2 roster=leader,jeong2,mender,kimware
+9082:[VERIFY_PUSH_BUG] no_mutation_detected
+9083:[QA_ENTRY_SHORTCUT] keep_kimware=true
+9084:[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9085:[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9086:[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9087:[QA_ENTRY_SHORTCUT] focus=jeong2_camera_center
+9088:[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+9089:[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+9090:[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+9091:[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+9092:[UNIT_ARTIFACT_TRACE] qaStage=STG2 name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS
+9093:[UNIT_ARTIFACT_FIX] qaStage=STG2 name=정2 action=FRINGE_SUPPRESS result=clean removedPx=41
+9094:[UNIT_SCALE_TRIAL] qaStage=STG2 name=정2 trial=52 drawBoxPx=52 displayPx=52 path=SHEET_SSOT anchor=tile_bottom_center
+9095:[UNIT_RENDER] qaStage=STG2 name=정2 path=SHEET_SSOT sourcePx=64 drawBoxPx=52 displayPx=52 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+9096:[UNIT_FOOTPRINT] qaStage=STG2 name=정2 sourcePx=64 drawBoxPx=52 displayPx=52 anchor=tile_bottom_center visualWidthTiles=2.59 visualHeightTiles=3.10 overhangLeftPx=12 overhangRightPx=13</pre><div class="dev-menu-overlay"><div class="dev-menu-panel" role="dialog" aria-modal="true">
