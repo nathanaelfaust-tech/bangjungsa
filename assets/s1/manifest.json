@@ -99,5 +99,11 @@
     "nyangsan_B": "assets/s1/sprites_raw_alpha_48/nyangsan_B.png",
     "nyangsan_L": "assets/s1/sprites_raw_alpha_48/nyangsan_L.png",
     "nyangsan_R": "assets/s1/sprites_raw_alpha_48/nyangsan_R.png"
+  },
+  "sprites_ssot": {
+    "jeong2_F": "assets/s1/sprites_ssot/jeong2_ssot_F.png",
+    "jeong2_B": "assets/s1/sprites_ssot/jeong2_ssot_B.png",
+    "jeong2_L": "assets/s1/sprites_ssot/jeong2_ssot_L.png",
+    "jeong2_R": "assets/s1/sprites_ssot/jeong2_ssot_R.png"
   }
 }

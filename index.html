@@ -1747,7 +1747,7 @@
         minimapTerrainCache.width = MINI_W;
         minimapTerrainCache.height = MINI_H;
         const miniTerrainCtx = minimapTerrainCache.getContext("2d");
-        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, sprites: {}, sprites_clean: {}, sprites_raw: {}, sprites_raw_alpha: {}, sprites_raw_alpha_48: {}, portraits: {}, ready: false, manifest: null };
+        const ASSETS = window.ASSETS = { season: "s1", units: {}, icons: {}, vfx: {}, ui: {}, sprites: {}, sprites_clean: {}, sprites_raw: {}, sprites_raw_alpha: {}, sprites_raw_alpha_48: {}, sprites_ssot: {}, portraits: {}, ready: false, manifest: null };
         const QA_MODE = (() => {
           try {
             const q = new URLSearchParams(location.search);
@@ -1850,7 +1850,7 @@
           ASSETS.ready = false;
           const mj = await loadManifest(season);
           ASSETS.manifest = mj;
-          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, sprites: 0, sprites_clean: 0, sprites_raw: 0, sprites_raw_alpha: 0, sprites_raw_alpha_48: 0, portraits: 0, missing: 0 };
+          const counts = { units: 0, icons: 0, vfx: 0, ui: 0, sprites: 0, sprites_clean: 0, sprites_raw: 0, sprites_raw_alpha: 0, sprites_raw_alpha_48: 0, sprites_ssot: 0, portraits: 0, missing: 0 };
 
           if (!mj) {
             ASSETS.ready = true;
@@ -1858,14 +1858,14 @@
             return;
           }
 
-          for (const group of ["units", "icons", "vfx", "ui", "sprites", "sprites_clean", "sprites_raw", "sprites_raw_alpha", "sprites_raw_alpha_48"]) {
+          for (const group of ["units", "icons", "vfx", "ui", "sprites", "sprites_clean", "sprites_raw", "sprites_raw_alpha", "sprites_raw_alpha_48", "sprites_ssot"]) {
             ASSETS[group] = {};
             const entries = mj[group] || {};
             for (const k of Object.keys(entries)) {
               const url = entries[k];
               const img = await preloadImage(url);
-              const isSpriteGroup = group === "sprites" || group === "sprites_clean" || group === "sprites_raw" || group === "sprites_raw_alpha" || group === "sprites_raw_alpha_48";
-              const expectedSize = group === "sprites_raw_alpha_48" ? 48 : 32;
+              const isSpriteGroup = group === "sprites" || group === "sprites_clean" || group === "sprites_raw" || group === "sprites_raw_alpha" || group === "sprites_raw_alpha_48" || group === "sprites_ssot";
+              const expectedSize = group === "sprites_raw_alpha_48" ? 48 : (group === "sprites_ssot" ? 64 : 32);
               if (isSpriteGroup && img && (img.naturalWidth !== expectedSize || img.naturalHeight !== expectedSize)) {
                 console.log(`[VERIFY_SPRITE_BADSIZE] key=${k} size=${img.naturalWidth}x${img.naturalHeight} -> null`);
                 ASSETS[group][k] = null;
@@ -1899,7 +1899,7 @@
             }
           }
           ASSETS.ready = true;
-          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} sprites=${counts.sprites} sprites_clean=${counts.sprites_clean} sprites_raw=${counts.sprites_raw} sprites_raw_alpha=${counts.sprites_raw_alpha} sprites_raw_alpha_48=${counts.sprites_raw_alpha_48} portraits=${counts.portraits} missing=${counts.missing}`);
+          console.log(`[VERIFY_ASSET] season=${season} ready=true units=${counts.units} icons=${counts.icons} vfx=${counts.vfx} ui=${counts.ui} sprites=${counts.sprites} sprites_clean=${counts.sprites_clean} sprites_raw=${counts.sprites_raw} sprites_raw_alpha=${counts.sprites_raw_alpha} sprites_raw_alpha_48=${counts.sprites_raw_alpha_48} sprites_ssot=${counts.sprites_ssot} portraits=${counts.portraits} missing=${counts.missing}`);
           console.log(`[VERIFY_ASSET] season=${season} portraits=${Object.keys(ASSETS.portraits || {}).length}`);
           console.log(`[VERIFY_ASSET_SPRITES] keys=${Object.keys(ASSETS.sprites || {}).slice(0, 20).join(",")}`);
           console.log("[VERIFY_SPRITES_KEYS]", Object.keys(ASSETS.sprites || {}).filter((k) => k.startsWith("jeong2_") || k.startsWith("nyangsan_")).join(","));
@@ -3575,11 +3575,13 @@
             info.displayPx,
             info.anchor,
             info.alpha,
+            info.sheetRow || "-",
+            info.sheetCol || "-",
             info.reason || ""
           ].join("|");
           if (unit.__unitRenderLogSig === sig) return;
           unit.__unitRenderLogSig = sig;
-          const base = `[UNIT_RENDER] qaStage=${info.qaStage} name=${info.name} path=${info.path} sourcePx=${info.sourcePx} drawBoxPx=${info.drawBoxPx} displayPx=${info.displayPx} anchor=${info.anchor} alpha=${info.alpha}`;
+          const base = `[UNIT_RENDER] qaStage=${info.qaStage} name=${info.name} path=${info.path} sourcePx=${info.sourcePx} drawBoxPx=${info.drawBoxPx} displayPx=${info.displayPx} anchor=${info.anchor} alpha=${info.alpha} sheetRow=${info.sheetRow || "-"} sheetCol=${info.sheetCol || "-"}`;
           console.log(base + (info.reason ? ` reason=${info.reason}` : ""));
         }
 
@@ -3617,11 +3619,25 @@
             const key = `${spriteId}_${face}`;
             const isJeong2Render = isJung2Unit(u);
             const prefer48 = stg2AllyVisual || MAP_SPRITE_RES === 48;
+            const ssotBank = ASSETS.sprites_ssot || {};
             let spriteImg = null;
             let S = 32;
+            let usedSsot = false;
             let used48 = false;
             const k2 = `${spriteId}_F`;
             if (isJeong2Render && stg2AllyVisual) {
+              const preferKeys = [key, k2, `${spriteId}_B`, `${spriteId}_L`, `${spriteId}_R`];
+              for (const k of preferKeys) {
+                const ssot = ssotBank && ssotBank[k];
+                if (ssot && ssot.complete && ssot.naturalWidth > 0) {
+                  spriteImg = ssot;
+                  S = Number(ssot.naturalWidth || 64);
+                  usedSsot = true;
+                  break;
+                }
+              }
+            }
+            if (!spriteImg && isJeong2Render && stg2AllyVisual) {
               const preferKeys = [key, k2, `${spriteId}_B`, `${spriteId}_L`, `${spriteId}_R`];
               for (const k of preferKeys) {
                 const c48 = ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k];
@@ -3648,7 +3664,11 @@
             }
             if (!spriteImg || !spriteImg.complete || spriteImg.naturalWidth === 0) {
               console.log("[VERIFY_SPRITE_MISS]", { uId: u.id, spriteId, face, key, prefer48, assetsReady: ASSETS.ready });
-              if (prefer48 && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k2]) {
+              if (isJeong2Render && stg2AllyVisual && ssotBank && ssotBank[k2]) {
+                spriteImg = ssotBank[k2];
+                S = Number(spriteImg?.naturalWidth || 64);
+                usedSsot = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
+              } else if (prefer48 && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k2]) {
                 spriteImg = ASSETS.sprites_raw_alpha_48[k2];
                 S = 48;
                 used48 = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
@@ -3660,19 +3680,22 @@
             const hasValidSprite = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
             if (hasValidSprite) {
               const sourcePx = Number(spriteImg.naturalWidth || S || 0);
-              const drawBoxInternal = stg2AllyVisual ? 32 : S;
+              const drawBoxInternal = stg2AllyVisual ? 64 : S;
               const drawBoxPx = stg2AllyVisual ? 64 : drawBoxInternal;
               const displayPx = drawBoxPx;
               const renderPath = stg2AllyVisual
-                ? ((used48 || sourcePx >= 48) ? "HIGHER_SOURCE" : "TEMP_UPSCALE")
+                ? (usedSsot ? "SHEET_SSOT" : ((used48 || sourcePx >= 48) ? "HIGHER_SOURCE" : "TEMP_UPSCALE"))
                 : "LEGACY_SOURCE";
+              const ssotSheetCol = face === "F" ? 1 : (face === "B" ? 2 : (face === "L" ? 3 : 4));
+              const sheetRow = usedSsot ? "top" : "-";
+              const sheetCol = usedSsot ? String(ssotSheetCol) : "-";
               let renderReason = "";
               let jeong2Frame = null;
-              if (stg2AllyVisual && isJeong2Render && renderPath !== "HIGHER_SOURCE") {
+              if (stg2AllyVisual && isJeong2Render && renderPath !== "SHEET_SSOT") {
                 renderReason = !ASSETS.ready
                   ? "assets_not_ready"
-                  : (ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[key] ? "image_incomplete_or_invalid" : `missing_key:${key}`);
-                console.log(`[UNIT_RENDER_FAIL] qaStage=${qaStage} name=${unitRenderName(u)} reason=${renderReason} expected=HIGHER_SOURCE key=${key}`);
+                  : (ssotBank && ssotBank[key] ? "image_incomplete_or_invalid" : `missing_ssot_key:${key}`);
+                console.log(`[UNIT_RENDER_FAIL] qaStage=${qaStage} name=${unitRenderName(u)} reason=${renderReason} expected=SHEET_SSOT key=${key}`);
               } else if (renderPath === "TEMP_UPSCALE") {
                 renderReason = "missing_48_source";
               }
@@ -3699,6 +3722,8 @@
                 displayPx,
                 anchor: "tile_bottom_center",
                 alpha: "yes",
+                sheetRow,
+                sheetCol,
                 reason: renderReason
               });
               const pxCenter = (u.x * tile) + (tile / 2);

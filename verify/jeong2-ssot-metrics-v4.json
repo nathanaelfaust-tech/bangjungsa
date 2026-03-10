@@ -1,0 +1,62 @@
+{
+  "F": {
+    "sourceSize": "690x752",
+    "frameRect": "x=0..689,y=0..751",
+    "extractBBox": "534x723",
+    "extractMargin": "L91,R65,T28,B1",
+    "outputSize": "64x64",
+    "outBBox": "59x62",
+    "outMargin": "L2,R3,T2,B0",
+    "alpha": "yes",
+    "opaquePx": 1419,
+    "checkerResiduePx": 134,
+    "sheetRow": "top",
+    "sheetCol": 1,
+    "checkerResidueBorderConnectedPx": 0
+  },
+  "B": {
+    "sourceSize": "690x752",
+    "frameRect": "x=690..1379,y=0..751",
+    "extractBBox": "576x680",
+    "extractMargin": "L107,R7,T71,B1",
+    "outputSize": "64x64",
+    "outBBox": "59x57",
+    "outMargin": "L2,R3,T7,B0",
+    "alpha": "yes",
+    "opaquePx": 1385,
+    "checkerResiduePx": 93,
+    "sheetRow": "top",
+    "sheetCol": 2,
+    "checkerResidueBorderConnectedPx": 0
+  },
+  "L": {
+    "sourceSize": "690x752",
+    "frameRect": "x=1380..2069,y=0..751",
+    "extractBBox": "397x723",
+    "extractMargin": "L124,R169,T28,B1",
+    "outputSize": "64x64",
+    "outBBox": "59x62",
+    "outMargin": "L2,R3,T2,B0",
+    "alpha": "yes",
+    "opaquePx": 1105,
+    "checkerResiduePx": 116,
+    "sheetRow": "top",
+    "sheetCol": 3,
+    "checkerResidueBorderConnectedPx": 0
+  },
+  "R": {
+    "sourceSize": "690x752",
+    "frameRect": "x=2070..2759,y=0..751",
+    "extractBBox": "429x676",
+    "extractMargin": "L261,R0,T76,B0",
+    "outputSize": "64x64",
+    "outBBox": "58x57",
+    "outMargin": "L2,R4,T7,B0",
+    "alpha": "yes",
+    "opaquePx": 993,
+    "checkerResiduePx": 64,
+    "sheetRow": "top",
+    "sheetCol": 4,
+    "checkerResidueBorderConnectedPx": 0
+  }
+}
