@@ -1,0 +1,21 @@
+2173:            console.log("[QA_ENTRY_SHORTCUT] keep_kimware=true");
+3603:          const base = `[UNIT_RENDER] qaStage=${info.qaStage} name=${info.name} path=${info.path} sourcePx=${info.sourcePx} drawBoxPx=${info.drawBoxPx} displayPx=${info.displayPx} anchor=${info.anchor} alpha=${info.alpha} sheetRow=${info.sheetRow || "-"} sheetCol=${info.sheetCol || "-"}`;
+3718:                console.log(`[UNIT_RENDER_FAIL] qaStage=${qaStage} name=${unitRenderName(u)} reason=${renderReason} expected=SHEET_SSOT key=${key}`);
+3727:                    `[UNIT_SCALE_TRIAL] qaStage=${qaStage} name=${unitRenderName(u)} trialDisplayPx=${jeong2TrialPx} trialDrawBoxPx=${drawBoxInternal} path=${renderPath} anchor=tile_bottom_center`
+3800:                console.log("[VERIFY_PUSH_BUG] dxdy mutated", { id: u.id, x: u.x, y: u.y, from: [_dx0, _dy0], to: [dx, dy] });
+7291:            console.log("[QA_ENTRY_SHORTCUT] stage=STG2 roster=" + campaign.rosterIds.join(","));
+7294:              console.log("[VERIFY_PUSH_BUG] no_mutation_detected");
+7301:                console.log("[QA_ENTRY_SHORTCUT] focus=jeong2_camera_center");
+8933:          <div class="tutorial-dialog-actions"><button id="tutorialDialogNextBtn" class="btnSmall" type="button">다음</button></div></div><pre id="qaVerifyDump" style="position: fixed; left: 8px; bottom: 8px; z-index: 99; margin: 0px; padding: 6px 8px; max-width: 95vw; max-height: 40vh; overflow: auto; background: rgba(0, 0, 0, 0.72); color: rgb(216, 251, 226); border: 1px solid rgba(120, 220, 180, 0.85); font: 11px / 1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;">[QA_ENTRY_SHORTCUT] stage=STG2 roster=leader,jeong2,mender,kimware
+8934:[VERIFY_PUSH_BUG] no_mutation_detected
+8935:[QA_ENTRY_SHORTCUT] keep_kimware=true
+8936:[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+8937:[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+8938:[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+8939:[QA_ENTRY_SHORTCUT] focus=jeong2_camera_center
+8940:[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+8941:[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+8942:[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+8943:[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+8944:[UNIT_SCALE_TRIAL] qaStage=STG2 name=정2 trialDisplayPx=52 trialDrawBoxPx=52 path=SHEET_SSOT anchor=tile_bottom_center
+8945:[UNIT_RENDER] qaStage=STG2 name=정2 path=SHEET_SSOT sourcePx=64 drawBoxPx=52 displayPx=52 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1</pre><div class="dev-menu-overlay"><div class="dev-menu-panel" role="dialog" aria-modal="true">
