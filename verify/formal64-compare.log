@@ -1,0 +1,39 @@
+[COMPARE] formal64 vs b56baseline
+
+--- FORMAL64 runtime logs ---
+[BOARD_SCALE_FORMALIZED] qaStage=STG2 name=정2 boardScale=64 spriteMode=SHEET_SSOT
+[VERIFY_PUSH_BUG] no_mutation_detected
+[QA_ENTRY_SHORTCUT] keep_kimware=true
+[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=64 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_LOAD_STATE] qaStage=STG2 preview=FORMAL64 name=정2 status=PRELOAD_WAIT
+[UNIT_LOAD_FIX] qaStage=STG2 name=정2 strategy=HIDE_UNTIL_READY result=waiting_for_ssot_first_draw
+[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=64 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[QA_ENTRY_SHORTCUT] focus=jeong2_camera_center preview=FORMAL64
+[BOARD_SCALE_FORMALIZED] qaStage=STG2 name=정2 boardScale=64 spriteMode=SHEET_SSOT
+[UNIT_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS
+[UNIT_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 name=정2 kind=SMALL_COMPONENT_RESIDUE source=SHEET_SSOT_ALPHA_EDGE_PASS
+[UNIT_ARTIFACT_FIX] qaStage=STG2 preview=FORMAL64 name=정2 action=FRINGE_SUPPRESS+RESIDUE_PRUNE result=clean removedPx=41
+[UNIT_LOAD_STATE] qaStage=STG2 preview=FORMAL64 name=정2 status=READY
+[UNIT_LOAD_FIX] qaStage=STG2 name=정2 strategy=PRELOAD_BEFORE_FIRST_DRAW result=first_visible_frame_ready_no_fallback
+[UNIT_RENDER] qaStage=STG2 preview=FORMAL64 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+[UNIT_RENDER] qaStage=STG2 preview=FORMAL64 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center
+[UNIT_FOOTPRINT] qaStage=STG2 preview=FORMAL64 name=정2 tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center visualWidthTiles=1.59 visualHeightTiles=1.91 overhangLeftPx=9 overhangRightPx=10
+[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=64 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+
+--- B56 reference runtime logs ---
+[BOARD_SCALE_BASELINE] qaStage=STG2 preview=B56_BASELINE boardScale=56 spriteMode=SHEET_SSOT onscreenLog=off
+[VERIFY_PUSH_BUG] no_mutation_detected
+[QA_ENTRY_SHORTCUT] keep_kimware=true
+[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=56 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=56 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=56 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[QA_ENTRY_SHORTCUT] focus=jeong2_camera_center preview=B56_BASELINE
+[BOARD_SCALE_BASELINE] qaStage=STG2 preview=B56_BASELINE boardScale=56 spriteMode=SHEET_SSOT onscreenLog=off
+[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=56 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[UNIT_ARTIFACT_TRACE] qaStage=STG2 preview=B56_BASELINE name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS
+[UNIT_ARTIFACT_TRACE] qaStage=STG2 preview=B56_BASELINE name=정2 kind=SMALL_COMPONENT_RESIDUE source=SHEET_SSOT_ALPHA_EDGE_PASS
+[UNIT_ARTIFACT_FIX] qaStage=STG2 preview=B56_BASELINE name=정2 action=FRINGE_SUPPRESS+RESIDUE_PRUNE result=clean removedPx=41
+[UNIT_LOAD_STATE] qaStage=STG2 preview=B56_BASELINE name=정2 status=PRELOAD_WAIT
+[UNIT_RENDER] qaStage=STG2 preview=B56_BASELINE name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=56 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+[UNIT_RENDER] qaStage=STG2 preview=B56_BASELINE name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=56 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center
+[UNIT_FOOTPRINT] qaStage=STG2 preview=B56_BASELINE name=정2 tileScale=56 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center visualWidthTiles=1.82 visualHeightTiles=2.18 overhangLeftPx=11 overhangRightPx=12

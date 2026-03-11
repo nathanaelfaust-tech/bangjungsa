@@ -777,7 +777,7 @@
           <select id="stageSelect" class="btnSmall"></select>
           <button id="campBtn" class="btnSmall" style="display:none;" type="button">캠프</button>
           <button id="previewABtn" class="btnSmall" style="display:none;" type="button">PREVIEW B56_BASELINE</button>
-          <button id="previewBBtn" class="btnSmall" style="display:none;" type="button">PREVIEW B64</button>
+          <button id="previewBBtn" class="btnSmall" style="display:none;" type="button">PREVIEW FORMAL64</button>
           <button id="devToggleBtn" class="btnSmall" type="button">DEV</button>
           <button id="devMenuBtn" class="btnSmall" style="display:none;" type="button">DEV 메뉴</button>
           <button id="skinToggleBtn" class="btnSmall" type="button">스킨: 레거시</button>
@@ -907,6 +907,7 @@
         const QA_MODE_PARAM = String(URL_Q.get("qa") || "").toLowerCase();
         const PREVIEW_MODE = (() => {
           const raw = String(URL_Q.get("preview") || "").toLowerCase();
+          if (raw === "formal64") return "formal64";
           if (raw === "b56baseline") return "b56baseline";
           if (raw === "b64") return "b64";
           if (raw === "bfinal64") return "bfinal64";
@@ -915,11 +916,13 @@
           if (raw === "bfinal") return "bfinal";
           return "";
         })();
+        const FORMAL64_ACTIVE = QA_MODE_PARAM === "stg2"
+          && (PREVIEW_MODE === "" || PREVIEW_MODE === "formal64" || PREVIEW_MODE === "b64" || PREVIEW_MODE === "bfinal64");
         const PREVIEW_ENABLED = QA_MODE_PARAM === "stg2" && !!PREVIEW_MODE;
         function previewModeLabel(mode) {
+          if (FORMAL64_ACTIVE && mode !== "b56baseline") return "FORMAL64";
           if (mode === "b56baseline" || mode === "b56") return "B56_BASELINE";
-          if (mode === "b64") return "B64";
-          if (mode === "bfinal64") return "BFINAL64";
+          if (mode === "b64" || mode === "bfinal64" || mode === "formal64") return "FORMAL64";
           if (mode === "b48") return "B48";
           if (mode === "bfinal") return "BFINAL";
           return mode ? mode.toUpperCase() : "NONE";
@@ -928,6 +931,7 @@
         const PREVIEW_B_SHEET_SOURCE = "assets/s1/sprites_ssot/jeong2_ssot_{F|B|L|R}.png";
         const JEONG2_WINNER_SCALE = 64;
         const BOARD_TILE_SCALE = (() => {
+          if (FORMAL64_ACTIVE) return JEONG2_WINNER_SCALE;
           if (PREVIEW_ENABLED && PREVIEW_MODE === "b56baseline") return 56;
           if (PREVIEW_ENABLED && PREVIEW_MODE === "b64") return 64;
           if (PREVIEW_ENABLED && PREVIEW_MODE === "bfinal64") return JEONG2_WINNER_SCALE;
@@ -935,7 +939,7 @@
           if (PREVIEW_ENABLED && PREVIEW_MODE === "b56") return 56;
           if (PREVIEW_ENABLED && PREVIEW_MODE === "bfinal") return JEONG2_WINNER_SCALE;
           const raw = Number(URL_Q.get("tilescale") || 32);
-          return [32, 40, 48, 56].includes(raw) ? raw : 32;
+          return [32, 40, 48, 56, 64].includes(raw) ? raw : 32;
         })();
         const TILE = Math.max(8, Math.round(BOARD_TILE_SCALE / 2));
         let MAP_W = 30;
@@ -1804,6 +1808,7 @@
         })();
         const unitFrameCache = new Map();
         const jeong2SuppressedFrameCache = new Map();
+        let jeong2LoadFixLogged = false;
         const qaVerifyLines = [];
         let qaVerifyEl = null;
         let qaPreviewLogSinkEl = null;
@@ -1853,6 +1858,7 @@
             || first.includes("BOARD_SCALE_FINALIST")
             || first.includes("BOARD_SCALE_WINNER")
             || first.includes("BOARD_SCALE_BASELINE")
+            || first.includes("BOARD_SCALE_FORMALIZED")
             || first.includes("BOARD_SCALE_REJECT")
             || first.includes("BOARD_SCALE_TRIAL")
             || first.includes("QA_ENTRY_SHORTCUT")
@@ -1861,6 +1867,7 @@
             || first.includes("UNIT_FRAME")
             || first.includes("UNIT_SCALE_TRIAL")
             || first.includes("UNIT_LOAD_STATE")
+            || first.includes("UNIT_LOAD_FIX")
             || first.includes("UNIT_FOOTPRINT")
             || first.includes("UNIT_ARTIFACT_TRACE")
             || first.includes("UNIT_ARTIFACT_FIX");
@@ -1935,7 +1942,7 @@
             return;
           }
 
-          for (const group of ["units", "icons", "vfx", "ui", "sprites", "sprites_clean", "sprites_raw", "sprites_raw_alpha", "sprites_raw_alpha_48", "sprites_ssot"]) {
+          for (const group of ["sprites_ssot", "units", "icons", "vfx", "ui", "sprites", "sprites_clean", "sprites_raw", "sprites_raw_alpha", "sprites_raw_alpha_48"]) {
             ASSETS[group] = {};
             const entries = mj[group] || {};
             for (const k of Object.keys(entries)) {
@@ -2004,14 +2011,14 @@
           }
           if (previewBBtn) {
             previewBBtn.style.display = showPreviewBtns ? "inline-block" : "none";
-            previewBBtn.disabled = PREVIEW_MODE === "b64";
+            previewBBtn.disabled = PREVIEW_MODE === "formal64";
           }
           if (devToggleBtn) devToggleBtn.style.display = "inline-block";
           if (devMenuBtn) devMenuBtn.style.display = devMode ? "inline-block" : "none";
         }
 
         function switchPreviewMode(mode) {
-          if (!["b56baseline", "b64", "bfinal64", "b48", "b56", "bfinal"].includes(mode)) return;
+          if (!["formal64", "b56baseline", "b64", "bfinal64", "b48", "b56", "bfinal"].includes(mode)) return;
           const q = new URLSearchParams(location.search);
           q.set("qa", "stg2");
           q.set("preview", mode);
@@ -2020,10 +2027,13 @@
         }
 
         function logPreviewModeLine() {
-          if (!(QA_MODE === "stg2" && PREVIEW_ENABLED)) return;
+          if (QA_MODE !== "stg2") return;
           if (PREVIEW_MODE === "b56baseline" || PREVIEW_MODE === "b56") {
             console.log("[BOARD_SCALE_BASELINE] qaStage=STG2 preview=B56_BASELINE boardScale=56 spriteMode=SHEET_SSOT onscreenLog=off");
             console.log(`[PREVIEW_ASSET] qaStage=STG2 preview=B56_BASELINE sheetSource=${PREVIEW_B_SHEET_SOURCE}`);
+          } else if (FORMAL64_ACTIVE) {
+            console.log("[BOARD_SCALE_FORMALIZED] qaStage=STG2 name=정2 boardScale=64 spriteMode=SHEET_SSOT");
+            console.log(`[PREVIEW_ASSET] qaStage=STG2 preview=FORMAL64 sheetSource=${PREVIEW_B_SHEET_SOURCE}`);
           } else if (PREVIEW_MODE === "b64") {
             console.log("[BOARD_SCALE_FINALIST] qaStage=STG2 preview=B64 boardScale=64 spriteMode=SHEET_SSOT onscreenLog=off");
             console.log(`[PREVIEW_ASSET] qaStage=STG2 preview=B64 sheetSource=${PREVIEW_B_SHEET_SOURCE}`);
@@ -3121,7 +3131,7 @@
           if (e.target === meonjiOverlay) closeMeonjiModal();
         });
         if (previewABtn) previewABtn.addEventListener("click", () => switchPreviewMode("b56baseline"));
-        if (previewBBtn) previewBBtn.addEventListener("click", () => switchPreviewMode("b64"));
+        if (previewBBtn) previewBBtn.addEventListener("click", () => switchPreviewMode("formal64"));
         if (DEV_BUILD && devToggleBtn) devToggleBtn.addEventListener("click", () => setDevMode(!devMode));
         if (DEV_BUILD && devMenuBtn) devMenuBtn.addEventListener("click", () => openDevMenu());
         skinToggleBtn.addEventListener("click", () => {
@@ -3676,7 +3686,7 @@
           if (jeong2SuppressedFrameCache.has(cacheKey)) return jeong2SuppressedFrameCache.get(cacheKey);
           // The repeating dotted columns observed in screenshots are not debug guides; they are tiny detached alpha islands.
           const qaStage = isStg2Stage() ? "STG2" : currentCampaignStageId;
-          const previewTok = (PREVIEW_ENABLED && PREVIEW_LABEL !== "NONE") ? ` preview=${PREVIEW_LABEL}` : "";
+          const previewTok = (PREVIEW_LABEL !== "NONE") ? ` preview=${PREVIEW_LABEL}` : "";
           console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${qaStage}${previewTok} name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS`);
           const c = document.createElement("canvas");
           c.width = srcW;
@@ -3767,6 +3777,7 @@
               }
             }
           }
+          console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${qaStage}${previewTok} name=정2 kind=SMALL_COMPONENT_RESIDUE source=SHEET_SSOT_ALPHA_EDGE_PASS`);
           // Generic side-strip speckle suppression regardless of color.
           for (let y = 1; y < srcH - 1; y++) {
             for (let x = 1; x < srcW - 1; x++) {
@@ -3786,8 +3797,26 @@
               }
             }
           }
+          // Aggressive fringe cleanup for low-alpha dots/chains that still survive on first paint.
+          for (let y = 1; y < srcH - 1; y++) {
+            for (let x = 1; x < srcW - 1; x++) {
+              const idx = y * srcW + x;
+              const i = idx * 4;
+              const a = data[i + 3];
+              if (a === 0 || a > 132) continue;
+              let n = 0;
+              const ns = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1], [x + 1, y + 1], [x - 1, y - 1], [x + 1, y - 1], [x - 1, y + 1]];
+              for (const [nx, ny] of ns) {
+                if (data[(ny * srcW + nx) * 4 + 3] > 28) n++;
+              }
+              if (n <= 2) {
+                data[i + 3] = 0;
+                removed++;
+              }
+            }
+          }
           cctx.putImageData(image, 0, 0);
-          console.log(`[UNIT_ARTIFACT_FIX] qaStage=${qaStage}${previewTok} name=정2 action=FRINGE_SUPPRESS result=${removed > 0 ? "clean" : "no_change"} removedPx=${removed}`);
+          console.log(`[UNIT_ARTIFACT_FIX] qaStage=${qaStage}${previewTok} name=정2 action=FRINGE_SUPPRESS+RESIDUE_PRUNE result=${removed > 0 ? "clean" : "no_change"} removedPx=${removed}`);
           jeong2SuppressedFrameCache.set(cacheKey, c);
           return c;
         }
@@ -3875,8 +3904,9 @@
             const face = renderFace(u.facing);
             const key = `${spriteId}_${face}`;
             const isJeong2Render = isJung2Unit(u);
-            const previewJeong2 = PREVIEW_ENABLED && isJeong2Render;
-            const previewFinalist = previewJeong2 && (PREVIEW_MODE === "b56baseline" || PREVIEW_MODE === "b64" || PREVIEW_MODE === "bfinal64" || PREVIEW_MODE === "b48" || PREVIEW_MODE === "b56" || PREVIEW_MODE === "bfinal");
+            const previewJeong2 = isJeong2Render && (PREVIEW_ENABLED || FORMAL64_ACTIVE);
+            const previewFinalist = previewJeong2 && (PREVIEW_LABEL === "FORMAL64" || PREVIEW_MODE === "b56baseline" || PREVIEW_MODE === "b48" || PREVIEW_MODE === "b56" || PREVIEW_MODE === "bfinal");
+            const formal64StrictJeong2 = isJeong2Render && stg2AllyVisual && FORMAL64_ACTIVE;
             const prefer48 = stg2AllyVisual || MAP_SPRITE_RES === 48;
             const ssotBank = ASSETS.sprites_ssot || {};
             let spriteImg = null;
@@ -3885,8 +3915,34 @@
             let used48 = false;
             let spriteSourceLabel = "";
             const k2 = `${spriteId}_F`;
+            const preferKeys = [key, k2, `${spriteId}_B`, `${spriteId}_L`, `${spriteId}_R`];
+            if (formal64StrictJeong2) {
+              let ssotReady = false;
+              for (const k of preferKeys) {
+                const ssot = ssotBank && ssotBank[k];
+                if (ssot && ssot.complete && ssot.naturalWidth > 0) {
+                  spriteImg = ssot;
+                  S = Number(ssot.naturalWidth || 64);
+                  usedSsot = true;
+                  spriteSourceLabel = `assets/s1/sprites_ssot/jeong2_ssot_${k.slice(-1)}.png`;
+                  ssotReady = true;
+                  break;
+                }
+              }
+              if (!ssotReady) {
+                const loadSig = `${qaStage}|FORMAL64|PRELOAD_WAIT|${face}`;
+                if (u.__unitLoadStateSig !== loadSig) {
+                  u.__unitLoadStateSig = loadSig;
+                  console.log(`[UNIT_LOAD_STATE] qaStage=${qaStage} preview=FORMAL64 name=${unitRenderName(u)} status=PRELOAD_WAIT`);
+                }
+                if (!jeong2LoadFixLogged && qaStage === "STG2") {
+                  jeong2LoadFixLogged = true;
+                  console.log("[UNIT_LOAD_FIX] qaStage=STG2 name=정2 strategy=HIDE_UNTIL_READY result=waiting_for_ssot_first_draw");
+                }
+                continue;
+              }
+            }
             if (!spriteImg && isJeong2Render && stg2AllyVisual) {
-              const preferKeys = [key, k2, `${spriteId}_B`, `${spriteId}_L`, `${spriteId}_R`];
               for (const k of preferKeys) {
                 const ssot = ssotBank && ssotBank[k];
                 if (ssot && ssot.complete && ssot.naturalWidth > 0) {
@@ -3898,8 +3954,7 @@
                 }
               }
             }
-            if (!spriteImg && isJeong2Render && stg2AllyVisual) {
-              const preferKeys = [key, k2, `${spriteId}_B`, `${spriteId}_L`, `${spriteId}_R`];
+            if (!spriteImg && isJeong2Render && stg2AllyVisual && !formal64StrictJeong2) {
               for (const k of preferKeys) {
                 const c48 = ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k];
                 if (c48 && c48.complete && c48.naturalWidth > 0) {
@@ -3911,7 +3966,7 @@
                 }
               }
             }
-            if (!spriteImg) {
+            if (!spriteImg && !formal64StrictJeong2) {
               if (prefer48 && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[key]) {
                 spriteImg = ASSETS.sprites_raw_alpha_48[key];
                 S = 48;
@@ -3929,7 +3984,14 @@
             }
             if (!spriteImg || !spriteImg.complete || spriteImg.naturalWidth === 0) {
               console.log("[VERIFY_SPRITE_MISS]", { uId: u.id, spriteId, face, key, prefer48, assetsReady: ASSETS.ready });
-              if (isJeong2Render && stg2AllyVisual && ssotBank && ssotBank[k2]) {
+              if (formal64StrictJeong2) {
+                const loadSig = `${qaStage}|FORMAL64|PRELOAD_WAIT|miss|${face}`;
+                if (u.__unitLoadStateSig !== loadSig) {
+                  u.__unitLoadStateSig = loadSig;
+                  console.log(`[UNIT_LOAD_STATE] qaStage=${qaStage} preview=FORMAL64 name=${unitRenderName(u)} status=PRELOAD_WAIT`);
+                }
+                continue;
+              } else if (isJeong2Render && stg2AllyVisual && ssotBank && ssotBank[k2]) {
                 spriteImg = ssotBank[k2];
                 S = Number(spriteImg?.naturalWidth || 64);
                 usedSsot = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
@@ -3985,13 +4047,17 @@
                 }
               }
               if (previewJeong2 && isJeong2Render) {
-                const loadStatus = !ASSETS.ready
-                  ? "ASSETS_NOT_READY"
-                  : (renderPath === "SHEET_SSOT" ? "READY" : "FALLBACK_VISIBLE");
+                const loadStatus = (FORMAL64_ACTIVE && renderPath === "SHEET_SSOT")
+                  ? "READY"
+                  : (!ASSETS.ready ? "PRELOAD_WAIT" : (renderPath === "SHEET_SSOT" ? "READY" : "FALLBACK_VISIBLE"));
                 const loadSig = `${qaStage}|${PREVIEW_LABEL}|${loadStatus}|${renderPath}|${face}`;
                 if (u.__unitLoadStateSig !== loadSig) {
                   u.__unitLoadStateSig = loadSig;
                   console.log(`[UNIT_LOAD_STATE] qaStage=${qaStage} preview=${PREVIEW_LABEL} name=${unitRenderName(u)} status=${loadStatus}`);
+                }
+                if (qaStage === "STG2" && PREVIEW_LABEL === "FORMAL64" && loadStatus === "READY" && !u.__unitLoadFixReadyLogged) {
+                  u.__unitLoadFixReadyLogged = true;
+                  console.log("[UNIT_LOAD_FIX] qaStage=STG2 name=정2 strategy=PRELOAD_BEFORE_FIRST_DRAW result=first_visible_frame_ready_no_fallback");
                 }
               }
               if (isJeong2Render && renderPath === "HIGHER_SOURCE") {
@@ -7589,7 +7655,7 @@
             ensureQaVerifyOverlay();
             applyPreviewCleanUi();
             console.log("[QA_ENTRY_SHORTCUT] stage=STG2 roster=" + campaign.rosterIds.join(","));
-            if (PREVIEW_ENABLED) {
+            if (PREVIEW_ENABLED || FORMAL64_ACTIVE) {
               logPreviewModeLine();
             } else if (BOARD_TILE_SCALE === 32) {
               console.log("[BOARD_SCALE_BASELINE] qaStage=STG2 tileScale=32 name=정2 path=SHEET_SSOT");
