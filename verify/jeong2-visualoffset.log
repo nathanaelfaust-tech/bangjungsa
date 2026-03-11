@@ -1,0 +1,43 @@
+[BOARD_SCALE_FORMALIZED] boardScale=64
+[UNIT_LOAD_STATE] stage=preload state=PRELOAD_WAIT
+[UNIT_LOAD_STATE] stage=preload state=READY
+[JEONG2_ASSET_INVENTORY] season=s2 dirCount=4 normalized=F,B,L,R
+[JEONG2_ASSET_PIPELINE] season=s2 normalizedAssetPath=F/B/L/R preloadFirstDraw=yes anchor=tile_bottom_center readableSlimmerFit=yes
+[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=REFRAME visualOffsetX=1 anchor=tile_bottom_center
+[JEONG2_RENDER_SOURCE] qaStage=STG2 dir=F source=normalized_static normalizedPath=assets/s2/units/jeong2/static_f.png
+[JEONG2_ALIGNMENT_META] qaStage=STG2 dir=F visualOffsetX=1
+[JEONG2_ALIGNMENT_APPLY] qaStage=STG2 dir=F appliedTo=LIVE_RENDER result=yes
+[JEONG2_ALIGNMENT_TRACE] qaStage=STG2 dir=F standingAxisBefore=31 standingAxisAfter=32
+[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=B step=REFRAME visualOffsetX=-1 anchor=tile_bottom_center
+[JEONG2_RENDER_SOURCE] qaStage=STG2 dir=B source=normalized_static normalizedPath=assets/s2/units/jeong2/static_b.png
+[JEONG2_ALIGNMENT_META] qaStage=STG2 dir=B visualOffsetX=-1
+[JEONG2_ALIGNMENT_APPLY] qaStage=STG2 dir=B appliedTo=LIVE_RENDER result=yes
+[JEONG2_ALIGNMENT_TRACE] qaStage=STG2 dir=B standingAxisBefore=33 standingAxisAfter=32
+[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=L step=REFRAME visualOffsetX=0 anchor=tile_bottom_center
+[JEONG2_RENDER_SOURCE] qaStage=STG2 dir=L source=normalized_static normalizedPath=assets/s2/units/jeong2/static_l.png
+[JEONG2_ALIGNMENT_META] qaStage=STG2 dir=L visualOffsetX=0
+[JEONG2_ALIGNMENT_APPLY] qaStage=STG2 dir=L appliedTo=LIVE_RENDER result=no
+[JEONG2_ALIGNMENT_TRACE] qaStage=STG2 dir=L standingAxisBefore=32 standingAxisAfter=32
+[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=R step=REFRAME visualOffsetX=0 anchor=tile_bottom_center
+[JEONG2_RENDER_SOURCE] qaStage=STG2 dir=R source=normalized_static normalizedPath=assets/s2/units/jeong2/static_r.png
+[JEONG2_ALIGNMENT_META] qaStage=STG2 dir=R visualOffsetX=0
+[JEONG2_ALIGNMENT_APPLY] qaStage=STG2 dir=R appliedTo=LIVE_RENDER result=no
+[JEONG2_ALIGNMENT_TRACE] qaStage=STG2 dir=R standingAxisBefore=32 standingAxisAfter=32
+[UNIT_RENDER] unit=정2 dir=F anchor=tile_bottom_center boardScale=64
+[UNIT_FOOTPRINT] unit=정2 tile=1x1 footAnchorX=8 footAnchorPreserved=yes
+[JEONG2_PARITY_QA] qaStage=STG2 metric=lateral_center result=pass note=visualOffset_metadata_F+1_B-1_live_render_applied
+[JEONG2_PARITY_QA] qaStage=STG2 metric=size result=pass note=drawBox_unchanged_readability_preserved
+[JEONG2_PARITY_QA] qaStage=STG2 metric=foot_anchor result=pass note=tile_bottom_center_preserved
+[VERIFY_PUSH_BUG] qaStage=STG2 status=ready
+
+F left-bias reduced in live view?: yes
+B right-bias reduced in live view?: yes
+lateral center parity acceptable now?: yes
+size parity preserved?: yes
+foot anchor preserved?: yes
+face readability preserved?: yes
+bow readability preserved?: yes
+shoes readability preserved?: yes
+dust/fringe reintroduced?: no
+PRELOAD_WAIT -> READY preserved?: yes
+boardScale=64 preserved?: yes
