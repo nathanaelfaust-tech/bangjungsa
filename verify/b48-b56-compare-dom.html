@@ -1,8 +1,7 @@
- <!doctype html>
-  <html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<!DOCTYPE html>
+<html lang="ko"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Stage 1 SRPG Prototype</title>
     <style>
       :root {
@@ -760,25 +759,25 @@
       }
     </style>
   </head>
-  <body>
+  <body data-skin="legacy">
     <div class="app">
       <div class="topbar">
         <div class="guide">
           <span id="phasePill" class="phase-pill">PLAYER</span>
           <strong id="guideText">아군 유닛 클릭 → 이동</strong>
           <span class="hint">Enter: 턴 종료, G: 좌표, Shift+드래그: 화면 이동</span>
-          <span id="devStatus" class="hint dev-status">DEV_BUILD=OFF  DEV=OFF</span>
-          <span id="touchHint" class="hint"></span>
-          <span id="devHint" class="hint"></span>
-          <span id="touchDebug" class="hint"></span>
-          <span id="debugReadout" class="hint"></span>
+          <span id="devStatus" class="hint dev-status">DEV_BUILD=ON  DEV=OFF</span>
+          <span id="touchHint" class="hint">드래그: 화면 이동 / 탭: 선택 / 길게: 취소</span>
+          <span id="devHint" class="hint" style="display: none;"></span>
+          <span id="touchDebug" class="hint" style="display: none;"></span>
+          <span id="debugReadout" class="hint" style="display: none;">MAP(24x16) VIEW(15x10) CAM(0,6) internal(420x280px)</span>
         </div>
         <div class="btnRow">
-          <select id="stageSelect" class="btnSmall"></select>
+          <select id="stageSelect" class="btnSmall"><option value="STG1" data-campaign-id="STG1">첫 번째 발걸음</option><option value="STG2" data-campaign-id="STG2">STG2</option></select>
           <button id="campBtn" class="btnSmall" style="display:none;" type="button">캠프</button>
-          <button id="previewABtn" class="btnSmall" style="display:none;" type="button">PREVIEW B48</button>
-          <button id="previewBBtn" class="btnSmall" style="display:none;" type="button">PREVIEW B56</button>
-          <button id="devToggleBtn" class="btnSmall" type="button">DEV</button>
+          <button id="previewABtn" class="btnSmall" style="display: inline-block;" type="button">PREVIEW B48</button>
+          <button id="previewBBtn" class="btnSmall" style="display: inline-block;" type="button" disabled="">PREVIEW B56</button>
+          <button id="devToggleBtn" class="btnSmall" type="button" style="display: inline-block;">DEV</button>
           <button id="devMenuBtn" class="btnSmall" style="display:none;" type="button">DEV 메뉴</button>
           <button id="skinToggleBtn" class="btnSmall" type="button">스킨: 레거시</button>
           <button id="nextStageBtn" class="btnSmall" style="display:none;" type="button">다음으로</button>
@@ -789,8 +788,18 @@
 
       <div class="stage">
         <div id="canvasWrap" class="canvas-wrap">
-          <canvas id="game"></canvas>
-        </div>
+          <canvas id="game" width="1680" height="1120"></canvas>
+        <div class="cmd-menu"><button id="cmdAttack" class="btnSmall" type="button">공격</button>
+          <button id="cmdSkill" class="btnSmall" type="button">스킬</button>
+          <button id="cmdHeroBolt" class="btnSmall" type="button">마법탄</button>
+          <button id="cmdHeroDash" class="btnSmall" type="button">돌진베기</button>
+          <button id="cmdHeroArc" class="btnSmall" type="button">마력견제탄</button>
+          <button id="cmdHeal" class="btnSmall" type="button">치유</button>
+          <button id="cmdPurify" class="btnSmall" type="button">정화</button>
+          <button id="cmdInteract" class="btnSmall" type="button">상호작용</button>
+          <button id="cmdNyang" class="btnSmall" type="button">비켜</button>
+          <button id="cmdTalk" class="btnSmall" type="button">대화</button>
+          <button id="cmdWait" class="btnSmall" type="button">대기</button></div></div>
 
         <aside class="side">
           <div class="card">
@@ -801,17 +810,17 @@
           <div class="card">
             <h3>유닛 정보</h3>
             <div id="unitInfo" class="small">선택/호버한 유닛 없음</div>
-            <div class="hp-bar"><div id="hpFill" class="hp-fill"></div></div>
+            <div class="hp-bar"><div id="hpFill" class="hp-fill" style="width: 0%;"></div></div>
           </div>
 
           <div class="card">
             <h3>이벤트 로그 (최근 5개)</h3>
-            <ol id="eventLog" class="logs"></ol>
+            <ol id="eventLog" class="logs"><li>스테이지 로드: STG2</li></ol>
           </div>
 
           <div class="card">
             <h3>목표 (Objective)</h3>
-            <ol id="objectiveList" class="objective-list"></ol>
+            <ol id="objectiveList" class="objective-list"><li class="">[진행] CUSTOM</li></ol>
           </div>
 
           <div class="card">
@@ -837,7 +846,7 @@
           <button id="menuNewBtn" class="btn" type="button">새로 시작</button>
         </div>
         <div class="small">리더 이름</div>
-        <input id="menuLeaderName" class="btnSmall menu-input" type="text" maxlength="16" placeholder="리더" />
+        <input id="menuLeaderName" class="btnSmall menu-input" type="text" maxlength="16" placeholder="리더">
         <div class="small">MBTI</div>
         <select id="menuMbti" class="btnSmall menu-input">
           <option value="INTJ">INTJ</option>
@@ -857,16 +866,16 @@
           <option value="ESTP">ESTP</option>
           <option value="ESFP">ESFP</option>
         </select>
-        <div id="mbtiAxisInfo" class="small"></div>
+        <div id="mbtiAxisInfo" class="small">용사 성향: 공격+0 / 안정+0</div>
         <div class="small">
-          안내: 리더 직업은 항상 용사(HERO_HYBRID)로 고정됩니다.<br />
-          안내: MBTI는 용사 스킬 성향(공격↔지원, 안정↔폭발) 가중치만 결정합니다.<br />
-          안내: 기존 회원(단톡 멤버)은 스토리의 등장인물로 나올 가능성이 높습니다.<br />
+          안내: 리더 직업은 항상 용사(HERO_HYBRID)로 고정됩니다.<br>
+          안내: MBTI는 용사 스킬 성향(공격↔지원, 안정↔폭발) 가중치만 결정합니다.<br>
+          안내: 기존 회원(단톡 멤버)은 스토리의 등장인물로 나올 가능성이 높습니다.<br>
           같은 이름+MBTI면 결과는 동일합니다(재현 가능).
         </div>
         <div class="small">스테이지 선택 (언락만 표시)</div>
-        <select id="menuStageSelect" class="btnSmall"></select>
-        <button id="menuStartBtn" class="btn" type="button">시작</button>
+        <select id="menuStageSelect" class="btnSmall"><option value="STG1">첫 번째 발걸음</option><option value="STG2">STG2</option></select>
+        <button id="menuStartBtn" class="btn" type="button">시작 (로스터 4)</button>
       </div>
     </div>
     <div id="campOverlay" class="camp-overlay">
@@ -9194,6 +9203,63 @@
           }
         }
       })();
-    </script>
-  </body>
-  </html>
+    </script><div class="dialog-overlay"><div class="dialog-panel">
+          <div class="dialog-body">
+            <div id="dialogPortraitWrap" class="dialog-portrait"><img id="dialogPortraitImg" alt=""></div>
+            <div class="dialog-content">
+              <div id="dialogSpeakers" class="dialog-speakers"></div>
+              <div id="dialogLine" class="dialog-line"></div>
+            </div>
+          </div>
+          <div class="dialog-actions"><button id="dialogNextBtn" class="btnSmall" type="button">다음</button></div>
+        </div></div><div id="dialogBar" style="display: none;"><div id="dialogBarPortrait" class="portraitBox"><img id="dialogBarPortraitImg" alt=""></div>
+          <div id="dialogCard">
+            <div id="dialogNamePill"></div>
+            <div id="dialogTextBody"></div>
+            <button id="dialogBarNextBtn" type="button">다음</button>
+          </div></div><div class="stage-toast">드래그: 화면 이동 / 탭: 선택 / 길게: 취소</div><div class="tutorial-dialog" style="pointer-events: none; display: none;"><div id="tutorialDialogSpeaker" class="tutorial-dialog-speaker"></div>
+          <div id="tutorialDialogLine" class="tutorial-dialog-line"></div>
+          <div class="tutorial-dialog-actions"><button id="tutorialDialogNextBtn" class="btnSmall" type="button">다음</button></div></div><pre id="qaPreviewLogSink" aria-hidden="true" style="display: none;">[QA_ENTRY_SHORTCUT] stage=STG2 roster=leader,jeong2,mender,kimware
+[BOARD_SCALE_FINALIST] qaStage=STG2 preview=B56 boardScale=56 spriteMode=SHEET_SSOT onscreenLog=off
+[PREVIEW_ASSET] qaStage=STG2 preview=B56 sheetSource=assets/s1/sprites_ssot/jeong2_ssot_{F|B|L|R}.png
+[VERIFY_PUSH_BUG] no_mutation_detected
+[QA_ENTRY_SHORTCUT] keep_kimware=true
+[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=56 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=56 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=56 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[QA_ENTRY_SHORTCUT] focus=jeong2_camera_center preview=B56
+[BOARD_SCALE_FINALIST] qaStage=STG2 preview=B56 boardScale=56 spriteMode=SHEET_SSOT onscreenLog=off
+[PREVIEW_ASSET] qaStage=STG2 preview=B56 sheetSource=assets/s1/sprites_ssot/jeong2_ssot_{F|B|L|R}.png
+[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=56 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_RENDER] qaStage=STG2 preview=B56 name=정2 path=TEMP_UPSCALE source=assets/s1/sprites/jeong2_F.png tileScale=56 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_RENDER] qaStage=STG2 preview=B56 name=정2 path=TEMP_UPSCALE source=assets/s1/sprites_raw_alpha/jeong2_F.png tileScale=56 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+[UNIT_RENDER_FAIL] qaStage=STG2 name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_FRAME] name=정2 face=F sourcePx=48 cropBox=34x43 trimmedMargin=L9,R5,T5,B0 fillRatioBefore=0.34 fillRatioAfter=0.53 anchor=tile_bottom_center
+[UNIT_RENDER] qaStage=STG2 preview=B56 name=정2 path=HIGHER_SOURCE source=assets/s1/sprites_raw_alpha_48/jeong2_F.png tileScale=56 sourcePx=48 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+[UNIT_ARTIFACT_TRACE] qaStage=STG2 name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS
+[UNIT_ARTIFACT_FIX] qaStage=STG2 name=정2 action=FRINGE_SUPPRESS result=clean removedPx=41
+[UNIT_SCALE_TRIAL] qaStage=STG2 name=정2 tileScale=56 trial=64 drawBoxPx=64 displayPx=64 path=SHEET_SSOT anchor=tile_bottom_center
+[UNIT_RENDER] qaStage=STG2 preview=B56 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=56 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+[UNIT_RENDER] qaStage=STG2 preview=B56 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=56 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center
+[UNIT_FOOTPRINT] qaStage=STG2 preview=B56 name=정2 tileScale=56 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center visualWidthTiles=1.82 visualHeightTiles=2.18 overhangLeftPx=11 overhangRightPx=12</pre><div class="dev-menu-overlay"><div class="dev-menu-panel" role="dialog" aria-modal="true">
+            <div style="font-weight:700;color:#b9d9ff;">DEV 메뉴</div>
+            <div class="dev-menu-actions">
+              <button type="button" class="btnSmall" data-dev-action="kill">적 전멸</button>
+              <button type="button" class="btnSmall" data-dev-action="victory">승리</button>
+              <button type="button" class="btnSmall" data-dev-action="hp1">적 1HP</button>
+              <button type="button" class="btnSmall" data-dev-action="reset">스테이지 리셋</button>
+              <button type="button" class="btnSmall" data-dev-action="flags">플래그</button>
+              <button type="button" class="btnSmall" data-dev-action="close">닫기</button>
+            </div>
+            <div id="devFlagPanel" style="display:none;">
+              <div class="small">Recruitment Flags</div>
+              <div id="devFlagList" class="dev-flag-list"></div>
+            </div>
+          </div></div>
+  
+  
+</body></html>
