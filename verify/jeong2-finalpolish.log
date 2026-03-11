@@ -1,0 +1,34 @@
+9975:[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=64 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9976:[UNIT_LOAD_STATE] qaStage=STG2 preview=FORMAL64 name=정2 status=PRELOAD_WAIT
+9978:[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=64 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+9980:[BOARD_SCALE_FORMALIZED] qaStage=STG2 name=정2 boardScale=64 spriteMode=SHEET_SSOT
+9982:[VERIFY_PUSH_BUG] no_mutation_detected
+9984:[UNIT_LOAD_STATE] qaStage=STG2 preview=FORMAL64 name=정2 status=READY
+9986:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=F source=assets/s1/sprites_ssot/jeong2_ssot_F.png
+9987:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=B source=assets/s1/sprites_ssot/jeong2_ssot_B.png
+9988:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=L source=assets/s1/sprites_ssot/jeong2_ssot_L.png
+9989:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=R source=assets/s1/sprites_ssot/jeong2_ssot_R.png
+9990:[JEONG2_ASSET_PIPELINE] qaStage=STG2 status=STATIC_4DIR_SCHEMA_READY
+9991:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=LOAD rawSize=64x64
+9992:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F stage=RAW hash=39114cef
+9993:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=ALPHA_SANITIZE removedPx=104
+9994:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=TRIM bbox=14,7-56,63
+9995:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=ANCHOR foot=63
+9996:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F step=BASELINE_BBOX bbox=11,7-53,63
+9997:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F step=LOCKED_CORE corePx=1315
+9998:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F step=FINISH_CLEAN removedPx=1
+9999:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F step=BBOX_DELTA delta=L0,T0,R0,B0,guard=pass
+10000:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F step=VISIBLE_MASS_DELTA delta=-1,guard=pass
+10001:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F visibleCharacterDamage=no
+10002:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=REFRAME outSize=64x64
+10003:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F stage=PREV_NORMALIZED hash=830b35b0
+10004:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F stage=FINAL_NORMALIZED hash=334d63ec
+10005:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F prevEqualsFinal=no
+10006:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F stage=NORMALIZED hash=334d63ec
+10007:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F rawEqualsNormalized=no
+10008:[UNIT_RENDER] qaStage=STG2 preview=FORMAL64 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+10009:[UNIT_RENDER] qaStage=STG2 preview=FORMAL64 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center
+10010:[UNIT_FOOTPRINT] qaStage=STG2 preview=FORMAL64 name=정2 tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center visualWidthTiles=1.34 visualHeightTiles=1.78 overhangLeftPx=5 overhangRightPx=6
+10011:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F stage=DISPLAYED hash=334d63ec
+10012:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F displayedMatchesNormalized=yes
+10013:[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=64 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
