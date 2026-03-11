@@ -1,0 +1,33 @@
+# A3-1
+[A3_FAILURE_ANALYSIS] name=정2 issue=FACE_UNREADABLE cause=A2 direct 48to32 downscale caused eye/face pixels to collapse at non-integer sample phase
+[A3_FAILURE_ANALYSIS] name=정2 issue=PIXEL_BREAKUP cause=A2 fallback chain plus 48to32 phase jitter produced unstable edge/silhouette breakup
+[A3_MODE] qaStage=STG2 preview=A3-1 source=assets/s1/sprites_raw_alpha_48/jeong2_{F|B|L|R}.png#A3_FACE_BIAS boardScale=32
+[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[A3_MODE] qaStage=STG2 preview=A3-1 source=assets/s1/sprites_raw_alpha_48/jeong2_{F|B|L|R}.png#A3_FACE_BIAS boardScale=32
+[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=32 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[UNIT_RENDER] qaStage=STG2 preview=A31 name=정2 path=MAP_PROXY_A3_1 source=assets/s1/sprites/jeong2_F.png tileScale=32 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[A3_RENDER] qaStage=STG2 preview=A3-1 name=정2 source=assets/s1/sprites/jeong2_F.png sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center
+[UNIT_RENDER] qaStage=STG2 preview=A31 name=정2 path=MAP_PROXY_A3_1 source=assets/s1/sprites_raw_alpha/jeong2_F.png tileScale=32 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[A3_RENDER] qaStage=STG2 preview=A3-1 name=정2 source=assets/s1/sprites_raw_alpha/jeong2_F.png sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center
+[UNIT_RENDER] qaStage=STG2 preview=A31 name=정2 path=MAP_PROXY_A3_1 source=assets/s1/sprites_raw_alpha_48/jeong2_F.png#A3-1 tileScale=32 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[A3_RENDER] qaStage=STG2 preview=A3-1 name=정2 source=assets/s1/sprites_raw_alpha_48/jeong2_F.png#A3-1 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center
+
+# A3-2
+[A3_FAILURE_ANALYSIS] name=정2 issue=FACE_UNREADABLE cause=A2 direct 48to32 downscale caused eye/face pixels to collapse at non-integer sample phase
+[A3_FAILURE_ANALYSIS] name=정2 issue=PIXEL_BREAKUP cause=A2 fallback chain plus 48to32 phase jitter produced unstable edge/silhouette breakup
+[A3_MODE] qaStage=STG2 preview=A3-2 source=assets/s1/sprites_raw_alpha_48/jeong2_{F|B|L|R}.png#A3_SILHOUETTE_BIAS boardScale=32
+[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[A3_MODE] qaStage=STG2 preview=A3-2 source=assets/s1/sprites_raw_alpha_48/jeong2_{F|B|L|R}.png#A3_SILHOUETTE_BIAS boardScale=32
+[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=32 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[UNIT_RENDER] qaStage=STG2 preview=A32 name=정2 path=MAP_PROXY_A3_2 source=assets/s1/sprites/jeong2_F.png tileScale=32 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[A3_RENDER] qaStage=STG2 preview=A3-2 name=정2 source=assets/s1/sprites/jeong2_F.png sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center
+[UNIT_RENDER] qaStage=STG2 preview=A32 name=정2 path=MAP_PROXY_A3_2 source=assets/s1/sprites_raw_alpha_48/jeong2_F.png#A3-2 tileScale=32 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[A3_RENDER] qaStage=STG2 preview=A3-2 name=정2 source=assets/s1/sprites_raw_alpha_48/jeong2_F.png#A3-2 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center
+
+# OVERLAY_CHECK
+a31_has_qaVerifyDump_node=no
+a32_has_qaVerifyDump_node=no
