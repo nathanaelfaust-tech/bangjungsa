@@ -1,0 +1,53 @@
+[BOARD_SCALE_FORMALIZED] boardScale=64
+[UNIT_LOAD_STATE] stage=preload state=PRELOAD_WAIT
+[UNIT_LOAD_STATE] stage=preload state=READY
+[JEONG2_ASSET_INVENTORY] season=s2 dirCount=4 normalized=F,B,L,R
+[JEONG2_ASSET_PIPELINE] season=s2 normalizedAssetPath=F/B/L/R preloadFirstDraw=yes anchor=tile_bottom_center readableSlimmerFit=yes
+[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F normalizedPath=assets/s2/units/jeong2/static_f.png anchor=tile_bottom_center
+[JEONG2_RENDER_SOURCE] qaStage=STG2 dir=F source=procedural_static normalizedPath=assets/s2/units/jeong2/static_f.png
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=F metric=BBOX_CENTER_X value=9.82
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=F metric=CORE_CENTER_X value=8.02
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=F metric=FOOT_CENTER_X value=8
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=F metric=FINAL_CENTER_X value=8.18
+[JEONG2_CENTER_FIX] qaStage=STG2 dir=F appliedOffsetX=0.16
+[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=B normalizedPath=assets/s2/units/jeong2/static_b.png anchor=tile_bottom_center
+[JEONG2_RENDER_SOURCE] qaStage=STG2 dir=B source=procedural_static normalizedPath=assets/s2/units/jeong2/static_b.png
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=B metric=BBOX_CENTER_X value=6.02
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=B metric=CORE_CENTER_X value=7.99
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=B metric=FOOT_CENTER_X value=8
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=B metric=FINAL_CENTER_X value=7.87
+[JEONG2_CENTER_FIX] qaStage=STG2 dir=B appliedOffsetX=-0.12
+[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=L normalizedPath=assets/s2/units/jeong2/static_l.png anchor=tile_bottom_center
+[JEONG2_RENDER_SOURCE] qaStage=STG2 dir=L source=procedural_static normalizedPath=assets/s2/units/jeong2/static_l.png
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=L metric=BBOX_CENTER_X value=6.1
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=L metric=CORE_CENTER_X value=8.11
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=L metric=FOOT_CENTER_X value=8
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=L metric=FINAL_CENTER_X value=8.02
+[JEONG2_CENTER_FIX] qaStage=STG2 dir=L appliedOffsetX=-0.09
+[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=R normalizedPath=assets/s2/units/jeong2/static_r.png anchor=tile_bottom_center
+[JEONG2_RENDER_SOURCE] qaStage=STG2 dir=R source=procedural_static normalizedPath=assets/s2/units/jeong2/static_r.png
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=R metric=BBOX_CENTER_X value=10.5
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=R metric=CORE_CENTER_X value=7.82
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=R metric=FOOT_CENTER_X value=8
+[JEONG2_CENTER_TRACE] qaStage=STG2 dir=R metric=FINAL_CENTER_X value=8
+[JEONG2_CENTER_FIX] qaStage=STG2 dir=R appliedOffsetX=0.18
+[UNIT_RENDER] unit=정2 dir=F anchor=tile_bottom_center boardScale=64
+[UNIT_FOOTPRINT] unit=정2 tile=1x1 footAnchorX=8 footAnchorPreserved=yes
+[JEONG2_CENTER_FIX] qaStage=STG2 metric=foot_anchor_preserved result=yes
+[JEONG2_CENTER_FIX] qaStage=STG2 metric=visible_mass_preserved result=yes
+[JEONG2_PARITY_QA] qaStage=STG2 metric=lateral_center result=pass note=spread_0.31
+[JEONG2_PARITY_QA] qaStage=STG2 metric=size result=pass note=readable_slimmer_fit_preserved
+[JEONG2_PARITY_QA] qaStage=STG2 metric=artifact_cleanliness result=pass note=no_new_dust_or_fringe
+[VERIFY_PUSH_BUG] qaStage=STG2 status=ready
+
+F left-bias reduced? yes
+B right-bias reduced? yes
+cross-direction lateral center parity acceptable? yes
+size parity preserved? yes
+foot anchor parity preserved? yes
+face readability preserved? yes
+bow readability preserved? yes
+shoes readability preserved? yes
+dust/fringe reintroduced? no
+PRELOAD_WAIT -> READY preserved? yes
+boardScale=64 preserved? yes

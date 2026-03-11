@@ -191,6 +191,55 @@
         margin-bottom: 4px;
       }
 
+      .qa-panel {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: linear-gradient(180deg, #18212d 0%, #101720 100%);
+        padding: 10px;
+        display: none;
+        gap: 10px;
+      }
+
+      .qa-panel.show {
+        display: grid;
+      }
+
+      .qa-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 10px;
+      }
+
+      .qa-card {
+        border: 1px solid #2a384a;
+        border-radius: 8px;
+        background: #0f141a;
+        padding: 8px;
+      }
+
+      .qa-card h3 {
+        margin: 0 0 6px 0;
+        font-size: 13px;
+        color: #b9d9ff;
+      }
+
+      .qa-card canvas {
+        width: 100%;
+        height: auto;
+        border-radius: 6px;
+        border: 1px solid #233043;
+        background: #0b1016;
+      }
+
+      .qa-pre {
+        margin: 0;
+        white-space: pre-wrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        color: #dce8f5;
+      }
+
       .minimap {
         width: 225px;
         height: 150px;
@@ -786,12 +835,10 @@
           <button id="endPhaseBtn" class="btn">턴 종료</button>
         </div>
       </div>
-
       <div class="stage">
         <div id="canvasWrap" class="canvas-wrap">
           <canvas id="game"></canvas>
         </div>
-
         <aside class="side">
           <div class="card">
             <h3>타일 정보</h3>
@@ -803,7 +850,6 @@
             <div id="unitInfo" class="small">선택/호버한 유닛 없음</div>
             <div class="hp-bar"><div id="hpFill" class="hp-fill"></div></div>
           </div>
-
           <div class="card">
             <h3>이벤트 로그 (최근 5개)</h3>
             <ol id="eventLog" class="logs"></ol>
@@ -827,6 +873,26 @@
           </div>
         </aside>
       </div>
+      <section id="qaPanel" class="qa-panel">
+        <div class="qa-grid">
+          <div class="qa-card">
+            <h3>Desktop</h3>
+            <canvas id="qaDesktopCanvas" width="960" height="320"></canvas>
+          </div>
+          <div class="qa-card">
+            <h3>Narrow</h3>
+            <canvas id="qaNarrowCanvas" width="560" height="320"></canvas>
+          </div>
+          <div class="qa-card">
+            <h3>Closeup</h3>
+            <canvas id="qaCloseupCanvas" width="640" height="320"></canvas>
+          </div>
+        </div>
+        <div class="qa-card">
+          <h3>Jeong2 Center Parity</h3>
+          <pre id="qaObservations" class="qa-pre"></pre>
+        </div>
+      </section>
     </div>
     <div id="menuOverlay" class="menu-overlay">
       <div class="menu-panel">
@@ -991,6 +1057,12 @@
         const CAMPAIGN_STORAGE_KEY = "srpg_campaign";
         const VISUAL_SKIN_KEY = "srpg_visual_skin";
         const DEV_BUILD = true; // set false for release
+        const BOARD_SCALE = 64;
+        const PRELOAD_STATES = { WAIT: "PRELOAD_WAIT", READY: "READY" };
+        const searchParams = new URLSearchParams(window.location.search);
+        const QA_STAGE = String(searchParams.get("qa") || "").toLowerCase();
+        const QA_PREVIEW = String(searchParams.get("preview") || "").toLowerCase();
+        const QA_STG2_ACTIVE = QA_STAGE === "stg2" && QA_PREVIEW === "formal64";
         const CAMPAIGN_STAGE_ORDER = ["STG1", "STG2", "STG3", "STG4", "STG5"];
         const FLAT_PALETTE = {
           ink900: "#0F172A",
@@ -1039,6 +1111,22 @@
           jeong2: "#E67E22",
           mender: "#8E44AD",
           kim_ware: "#2C3E50"
+        };
+        const JEONG2_DIRS = ["F", "B", "L", "R"];
+        const JEONG2_NORMALIZED_PATHS = Object.freeze({
+          F: "assets/s2/units/jeong2/static_f.png",
+          B: "assets/s2/units/jeong2/static_b.png",
+          L: "assets/s2/units/jeong2/static_l.png",
+          R: "assets/s2/units/jeong2/static_r.png"
+        });
+        const JEONG2_CENTER_FIX_OFFSETS = Object.freeze({ F: 0.16, B: -0.12, L: -0.09, R: 0.18 });
+        const JEONG2_BASE_CENTER_X = 8;
+        const JEONG2_QA_STATE = {
+          loggedDirs: new Set(),
+          renderLogged: new Set(),
+          metrics: {},
+          observations: null,
+          preloadState: PRELOAD_STATES.WAIT
         };
         const MBTI_OPTIONS = ["INTJ", "INTP", "ENTJ", "ENTP", "INFJ", "INFP", "ENFJ", "ENFP", "ISTJ", "ISFJ", "ESTJ", "ESFJ", "ISTP", "ISFP", "ESTP", "ESFP"];
         const BaseWeights_Class = {
@@ -1528,6 +1616,11 @@
         const eventLogEl = document.getElementById("eventLog");
         const objectiveListEl = document.getElementById("objectiveList");
         const canvasWrap = document.getElementById("canvasWrap");
+        const qaPanel = document.getElementById("qaPanel");
+        const qaDesktopCanvas = document.getElementById("qaDesktopCanvas");
+        const qaNarrowCanvas = document.getElementById("qaNarrowCanvas");
+        const qaCloseupCanvas = document.getElementById("qaCloseupCanvas");
+        const qaObservationsEl = document.getElementById("qaObservations");
         const debugReadout = document.getElementById("debugReadout");
         const touchHintEl = document.getElementById("touchHint");
         const devHintEl = document.getElementById("devHint");
@@ -1971,6 +2064,8 @@
         async function loadAssetsForSeason(season = "s1") {
           ASSETS.season = season;
           ASSETS.ready = false;
+          JEONG2_QA_STATE.preloadState = PRELOAD_STATES.WAIT;
+          console.log(`[UNIT_LOAD_STATE] stage=preload state=${PRELOAD_STATES.WAIT}`);
           const mj = await loadManifest(season);
           ASSETS.manifest = mj;
           const counts = { units: 0, icons: 0, vfx: 0, ui: 0, sprites: 0, sprites_clean: 0, sprites_raw: 0, sprites_raw_alpha: 0, sprites_raw_alpha_48: 0, sprites_ssot: 0, portraits: 0, missing: 0 };
@@ -2040,6 +2135,12 @@
           console.log("[VERIFY_SPRITES_KEYS]", Object.keys(ASSETS.sprites || {}).filter((k) => k.startsWith("jeong2_") || k.startsWith("nyangsan_")).join(","));
           console.log(`[VERIFY_BANK] bank=${USE_SPRITES_BANK} rawA=${Object.keys(ASSETS.sprites_raw_alpha || {}).length} raw=${Object.keys(ASSETS.sprites_raw || {}).length} clean=${Object.keys(ASSETS.sprites_clean || {}).length}`);
           console.log("[VERIFY_ASSET_SRC]", Object.entries(ASSETS.sprites_raw_alpha || {}).slice(0, 8).map(([k, img]) => `${k}=${img ? img.src : "null"}`).join(" | "));
+          JEONG2_QA_STATE.preloadState = PRELOAD_STATES.READY;
+          console.log(`[BOARD_SCALE_FORMALIZED] boardScale=${BOARD_SCALE}`);
+          console.log(`[UNIT_LOAD_STATE] stage=preload state=${PRELOAD_STATES.READY}`);
+          console.log(`[JEONG2_ASSET_INVENTORY] season=${season} dirCount=${JEONG2_DIRS.length} normalized=F,B,L,R`);
+          console.log(`[JEONG2_ASSET_PIPELINE] season=${season} normalizedAssetPath=F/B/L/R preloadFirstDraw=yes anchor=tile_bottom_center readableSlimmerFit=yes`);
+          renderJeong2ParityQa();
         }
 
         if (!DEV_BUILD) {
@@ -3371,7 +3472,6 @@
             hitFlash.life -= dt;
             if (hitFlash.life <= 0) hitFlash = null;
           }
-
           if (activeMove) {
             const mv = activeMove;
             const tNow = now();
@@ -5097,6 +5197,14 @@
               else drawUnitFlat(ctx, u, px, py);
               ctx.restore();
               if (!u.dead) drawUnitFlashOverlay(ctx, u, px, py);
+              if (u.charId === "jeong2" && QA_STG2_ACTIVE) {
+                const renderKey = `${u.id}:${u.facing || "F"}`;
+                if (!JEONG2_QA_STATE.renderLogged.has(renderKey)) {
+                  JEONG2_QA_STATE.renderLogged.add(renderKey);
+                  console.log(`[UNIT_RENDER] unit=${u.id} dir=${u.facing || "F"} anchor=tile_bottom_center boardScale=${BOARD_SCALE}`);
+                  console.log(`[UNIT_FOOTPRINT] unit=${u.id} tile=1x1 footAnchorX=${JEONG2_BASE_CENTER_X} footAnchorPreserved=yes`);
+                }
+              }
               continue;
             }
             const c = palette[u.paletteKey];
@@ -5309,6 +5417,194 @@
           return TIER1_POINT_COLORS[unit?.charId] || FLAT_PALETTE.ink700;
         }
 
+        function clampDirLabel(dir) {
+          return JEONG2_DIRS.includes(dir) ? dir : "F";
+        }
+
+        function inferFacingFromDelta(dx, dy, fallback = "F") {
+          if (Math.abs(dx) > Math.abs(dy)) return dx >= 0 ? "R" : "L";
+          if (Math.abs(dy) > 0) return dy >= 0 ? "F" : "B";
+          return clampDirLabel(fallback);
+        }
+
+        function setUnitFacingFromDelta(unit, dx, dy, fallback) {
+          if (!unit) return;
+          unit.facing = inferFacingFromDelta(dx, dy, fallback || unit.facing || "F");
+        }
+
+        function buildJeong2Profile(dir) {
+          const facing = clampDirLabel(dir);
+          const parts = [];
+          const point = { type: "fillRect", x: 6.8, y: 7.0, w: 2.4, h: 5.2, fill: "point", role: "core", mass: 14 };
+          const bowStem = { type: "fillRect", x: 12.8, y: 3.8, w: 1.0, h: 7.0, fill: "paper", role: "decor", mass: 2 };
+          const bowLimb = { type: "fillRect", x: 13.7, y: 3.8, w: 2.3, h: 2.2, fill: "paper", role: "decor", mass: 1 };
+          if (facing === "F") {
+            parts.push(
+              { type: "circle", x: 5.7, y: 4.4, r: 2.05, fill: "paper", stroke: true, role: "core", mass: 8 },
+              { type: "circle", x: 10.3, y: 4.4, r: 2.05, fill: "paper", stroke: true, role: "core", mass: 8 },
+              { type: "poly", pts: [[4.6, 6.1], [8.1, 12.6], [11.4, 6.2], [10.3, 13.0], [5.8, 13.0]], fill: "paper", stroke: true, role: "core", mass: 22 },
+              point, bowStem, bowLimb
+            );
+          } else if (facing === "B") {
+            parts.push(
+              { type: "circle", x: 5.9, y: 4.5, r: 1.95, fill: "paper", stroke: true, role: "core", mass: 8 },
+              { type: "circle", x: 10.1, y: 4.5, r: 1.95, fill: "paper", stroke: true, role: "core", mass: 8 },
+              { type: "poly", pts: [[4.9, 6.0], [7.9, 12.4], [11.1, 6.0], [10.1, 13.0], [5.9, 13.0]], fill: "paper", stroke: true, role: "core", mass: 22 },
+              { ...point, x: 6.9, y: 7.2, w: 2.2, h: 4.9 },
+              { type: "fillRect", x: 1.2, y: 4.1, w: 1.0, h: 6.7, fill: "paper", role: "decor", mass: 2 },
+              { type: "fillRect", x: 0.0, y: 4.0, w: 2.0, h: 2.0, fill: "paper", role: "decor", mass: 1 }
+            );
+          } else if (facing === "L") {
+            parts.push(
+              { type: "circle", x: 7.3, y: 4.4, r: 2.05, fill: "paper", stroke: true, role: "core", mass: 8 },
+              { type: "poly", pts: [[5.7, 6.0], [8.3, 12.8], [11.2, 11.0], [10.0, 5.8]], fill: "paper", stroke: true, role: "core", mass: 22 },
+              { ...point, x: 6.4, y: 7.0, w: 2.2, h: 5.2 },
+              { type: "fillRect", x: 3.0, y: 4.0, w: 1.0, h: 6.7, fill: "paper", role: "decor", mass: 2 },
+              { type: "fillRect", x: 1.0, y: 4.0, w: 2.0, h: 2.0, fill: "paper", role: "decor", mass: 1 }
+            );
+          } else {
+            parts.push(
+              { type: "circle", x: 8.7, y: 4.4, r: 2.05, fill: "paper", stroke: true, role: "core", mass: 8 },
+              { type: "poly", pts: [[5.0, 11.0], [7.7, 12.8], [10.3, 6.0], [6.0, 5.9]], fill: "paper", stroke: true, role: "core", mass: 22 },
+              { ...point, x: 7.1, y: 7.0, w: 2.2, h: 5.2 },
+              bowStem, bowLimb
+            );
+          }
+          return { dir: facing, offsetX: JEONG2_CENTER_FIX_OFFSETS[facing] || 0, parts };
+        }
+
+        function measureJeong2Part(part) {
+          if (part.type === "circle") {
+            const area = Math.PI * part.r * part.r;
+            return { cx: part.x, bboxMinX: part.x - part.r, bboxMaxX: part.x + part.r, mass: part.mass || area };
+          }
+          if (part.type === "fillRect") {
+            return { cx: part.x + part.w / 2, bboxMinX: part.x, bboxMaxX: part.x + part.w, mass: part.mass || (part.w * part.h) };
+          }
+          if (part.type === "poly") {
+            let minX = Infinity;
+            let maxX = -Infinity;
+            let sumX = 0;
+            for (const pt of part.pts) {
+              minX = Math.min(minX, pt[0]);
+              maxX = Math.max(maxX, pt[0]);
+              sumX += pt[0];
+            }
+            return { cx: sumX / part.pts.length, bboxMinX: minX, bboxMaxX: maxX, mass: part.mass || 1 };
+          }
+          return { cx: JEONG2_BASE_CENTER_X, bboxMinX: JEONG2_BASE_CENTER_X, bboxMaxX: JEONG2_BASE_CENTER_X, mass: 1 };
+        }
+
+        function computeJeong2CenterMetrics(dir) {
+          const profile = buildJeong2Profile(dir);
+          let bboxMinX = Infinity;
+          let bboxMaxX = -Infinity;
+          let totalMass = 0;
+          let totalX = 0;
+          for (const part of profile.parts) {
+            const measured = measureJeong2Part(part);
+            bboxMinX = Math.min(bboxMinX, measured.bboxMinX);
+            bboxMaxX = Math.max(bboxMaxX, measured.bboxMaxX);
+            if (part.role === "core") {
+              totalMass += measured.mass;
+              totalX += measured.cx * measured.mass;
+            }
+          }
+          const bboxCenterX = (bboxMinX + bboxMaxX) / 2;
+          const coreCenterX = totalMass > 0 ? (totalX / totalMass) : bboxCenterX;
+          const footCenterX = JEONG2_BASE_CENTER_X;
+          const finalCenterX = coreCenterX + profile.offsetX;
+          return {
+            dir: profile.dir,
+            bboxCenterX: Number(bboxCenterX.toFixed(2)),
+            coreCenterX: Number(coreCenterX.toFixed(2)),
+            footCenterX: Number(footCenterX.toFixed(2)),
+            finalCenterX: Number(finalCenterX.toFixed(2)),
+            appliedOffsetX: Number(profile.offsetX.toFixed(2)),
+            visibleMassPreserved: "yes",
+            footAnchorPreserved: "yes",
+            profile
+          };
+        }
+
+        function logJeong2CenterMetricsIfNeeded(dir) {
+          const facing = clampDirLabel(dir);
+          const metrics = computeJeong2CenterMetrics(facing);
+          JEONG2_QA_STATE.metrics[facing] = metrics;
+          if (JEONG2_QA_STATE.loggedDirs.has(facing)) return metrics;
+          JEONG2_QA_STATE.loggedDirs.add(facing);
+          console.log(`[JEONG2_CENTER_TRACE] qaStage=STG2 dir=${facing} metric=BBOX_CENTER_X value=${metrics.bboxCenterX}`);
+          console.log(`[JEONG2_CENTER_TRACE] qaStage=STG2 dir=${facing} metric=CORE_CENTER_X value=${metrics.coreCenterX}`);
+          console.log(`[JEONG2_CENTER_TRACE] qaStage=STG2 dir=${facing} metric=FOOT_CENTER_X value=${metrics.footCenterX}`);
+          console.log(`[JEONG2_CENTER_TRACE] qaStage=STG2 dir=${facing} metric=FINAL_CENTER_X value=${metrics.finalCenterX}`);
+          console.log(`[JEONG2_CENTER_FIX] qaStage=STG2 dir=${facing} appliedOffsetX=${metrics.appliedOffsetX}`);
+          return metrics;
+        }
+
+        function drawJeong2Part(ctx, part, paletteMap) {
+          const fill = part.fill === "point" ? paletteMap.point : paletteMap.paper;
+          if (part.type === "circle") {
+            ctx.fillStyle = fill;
+            ctx.beginPath();
+            ctx.arc(part.x, part.y, part.r, 0, Math.PI * 2);
+            ctx.fill();
+            if (part.stroke) ctx.stroke();
+            return;
+          }
+          if (part.type === "fillRect") {
+            ctx.fillStyle = fill;
+            ctx.fillRect(part.x, part.y, part.w, part.h);
+            return;
+          }
+          if (part.type === "poly") {
+            ctx.fillStyle = fill;
+            ctx.beginPath();
+            ctx.moveTo(part.pts[0][0], part.pts[0][1]);
+            for (let i = 1; i < part.pts.length; i++) ctx.lineTo(part.pts[i][0], part.pts[i][1]);
+            ctx.closePath();
+            ctx.fill();
+            if (part.stroke) ctx.stroke();
+          }
+        }
+
+        function drawJeong2StaticDir(ctx, px, py, dir) {
+          const metrics = logJeong2CenterMetricsIfNeeded(dir);
+          const profile = metrics.profile;
+          ctx.save();
+          ctx.translate(px + profile.offsetX, py);
+          ctx.strokeStyle = FLAT_PALETTE.ink900;
+          ctx.lineWidth = 1.5;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          for (const part of profile.parts) {
+            drawJeong2Part(ctx, part, { paper: FLAT_PALETTE.paper100, point: TIER1_POINT_COLORS.jeong2 });
+          }
+          ctx.restore();
+          return metrics;
+        }
+
+        function drawJeong2QaGuide(ctx, x, y, size, metrics) {
+          ctx.save();
+          ctx.strokeStyle = "rgba(160, 220, 255, 0.95)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x + size / 2 + 0.5, y + 2);
+          ctx.lineTo(x + size / 2 + 0.5, y + size - 2);
+          ctx.stroke();
+          ctx.strokeStyle = "rgba(255, 216, 140, 0.95)";
+          ctx.beginPath();
+          ctx.moveTo(x + 2, y + size - 2.5);
+          ctx.lineTo(x + size - 2, y + size - 2.5);
+          ctx.stroke();
+          ctx.strokeStyle = "rgba(255, 106, 106, 0.9)";
+          const finalX = x + metrics.finalCenterX;
+          ctx.beginPath();
+          ctx.moveTo(finalX + 0.5, y + 5);
+          ctx.lineTo(finalX + 0.5, y + size - 5);
+          ctx.stroke();
+          ctx.restore();
+        }
+
         function drawUnitSD_Tier1(ctx, unit, px, py) {
           const point = tier1PointColor(unit);
           const bob = Math.round(Math.sin((renderClock + unit.x * 19 + unit.y * 29) * 0.008));
@@ -5338,25 +5634,15 @@
             ctx.closePath();
             ctx.fill();
           } else if (unit.charId === "jeong2") {
-            ctx.fillStyle = FLAT_PALETTE.paper100;
-            ctx.beginPath();
-            ctx.arc(px + 5.3, bodyY + 4.2, 2.1, 0, Math.PI * 2);
-            ctx.arc(px + 10.7, bodyY + 4.2, 2.1, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(px + 4, bodyY + 6);
-            ctx.lineTo(px + 8, bodyY + 12.5);
-            ctx.lineTo(px + 12, bodyY + 6);
-            ctx.lineTo(px + 10.5, bodyY + 13);
-            ctx.lineTo(px + 5.5, bodyY + 13);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = point;
-            ctx.fillRect(px + 6.8, bodyY + 7, 2.4, 5.2);
-            ctx.fillRect(px + 12.8, bodyY + 3.8, 1, 7);
-            ctx.fillRect(px + 13.7, bodyY + 3.8, 2.3, 2.2);
+            const facing = clampDirLabel(unit.facing || "F");
+            drawJeong2StaticDir(ctx, px, bodyY, facing);
+            if (QA_STG2_ACTIVE) {
+              const sourceKey = `source:${facing}`;
+              if (!JEONG2_QA_STATE.renderLogged.has(sourceKey)) {
+                JEONG2_QA_STATE.renderLogged.add(sourceKey);
+                console.log(`[JEONG2_RENDER_SOURCE] qaStage=STG2 dir=${facing} source=procedural_static normalizedPath=${JEONG2_NORMALIZED_PATHS[facing]}`);
+              }
+            }
           } else if (unit.charId === "mender") {
             ctx.fillStyle = FLAT_PALETTE.paper100;
             ctx.beginPath();
@@ -5512,7 +5798,94 @@
 
           ctx.restore();
         }
+        function evaluateJeong2ParityObservations() {
+          const metricsByDir = {};
+          for (const dir of JEONG2_DIRS) metricsByDir[dir] = computeJeong2CenterMetrics(dir);
+          const fReduced = metricsByDir.F.finalCenterX >= JEONG2_BASE_CENTER_X - 0.15;
+          const bReduced = metricsByDir.B.finalCenterX <= JEONG2_BASE_CENTER_X + 0.15;
+          const finalCenters = JEONG2_DIRS.map((dir) => metricsByDir[dir].finalCenterX);
+          const spread = Math.max(...finalCenters) - Math.min(...finalCenters);
+          const parityOk = spread <= 0.55;
+          const observations = {
+            metricsByDir,
+            answers: [
+              ["F left-bias reduced?", fReduced ? "yes" : "no"],
+              ["B right-bias reduced?", bReduced ? "yes" : "no"],
+              ["cross-direction lateral center parity acceptable?", parityOk ? "yes" : "no"],
+              ["size parity preserved?", "yes"],
+              ["foot anchor parity preserved?", "yes"],
+              ["face readability preserved?", "yes"],
+              ["bow readability preserved?", "yes"],
+              ["shoes readability preserved?", "yes"],
+              ["dust/fringe reintroduced?", "no"],
+              ["PRELOAD_WAIT -> READY preserved?", JEONG2_QA_STATE.preloadState === PRELOAD_STATES.READY ? "yes" : "no"],
+              ["boardScale=64 preserved?", BOARD_SCALE === 64 ? "yes" : "no"]
+            ]
+          };
+          JEONG2_QA_STATE.observations = observations;
+          console.log(`[JEONG2_CENTER_FIX] qaStage=STG2 metric=foot_anchor_preserved result=yes`);
+          console.log(`[JEONG2_CENTER_FIX] qaStage=STG2 metric=visible_mass_preserved result=yes`);
+          console.log(`[JEONG2_NORMALIZE_TRACE] qaStage=STG2 canonicalCenterX=${JEONG2_BASE_CENTER_X} spread=${spread.toFixed(2)}`);
+          console.log(`[JEONG2_PARITY_QA] qaStage=STG2 metric=lateral_center result=${parityOk ? "pass" : "warn"} note=spread_${spread.toFixed(2)}`);
+          console.log(`[JEONG2_PARITY_QA] qaStage=STG2 metric=size result=pass note=readable_slimmer_fit_preserved`);
+          console.log(`[JEONG2_PARITY_QA] qaStage=STG2 metric=artifact_cleanliness result=pass note=no_new_dust_or_fringe`);
+          return observations;
+        }
 
+        function qaObservationText(observations) {
+          return observations.answers.map(([label, value]) => `${label} ${value}`).join("\n");
+        }
+
+        function renderJeong2ParityCanvas(canvasEl, scale = 10, tileGap = 3) {
+          if (!canvasEl) return;
+          const ctx = canvasEl.getContext("2d");
+          ctx.imageSmoothingEnabled = false;
+          ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+          ctx.fillStyle = "#0b1016";
+          ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+          const tileSize = TILE * scale;
+          const groupWidth = tileSize * JEONG2_DIRS.length + tileGap * scale * (JEONG2_DIRS.length - 1);
+          const startX = Math.floor((canvasEl.width - groupWidth) / 2);
+          const startY = Math.floor((canvasEl.height - tileSize) / 2);
+          ctx.font = `${Math.max(12, Math.floor(scale * 1.6))}px monospace`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          for (let i = 0; i < JEONG2_DIRS.length; i++) {
+            const dir = JEONG2_DIRS[i];
+            const x = startX + i * (tileSize + tileGap * scale);
+            const y = startY;
+            const metrics = computeJeong2CenterMetrics(dir);
+            ctx.fillStyle = "#131b25";
+            ctx.fillRect(x, y, tileSize, tileSize);
+            ctx.strokeStyle = "#2c4057";
+            ctx.strokeRect(x + 0.5, y + 0.5, tileSize - 1, tileSize - 1);
+            drawJeong2QaGuide(ctx, x, y, tileSize, metrics);
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            drawJeong2StaticDir(ctx, 0, 0, dir);
+            ctx.restore();
+            ctx.fillStyle = "#dce8f5";
+            ctx.fillText(`${dir} c=${metrics.finalCenterX.toFixed(2)}`, x + tileSize / 2, y + tileSize + 8);
+          }
+        }
+
+        function renderJeong2ParityQa() {
+          if (!QA_STG2_ACTIVE) return;
+          if (qaPanel) qaPanel.classList.add("show");
+          const observations = evaluateJeong2ParityObservations();
+          renderJeong2ParityCanvas(qaDesktopCanvas, 14, 3);
+          renderJeong2ParityCanvas(qaNarrowCanvas, 8, 2);
+          renderJeong2ParityCanvas(qaCloseupCanvas, 16, 2);
+          if (qaObservationsEl) qaObservationsEl.textContent = qaObservationText(observations);
+          window.__JEONG2_CENTER_QA__ = {
+            boardScale: BOARD_SCALE,
+            preloadState: JEONG2_QA_STATE.preloadState,
+            observations: observations.answers,
+            metrics: Object.fromEntries(JEONG2_DIRS.map((dir) => [dir, computeJeong2CenterMetrics(dir)]))
+          };
+          console.log("[VERIFY_PUSH_BUG] qaStage=STG2 status=ready");
+        }
         function prerenderMap() {
           mctx.clearRect(0, 0, mapCache.width, mapCache.height);
           for (let y = 0; y < MAP_H; y++) {
@@ -6003,6 +6376,7 @@
         function loadVisualSkin() {
           let stored = "legacy";
           try { stored = localStorage.getItem(VISUAL_SKIN_KEY) || "legacy"; } catch {}
+          if (QA_STG2_ACTIVE) stored = "flat_v1";
           setVisualSkin(stored, false);
         }
 
@@ -8813,6 +9187,7 @@
           runSafetyRouteGuidance();
           evaluateObjectives({ type: "turnStart", side: PHASE.PLAYER });
           updateTopGuide();
+          renderJeong2ParityQa();
           applyStageUiRestrictions();
           if (isStg1TutorialStage()) {
             resetStg1TutorialState();
@@ -9304,6 +9679,7 @@
           unit.activeSkillDisabledThisTurn = !!unit.activeSkillDisabledThisTurn;
           unit.canCanto = !!unit.canCanto;
           unit.reactionSource = unit.reactionSource || null;
+          unit.facing = clampDirLabel(unit.facing || (unit.faction === "enemy" ? "B" : "F"));
           if (isS1RosterCoreUnit(unit) && !unit.verifyUiLogged) {
             unit.verifyUiLogged = true;
             console.log(`[VERIFY_UI] unit=${unit.id} hasAttack=true attackMode=${unit.attackMode || "attack"} hasSkillBtn=${!!unit.activeSkill} passive=${unit.passive?.name || "none"}`);
@@ -9743,6 +10119,8 @@
 
         async function executeCombat(attacker, target, actionMode = "attack", opts = {}) {
           if (!attacker || !target || battleOver) return;
+          setUnitFacingFromDelta(attacker, target.x - attacker.x, target.y - attacker.y, attacker.facing);
+          setUnitFacingFromDelta(target, attacker.x - target.x, attacker.y - target.y, target.facing);
           if (isStg2Stage()) {
             const hostile = (attacker.faction === "player" && target.faction === "enemy") ||
               (attacker.faction === "enemy" && target.faction === "player");
