@@ -1,0 +1,23 @@
+# PREVIEW A
+[PREVIEW_MODE] qaStage=STG2 preview=A spriteMode=MAP_PROXY boardScale=32 proxySource=assets/s1/sprites/jeong2_{F|B|L|R}.png
+[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=정2 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=32 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[PREVIEW_MODE] qaStage=STG2 preview=A spriteMode=MAP_PROXY boardScale=32 proxySource=assets/s1/sprites/jeong2_{F|B|L|R}.png
+[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=32 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[UNIT_RENDER] qaStage=STG2 preview=A name=정2 path=MAP_PROXY source=assets/s1/sprites/jeong2_F.png tileScale=32 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+
+# PREVIEW B
+[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=48 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[PREVIEW_MODE] qaStage=STG2 preview=B spriteMode=SHEET_SSOT boardScale=48 proxySource=none
+[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=48 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[UNIT_RENDER_FAIL] qaStage=STG2 preview=B name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_RENDER] qaStage=STG2 preview=B name=정2 path=SHEET_SSOT_FALLBACK source=assets/s1/sprites/jeong2_F.png tileScale=48 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+[UNIT_RENDER_FAIL] qaStage=STG2 preview=B name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_RENDER_FAIL] qaStage=STG2 preview=B name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_RENDER_FAIL] qaStage=STG2 preview=B name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_RENDER_FAIL] qaStage=STG2 preview=B name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_RENDER] qaStage=STG2 preview=B name=정2 path=SHEET_SSOT_FALLBACK source=assets/s1/sprites_raw_alpha/jeong2_F.png tileScale=48 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+[UNIT_RENDER_FAIL] qaStage=STG2 preview=B name=정2 reason=assets_not_ready expected=SHEET_SSOT key=jeong2_F
+[UNIT_RENDER] qaStage=STG2 preview=B name=정2 path=SHEET_SSOT_FALLBACK source=assets/s1/sprites_raw_alpha_48/jeong2_F.png tileScale=48 sourcePx=48 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=- reason=assets_not_ready
+[UNIT_RENDER] qaStage=STG2 preview=B name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=48 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
