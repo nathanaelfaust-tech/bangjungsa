@@ -776,8 +776,8 @@
         <div class="btnRow">
           <select id="stageSelect" class="btnSmall"></select>
           <button id="campBtn" class="btnSmall" style="display:none;" type="button">캠프</button>
-          <button id="previewABtn" class="btnSmall" style="display:none;" type="button">PREVIEW B48</button>
-          <button id="previewBBtn" class="btnSmall" style="display:none;" type="button">PREVIEW B56</button>
+          <button id="previewABtn" class="btnSmall" style="display:none;" type="button">PREVIEW B56_BASELINE</button>
+          <button id="previewBBtn" class="btnSmall" style="display:none;" type="button">PREVIEW B64</button>
           <button id="devToggleBtn" class="btnSmall" type="button">DEV</button>
           <button id="devMenuBtn" class="btnSmall" style="display:none;" type="button">DEV 메뉴</button>
           <button id="skinToggleBtn" class="btnSmall" type="button">스킨: 레거시</button>
@@ -907,16 +907,30 @@
         const QA_MODE_PARAM = String(URL_Q.get("qa") || "").toLowerCase();
         const PREVIEW_MODE = (() => {
           const raw = String(URL_Q.get("preview") || "").toLowerCase();
+          if (raw === "b56baseline") return "b56baseline";
+          if (raw === "b64") return "b64";
+          if (raw === "bfinal64") return "bfinal64";
           if (raw === "b48") return "b48";
           if (raw === "b56") return "b56";
           if (raw === "bfinal") return "bfinal";
           return "";
         })();
         const PREVIEW_ENABLED = QA_MODE_PARAM === "stg2" && !!PREVIEW_MODE;
-        const PREVIEW_LABEL = PREVIEW_MODE ? PREVIEW_MODE.toUpperCase() : "NONE";
+        function previewModeLabel(mode) {
+          if (mode === "b56baseline" || mode === "b56") return "B56_BASELINE";
+          if (mode === "b64") return "B64";
+          if (mode === "bfinal64") return "BFINAL64";
+          if (mode === "b48") return "B48";
+          if (mode === "bfinal") return "BFINAL";
+          return mode ? mode.toUpperCase() : "NONE";
+        }
+        const PREVIEW_LABEL = previewModeLabel(PREVIEW_MODE);
         const PREVIEW_B_SHEET_SOURCE = "assets/s1/sprites_ssot/jeong2_ssot_{F|B|L|R}.png";
-        const JEONG2_WINNER_SCALE = 56;
+        const JEONG2_WINNER_SCALE = 64;
         const BOARD_TILE_SCALE = (() => {
+          if (PREVIEW_ENABLED && PREVIEW_MODE === "b56baseline") return 56;
+          if (PREVIEW_ENABLED && PREVIEW_MODE === "b64") return 64;
+          if (PREVIEW_ENABLED && PREVIEW_MODE === "bfinal64") return JEONG2_WINNER_SCALE;
           if (PREVIEW_ENABLED && PREVIEW_MODE === "b48") return 48;
           if (PREVIEW_ENABLED && PREVIEW_MODE === "b56") return 56;
           if (PREVIEW_ENABLED && PREVIEW_MODE === "bfinal") return JEONG2_WINNER_SCALE;
@@ -1839,12 +1853,14 @@
             || first.includes("BOARD_SCALE_FINALIST")
             || first.includes("BOARD_SCALE_WINNER")
             || first.includes("BOARD_SCALE_BASELINE")
+            || first.includes("BOARD_SCALE_REJECT")
             || first.includes("BOARD_SCALE_TRIAL")
             || first.includes("QA_ENTRY_SHORTCUT")
             || first.includes("UNIT_RENDER")
             || first.includes("UNIT_RENDER_FAIL")
             || first.includes("UNIT_FRAME")
             || first.includes("UNIT_SCALE_TRIAL")
+            || first.includes("UNIT_LOAD_STATE")
             || first.includes("UNIT_FOOTPRINT")
             || first.includes("UNIT_ARTIFACT_TRACE")
             || first.includes("UNIT_ARTIFACT_FIX");
@@ -1984,18 +2000,18 @@
           const showPreviewBtns = QA_MODE === "stg2";
           if (previewABtn) {
             previewABtn.style.display = showPreviewBtns ? "inline-block" : "none";
-            previewABtn.disabled = PREVIEW_MODE === "b48";
+            previewABtn.disabled = PREVIEW_MODE === "b56baseline";
           }
           if (previewBBtn) {
             previewBBtn.style.display = showPreviewBtns ? "inline-block" : "none";
-            previewBBtn.disabled = PREVIEW_MODE === "b56";
+            previewBBtn.disabled = PREVIEW_MODE === "b64";
           }
           if (devToggleBtn) devToggleBtn.style.display = "inline-block";
           if (devMenuBtn) devMenuBtn.style.display = devMode ? "inline-block" : "none";
         }
 
         function switchPreviewMode(mode) {
-          if (!["b48", "b56", "bfinal"].includes(mode)) return;
+          if (!["b56baseline", "b64", "bfinal64", "b48", "b56", "bfinal"].includes(mode)) return;
           const q = new URLSearchParams(location.search);
           q.set("qa", "stg2");
           q.set("preview", mode);
@@ -2005,12 +2021,18 @@
 
         function logPreviewModeLine() {
           if (!(QA_MODE === "stg2" && PREVIEW_ENABLED)) return;
-          if (PREVIEW_MODE === "b48") {
+          if (PREVIEW_MODE === "b56baseline" || PREVIEW_MODE === "b56") {
+            console.log("[BOARD_SCALE_BASELINE] qaStage=STG2 preview=B56_BASELINE boardScale=56 spriteMode=SHEET_SSOT onscreenLog=off");
+            console.log(`[PREVIEW_ASSET] qaStage=STG2 preview=B56_BASELINE sheetSource=${PREVIEW_B_SHEET_SOURCE}`);
+          } else if (PREVIEW_MODE === "b64") {
+            console.log("[BOARD_SCALE_FINALIST] qaStage=STG2 preview=B64 boardScale=64 spriteMode=SHEET_SSOT onscreenLog=off");
+            console.log(`[PREVIEW_ASSET] qaStage=STG2 preview=B64 sheetSource=${PREVIEW_B_SHEET_SOURCE}`);
+          } else if (PREVIEW_MODE === "bfinal64") {
+            console.log(`[BOARD_SCALE_WINNER] qaStage=STG2 preview=BFINAL64 boardScale=${JEONG2_WINNER_SCALE} spriteMode=SHEET_SSOT onscreenLog=off`);
+            console.log(`[PREVIEW_ASSET] qaStage=STG2 preview=BFINAL64 sheetSource=${PREVIEW_B_SHEET_SOURCE}`);
+          } else if (PREVIEW_MODE === "b48") {
             console.log("[BOARD_SCALE_FINALIST] qaStage=STG2 preview=B48 boardScale=48 spriteMode=SHEET_SSOT onscreenLog=off");
             console.log(`[PREVIEW_ASSET] qaStage=STG2 preview=B48 sheetSource=${PREVIEW_B_SHEET_SOURCE}`);
-          } else if (PREVIEW_MODE === "b56") {
-            console.log("[BOARD_SCALE_FINALIST] qaStage=STG2 preview=B56 boardScale=56 spriteMode=SHEET_SSOT onscreenLog=off");
-            console.log(`[PREVIEW_ASSET] qaStage=STG2 preview=B56 sheetSource=${PREVIEW_B_SHEET_SOURCE}`);
           } else if (PREVIEW_MODE === "bfinal") {
             console.log(`[BOARD_SCALE_WINNER] qaStage=STG2 preview=BFINAL boardScale=${JEONG2_WINNER_SCALE} spriteMode=SHEET_SSOT onscreenLog=off`);
             console.log(`[PREVIEW_ASSET] qaStage=STG2 preview=BFINAL sheetSource=${PREVIEW_B_SHEET_SOURCE}`);
@@ -3098,8 +3120,8 @@
         if (meonjiOverlay) meonjiOverlay.addEventListener("click", (e) => {
           if (e.target === meonjiOverlay) closeMeonjiModal();
         });
-        if (previewABtn) previewABtn.addEventListener("click", () => switchPreviewMode("b48"));
-        if (previewBBtn) previewBBtn.addEventListener("click", () => switchPreviewMode("b56"));
+        if (previewABtn) previewABtn.addEventListener("click", () => switchPreviewMode("b56baseline"));
+        if (previewBBtn) previewBBtn.addEventListener("click", () => switchPreviewMode("b64"));
         if (DEV_BUILD && devToggleBtn) devToggleBtn.addEventListener("click", () => setDevMode(!devMode));
         if (DEV_BUILD && devMenuBtn) devMenuBtn.addEventListener("click", () => openDevMenu());
         skinToggleBtn.addEventListener("click", () => {
@@ -3653,7 +3675,9 @@
           const cacheKey = `${face || "F"}::${img?.src || "inline"}::${srcW}x${srcH}`;
           if (jeong2SuppressedFrameCache.has(cacheKey)) return jeong2SuppressedFrameCache.get(cacheKey);
           // The repeating dotted columns observed in screenshots are not debug guides; they are tiny detached alpha islands.
-          console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${isStg2Stage() ? "STG2" : currentCampaignStageId} name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS`);
+          const qaStage = isStg2Stage() ? "STG2" : currentCampaignStageId;
+          const previewTok = (PREVIEW_ENABLED && PREVIEW_LABEL !== "NONE") ? ` preview=${PREVIEW_LABEL}` : "";
+          console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${qaStage}${previewTok} name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS`);
           const c = document.createElement("canvas");
           c.width = srcW;
           c.height = srcH;
@@ -3763,7 +3787,7 @@
             }
           }
           cctx.putImageData(image, 0, 0);
-          console.log(`[UNIT_ARTIFACT_FIX] qaStage=${isStg2Stage() ? "STG2" : currentCampaignStageId} name=정2 action=FRINGE_SUPPRESS result=${removed > 0 ? "clean" : "no_change"} removedPx=${removed}`);
+          console.log(`[UNIT_ARTIFACT_FIX] qaStage=${qaStage}${previewTok} name=정2 action=FRINGE_SUPPRESS result=${removed > 0 ? "clean" : "no_change"} removedPx=${removed}`);
           jeong2SuppressedFrameCache.set(cacheKey, c);
           return c;
         }
@@ -3852,7 +3876,7 @@
             const key = `${spriteId}_${face}`;
             const isJeong2Render = isJung2Unit(u);
             const previewJeong2 = PREVIEW_ENABLED && isJeong2Render;
-            const previewFinalist = previewJeong2 && (PREVIEW_MODE === "b48" || PREVIEW_MODE === "b56" || PREVIEW_MODE === "bfinal");
+            const previewFinalist = previewJeong2 && (PREVIEW_MODE === "b56baseline" || PREVIEW_MODE === "b64" || PREVIEW_MODE === "bfinal64" || PREVIEW_MODE === "b48" || PREVIEW_MODE === "b56" || PREVIEW_MODE === "bfinal");
             const prefer48 = stg2AllyVisual || MAP_SPRITE_RES === 48;
             const ssotBank = ASSETS.sprites_ssot || {};
             let spriteImg = null;
@@ -3960,6 +3984,16 @@
                   );
                 }
               }
+              if (previewJeong2 && isJeong2Render) {
+                const loadStatus = !ASSETS.ready
+                  ? "ASSETS_NOT_READY"
+                  : (renderPath === "SHEET_SSOT" ? "READY" : "FALLBACK_VISIBLE");
+                const loadSig = `${qaStage}|${PREVIEW_LABEL}|${loadStatus}|${renderPath}|${face}`;
+                if (u.__unitLoadStateSig !== loadSig) {
+                  u.__unitLoadStateSig = loadSig;
+                  console.log(`[UNIT_LOAD_STATE] qaStage=${qaStage} preview=${PREVIEW_LABEL} name=${unitRenderName(u)} status=${loadStatus}`);
+                }
+              }
               if (isJeong2Render && renderPath === "HIGHER_SOURCE") {
                 jeong2Frame = getJeong2FrameInfo(face, spriteImg);
                 const frameSig = `${face}|${jeong2Frame.cropW}x${jeong2Frame.cropH}|${jeong2Frame.fillBefore.toFixed(2)}|${jeong2Frame.fillAfter.toFixed(2)}`;
@@ -3990,7 +4024,7 @@
                 reason: renderReason
               });
               if (previewFinalist && isJeong2Render && renderPath === "SHEET_SSOT") {
-                const finalistLabel = PREVIEW_MODE === "b48" ? "B48" : (PREVIEW_MODE === "b56" ? "B56" : "BFINAL");
+                const finalistLabel = PREVIEW_LABEL;
                 const rSig = `${finalistLabel}|${sourcePx}|${drawBoxPx}`;
                 if (u.__finalistRenderSig !== rSig) {
                   u.__finalistRenderSig = rSig;
@@ -4056,7 +4090,7 @@
                 const fpSig = `${qaStage}|${drawBoxInternal}|${visW.toFixed(2)}|${visH.toFixed(2)}|${overhangLeft}|${overhangRight}|${face}`;
                 if (u.__footprintSig !== fpSig) {
                   u.__footprintSig = fpSig;
-                  const fpPreview = previewFinalist ? (PREVIEW_MODE === "b48" ? "B48" : (PREVIEW_MODE === "b56" ? "B56" : "BFINAL")) : "";
+                  const fpPreview = previewFinalist ? PREVIEW_LABEL : "";
                   const fpPreviewTok = fpPreview ? ` preview=${fpPreview}` : "";
                   console.log(
                     `[UNIT_FOOTPRINT] qaStage=${qaStage}${fpPreviewTok} name=${unitRenderName(u)} tileScale=${BOARD_TILE_SCALE} sourcePx=${sourcePx} drawBoxPx=${drawBoxInternal} displayPx=${drawBoxInternal} anchor=tile_bottom_center ` +
