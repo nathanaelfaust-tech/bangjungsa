@@ -1,0 +1,116 @@
+10191:[BOARD_SCALE_FORMALIZED] qaStage=STG2 name=정2 boardScale=64 spriteMode=SHEET_SSOT
+10193:[VERIFY_PUSH_BUG] no_mutation_detected
+10195:[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=64 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+10196:[UNIT_LOAD_STATE] qaStage=STG2 preview=FORMAL64 name=정2 status=PRELOAD_WAIT
+10198:[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=64 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+10200:[BOARD_SCALE_FORMALIZED] qaStage=STG2 name=정2 boardScale=64 spriteMode=SHEET_SSOT
+10202:[VERIFY_PUSH_BUG] no_mutation_detected
+10204:[UNIT_LOAD_STATE] qaStage=STG2 preview=FORMAL64 name=정2 status=READY
+10206:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=F found=yes source=assets/s1/sprites_ssot/jeong2_ssot_F.png
+10207:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=F source=assets/s1/sprites_ssot/jeong2_ssot_F.png
+10208:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=B found=yes source=assets/s1/sprites_ssot/jeong2_ssot_B.png
+10209:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=B source=assets/s1/sprites_ssot/jeong2_ssot_B.png
+10210:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=L found=no source=-
+10211:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=L status=MISSING_SLOT
+10212:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=R found=no source=-
+10213:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=R status=MISSING_SLOT
+10214:[JEONG2_ASSET_PIPELINE] qaStage=STG2 status=STATIC_4DIR_SCHEMA_READY
+10215:[JEONG2_ASSET_PIPELINE] qaStage=STG2 status=STATIC_4DIR_WIRED availableDirs=F,B
+10216:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=B step=LOAD rawSize=64x64
+10217:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=B stage=RAW hash=e62310ec
+10218:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=B step=ALPHA_SANITIZE removedPx=80
+10219:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=B step=TRIM bbox=11,7-51,63
+10220:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=B step=ANCHOR foot=63
+10221:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=B step=BASELINE_BBOX bbox=12,7-52,63
+10222:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=B step=LOCKED_CORE corePx=1305
+10223:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=B step=FINISH_CLEAN removedPx=1
+10224:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=B step=BBOX_DELTA delta=L0,T0,R0,B0,guard=pass
+10225:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=B step=VISIBLE_MASS_DELTA delta=-1,guard=pass
+10226:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=B visibleCharacterDamage=no
+10227:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=B step=REFRAME outSize=64x64
+10228:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=B stage=PREV_NORMALIZED hash=26f86c63
+10229:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=B stage=FINAL_NORMALIZED hash=0d8798c5
+10230:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=B prevEqualsFinal=no
+10231:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=B stage=NORMALIZED hash=0d8798c5
+10232:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=B rawEqualsNormalized=no
+10233:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=LOAD rawSize=64x64
+10234:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F stage=RAW hash=39114cef
+10235:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=ALPHA_SANITIZE removedPx=104
+10236:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=TRIM bbox=14,7-56,63
+10237:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=ANCHOR foot=63
+10238:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F step=BASELINE_BBOX bbox=11,7-53,63
+10239:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F step=LOCKED_CORE corePx=1315
+10240:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F step=FINISH_CLEAN removedPx=1
+10241:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F step=BBOX_DELTA delta=L0,T0,R0,B0,guard=pass
+10242:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F step=VISIBLE_MASS_DELTA delta=-1,guard=pass
+10243:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=F visibleCharacterDamage=no
+10244:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=F step=REFRAME outSize=64x64
+10245:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F stage=PREV_NORMALIZED hash=830b35b0
+10246:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F stage=FINAL_NORMALIZED hash=334d63ec
+10247:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F prevEqualsFinal=no
+10248:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F stage=NORMALIZED hash=334d63ec
+10249:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F rawEqualsNormalized=no
+10250:[JEONG2_PARITY_QA] qaStage=STG2 metric=size result=pass note=widthRange:41-43,heightRange:57-57
+10251:[JEONG2_PARITY_QA] qaStage=STG2 metric=foot_anchor result=pass note=footRange:63-63
+10252:[JEONG2_PARITY_QA] qaStage=STG2 metric=readability result=pass note=minAlphaCount:1304
+10253:[JEONG2_PARITY_QA] qaStage=STG2 metric=artifact_cleanliness result=pass note=finish_clean_applied
+10254:[UNIT_RENDER] qaStage=STG2 preview=FORMAL64 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+10255:[UNIT_RENDER] qaStage=STG2 preview=FORMAL64 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center
+10256:[UNIT_FOOTPRINT] qaStage=STG2 preview=FORMAL64 name=정2 tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center visualWidthTiles=1.34 visualHeightTiles=1.78 overhangLeftPx=5 overhangRightPx=6
+10257:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F stage=DISPLAYED hash=334d63ec
+10258:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=F displayedMatchesNormalized=yes
+10259:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=F found=yes source=assets/s1/sprites_ssot/jeong2_ssot_F.png
+10260:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=F source=assets/s1/sprites_ssot/jeong2_ssot_F.png
+10261:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=B found=yes source=assets/s1/sprites_ssot/jeong2_ssot_B.png
+10262:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=B source=assets/s1/sprites_ssot/jeong2_ssot_B.png
+10263:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=L found=yes source=assets/s1/sprites_ssot/jeong2_ssot_L.png
+10264:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=L source=assets/s1/sprites_ssot/jeong2_ssot_L.png
+10265:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=R found=no source=-
+10266:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=R status=MISSING_SLOT
+10267:[JEONG2_ASSET_PIPELINE] qaStage=STG2 status=STATIC_4DIR_SCHEMA_READY
+10268:[JEONG2_ASSET_PIPELINE] qaStage=STG2 status=STATIC_4DIR_WIRED availableDirs=F,B,L
+10269:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=L step=LOAD rawSize=64x64
+10270:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=L stage=RAW hash=ce8ba5f7
+10271:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=L step=ALPHA_SANITIZE removedPx=101
+10272:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=L step=TRIM bbox=13,7-46,63
+10273:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=L step=ANCHOR foot=63
+10274:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=L step=BASELINE_BBOX bbox=15,7-48,63
+10275:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=L step=LOCKED_CORE corePx=1004
+10276:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=L step=FINISH_CLEAN removedPx=1
+10277:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=L step=BBOX_DELTA delta=L0,T0,R0,B0,guard=pass
+10278:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=L step=VISIBLE_MASS_DELTA delta=-1,guard=pass
+10279:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=L visibleCharacterDamage=no
+10280:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=L step=REFRAME outSize=64x64
+10281:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=L stage=PREV_NORMALIZED hash=d8fe05d6
+10282:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=L stage=FINAL_NORMALIZED hash=853d0371
+10283:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=L prevEqualsFinal=no
+10284:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=L stage=NORMALIZED hash=853d0371
+10285:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=L rawEqualsNormalized=no
+10286:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=F found=yes source=assets/s1/sprites_ssot/jeong2_ssot_F.png
+10287:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=F source=assets/s1/sprites_ssot/jeong2_ssot_F.png
+10288:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=B found=yes source=assets/s1/sprites_ssot/jeong2_ssot_B.png
+10289:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=B source=assets/s1/sprites_ssot/jeong2_ssot_B.png
+10290:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=L found=yes source=assets/s1/sprites_ssot/jeong2_ssot_L.png
+10291:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=L source=assets/s1/sprites_ssot/jeong2_ssot_L.png
+10292:[JEONG2_ASSET_INVENTORY] qaStage=STG2 dir=R found=yes source=assets/s1/sprites_ssot/jeong2_ssot_R.png
+10293:[JEONG2_ASSET_SSOT] qaStage=STG2 dir=R source=assets/s1/sprites_ssot/jeong2_ssot_R.png
+10294:[JEONG2_ASSET_PIPELINE] qaStage=STG2 status=STATIC_4DIR_SCHEMA_READY
+10295:[JEONG2_ASSET_PIPELINE] qaStage=STG2 status=STATIC_4DIR_WIRED availableDirs=F,B,L,R
+10296:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=R step=LOAD rawSize=64x64
+10297:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=R stage=RAW hash=ec98b76e
+10298:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=R step=ALPHA_SANITIZE removedPx=53
+10299:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=R step=TRIM bbox=24,7-49,63
+10300:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=R step=ANCHOR foot=63
+10301:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=R step=BASELINE_BBOX bbox=19,7-44,63
+10302:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=R step=LOCKED_CORE corePx=940
+10303:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=R step=FINISH_CLEAN removedPx=1
+10304:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=R step=BBOX_DELTA delta=L0,T0,R0,B0,guard=pass
+10305:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=R step=VISIBLE_MASS_DELTA delta=-1,guard=pass
+10306:[JEONG2_FINISH_TRACE] qaStage=STG2 dir=R visibleCharacterDamage=no
+10307:[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=R step=REFRAME outSize=64x64
+10308:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=R stage=PREV_NORMALIZED hash=e206b00a
+10309:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=R stage=FINAL_NORMALIZED hash=17ee0cb2
+10310:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=R prevEqualsFinal=no
+10311:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=R stage=NORMALIZED hash=17ee0cb2
+10312:[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 dir=R rawEqualsNormalized=no
+10313:[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=64 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
