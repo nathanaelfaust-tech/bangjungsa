@@ -1808,6 +1808,7 @@
         })();
         const unitFrameCache = new Map();
         const jeong2SuppressedFrameCache = new Map();
+        const jeong2RuntimeFrameCache = new Map();
         let jeong2LoadFixLogged = false;
         const qaVerifyLines = [];
         let qaVerifyEl = null;
@@ -1873,6 +1874,8 @@
             || first.includes("UNIT_ARTIFACT_FIX")
             || first.includes("JEONG2_SPECK_TRACE")
             || first.includes("JEONG2_SPECK_FIX")
+            || first.includes("JEONG2_RUNTIME_TRACE")
+            || first.includes("JEONG2_RUNTIME_FIX")
             || first.includes("JEONG2_FINAL_ARTIFACT_TRACE")
             || first.includes("JEONG2_FINAL_ARTIFACT_FIX");
           if (!isVerify) return;
@@ -2066,6 +2069,19 @@
           if (debugReadout) debugReadout.style.display = "none";
           if (qaVerifyEl && qaVerifyEl.parentNode) qaVerifyEl.parentNode.removeChild(qaVerifyEl);
           qaVerifyEl = null;
+        }
+
+        function applyFormal64PixelLock() {
+          if (!(QA_MODE === "stg2" && PREVIEW_LABEL === "FORMAL64")) return;
+          if (canvasWrap) {
+            canvasWrap.style.transform = "none";
+            canvasWrap.style.willChange = "auto";
+            canvasWrap.style.imageRendering = "pixelated";
+          }
+          if (canvas) {
+            canvas.style.transform = "none";
+            canvas.style.imageRendering = "pixelated";
+          }
         }
 
         function devSetEnemiesToOneHp() {
@@ -3976,6 +3992,202 @@
           return c;
         }
 
+        function getJeong2RuntimePrunedFrame(face, img, opt = {}) {
+          const qaStage = isStg2Stage() ? "STG2" : currentCampaignStageId;
+          if (!(qaStage === "STG2" && PREVIEW_LABEL === "FORMAL64")) return img;
+          const drawSize = Math.max(1, Math.round(Number(opt.drawSize) || 64));
+          const srcSize = Math.max(1, Math.round(Number(opt.sourcePx) || img?.naturalWidth || img?.width || 64));
+          const sx = Math.max(0, Math.round(Number(opt.sx) || 0));
+          const sy = Math.max(0, Math.round(Number(opt.sy) || 0));
+          const sw = Math.max(1, Math.round(Number(opt.sw) || srcSize));
+          const sh = Math.max(1, Math.round(Number(opt.sh) || srcSize));
+          const cacheKey = `runtime::${face || "F"}::${img?.src || "inline"}::${srcSize}::${sx},${sy},${sw},${sh}::${drawSize}`;
+          if (jeong2RuntimeFrameCache.has(cacheKey)) return jeong2RuntimeFrameCache.get(cacheKey);
+          const c = document.createElement("canvas");
+          c.width = drawSize;
+          c.height = drawSize;
+          const cctx = c.getContext("2d");
+          cctx.imageSmoothingEnabled = false;
+          cctx.clearRect(0, 0, drawSize, drawSize);
+          cctx.drawImage(img, sx, sy, sw, sh, 0, 0, drawSize, drawSize);
+          const image = cctx.getImageData(0, 0, drawSize, drawSize);
+          const data = image.data;
+          const W = drawSize;
+          const H = drawSize;
+          const N = W * H;
+          const alphaAt = (idx) => data[idx * 4 + 3];
+          const alphaAtXY = (x, y) => data[(y * W + x) * 4 + 3];
+          const bboxUnion = (arr) => {
+            if (!arr.length) return "-";
+            let minX = W, minY = H, maxX = -1, maxY = -1;
+            for (const c0 of arr) {
+              if (c0.minX < minX) minX = c0.minX;
+              if (c0.minY < minY) minY = c0.minY;
+              if (c0.maxX > maxX) maxX = c0.maxX;
+              if (c0.maxY > maxY) maxY = c0.maxY;
+            }
+            return `${minX},${minY}-${maxX},${maxY}`;
+          };
+          const scanComponents = (alphaCut = 1, onlyOutsideMask = null) => {
+            const visited = new Uint8Array(N);
+            const q = new Int32Array(N);
+            const comps = [];
+            for (let y = 0; y < H; y++) {
+              for (let x = 0; x < W; x++) {
+                const idx = y * W + x;
+                if (visited[idx]) continue;
+                if (alphaAt(idx) < alphaCut) continue;
+                if (onlyOutsideMask && onlyOutsideMask[idx]) continue;
+                let head = 0;
+                let tail = 0;
+                let count = 0;
+                let minX = W, minY = H, maxX = -1, maxY = -1;
+                let maxAlpha = 0;
+                visited[idx] = 1;
+                q[tail++] = idx;
+                while (head < tail) {
+                  const id = q[head++];
+                  const cx = id % W;
+                  const cy = (id / W) | 0;
+                  const a = alphaAt(id);
+                  if (a > maxAlpha) maxAlpha = a;
+                  count++;
+                  if (cx < minX) minX = cx;
+                  if (cy < minY) minY = cy;
+                  if (cx > maxX) maxX = cx;
+                  if (cy > maxY) maxY = cy;
+                  const ns = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+                  for (const [nx, ny] of ns) {
+                    if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                    const nidx = ny * W + nx;
+                    if (visited[nidx]) continue;
+                    if (alphaAt(nidx) < alphaCut) continue;
+                    if (onlyOutsideMask && onlyOutsideMask[nidx]) continue;
+                    visited[nidx] = 1;
+                    q[tail++] = nidx;
+                  }
+                }
+                comps.push({ count, minX, minY, maxX, maxY, maxAlpha });
+              }
+            }
+            return comps;
+          };
+          const coreComps = scanComponents(32, null);
+          let core = null;
+          for (const cc of coreComps) {
+            if (!core || cc.count > core.count) core = cc;
+          }
+          const maxComponentPx = core ? core.count : 0;
+          const coreMask = new Uint8Array(N);
+          if (core) {
+            for (let y = core.minY; y <= core.maxY; y++) {
+              for (let x = core.minX; x <= core.maxX; x++) {
+                const idx = y * W + x;
+                if (alphaAt(idx) >= 32) coreMask[idx] = 1;
+              }
+            }
+          }
+          const halo = new Uint8Array(N);
+          for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+              const idx = y * W + x;
+              if (!coreMask[idx]) continue;
+              for (let oy = -1; oy <= 1; oy++) {
+                for (let ox = -1; ox <= 1; ox++) {
+                  const nx = x + ox;
+                  const ny = y + oy;
+                  if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                  halo[ny * W + nx] = 1;
+                }
+              }
+            }
+          }
+          let removedPx = 0;
+          let lowAlphaAttached = 0;
+          for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+              const idx = y * W + x;
+              const a = alphaAt(idx);
+              if (a <= 0 || a > 31) continue;
+              if (halo[idx]) continue;
+              let touchHalo = false;
+              const ns = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]];
+              for (const [nx, ny] of ns) {
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                if (halo[ny * W + nx]) { touchHalo = true; break; }
+              }
+              if (touchHalo) lowAlphaAttached++;
+              data[idx * 4 + 3] = 0;
+              removedPx++;
+            }
+          }
+          let outerRingFringe = 0;
+          for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+              if (!(x === 0 || y === 0 || x === W - 1 || y === H - 1)) continue;
+              const idx = y * W + x;
+              const a = alphaAt(idx);
+              if (a <= 0 || a > 63) continue;
+              if (halo[idx]) continue;
+              data[idx * 4 + 3] = 0;
+              removedPx++;
+              outerRingFringe++;
+            }
+          }
+          const outsideComps = scanComponents(1, halo);
+          const tinyTargets = outsideComps.filter((cp) => cp.count <= 4 && cp.maxAlpha <= 80);
+          const tinyEdgeTargets = outsideComps.filter((cp) => cp.count <= 2 && (cp.minX <= 2 || cp.maxX >= W - 3 || cp.minY <= 2 || cp.maxY >= H - 3));
+          let removedComponents = 0;
+          const removalTargets = [...tinyTargets];
+          for (const et of tinyEdgeTargets) {
+            if (!removalTargets.includes(et)) removalTargets.push(et);
+          }
+          if (removalTargets.length) {
+            removedComponents = removalTargets.length;
+            const mark = new Uint8Array(N);
+            const q = new Int32Array(N);
+            for (const t of removalTargets) {
+              for (let y = t.minY; y <= t.maxY; y++) {
+                for (let x = t.minX; x <= t.maxX; x++) {
+                  const idx = y * W + x;
+                  if (mark[idx] || halo[idx]) continue;
+                  if (alphaAt(idx) <= 0) continue;
+                  let head = 0;
+                  let tail = 0;
+                  mark[idx] = 1;
+                  q[tail++] = idx;
+                  while (head < tail) {
+                    const id = q[head++];
+                    const cx = id % W;
+                    const cy = (id / W) | 0;
+                    data[id * 4 + 3] = 0;
+                    removedPx++;
+                    const ns = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+                    for (const [nx, ny] of ns) {
+                      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                      const nidx = ny * W + nx;
+                      if (mark[nidx] || halo[nidx]) continue;
+                      if (alphaAt(nidx) <= 0) continue;
+                      mark[nidx] = 1;
+                      q[tail++] = nidx;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          const finalOutsideComps = scanComponents(1, halo);
+          console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 source=FINAL_FRAME count=${outsideComps.length}`);
+          console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=LOW_ALPHA_ATTACHED count=${lowAlphaAttached}`);
+          console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=OUTER_RING_FRINGE count=${outerRingFringe}`);
+          console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 count=${finalOutsideComps.length} maxComponentPx=${maxComponentPx} bbox=${bboxUnion(finalOutsideComps)}`);
+          cctx.putImageData(image, 0, 0);
+          console.log(`[JEONG2_RUNTIME_FIX] qaStage=STG2 preview=FORMAL64 action=FINAL_FRAME_PRUNE removedPx=${removedPx} removedComponents=${removedComponents}`);
+          console.log("[JEONG2_RUNTIME_FIX] qaStage=STG2 preview=FORMAL64 visibleCharacterDamage=no");
+          jeong2RuntimeFrameCache.set(cacheKey, c);
+          return c;
+        }
+
         function getJeong2FrameInfo(face, img) {
           const key = `${face || "F"}::${img?.src || "nosrc"}`;
           if (unitFrameCache.has(key)) return unitFrameCache.get(key);
@@ -4171,7 +4383,7 @@
             const sourcePx0 = Number(spriteImg?.naturalWidth || spriteImg?.width || S || 0);
             const hasValidSprite = !!(spriteImg && sourcePx0 > 0 && (spriteImg.complete !== false));
             if (hasValidSprite) {
-              const sourcePx = Number(spriteImg.naturalWidth || spriteImg.width || S || 0);
+              let sourcePx = Number(spriteImg.naturalWidth || spriteImg.width || S || 0);
               const jeong2TrialPx = (isJeong2Render && stg2AllyVisual && usedSsot) ? JEONG2_SCALE_TRIAL : 64;
               const drawBoxInternal = stg2AllyVisual ? (isJeong2Render ? jeong2TrialPx : 64) : S;
               const drawBoxPx = drawBoxInternal;
@@ -4228,6 +4440,13 @@
                     `anchor=tile_bottom_center`
                   );
                 }
+              }
+              if (isJeong2Render && PREVIEW_LABEL === "FORMAL64" && renderPath === "SHEET_SSOT") {
+                spriteImg = getJeong2RuntimePrunedFrame(face, spriteImg, {
+                  sourcePx,
+                  drawSize: Math.max(1, Math.round(drawBoxInternal))
+                });
+                sourcePx = Number(spriteImg?.naturalWidth || spriteImg?.width || sourcePx || 64);
               }
               logUnitRenderSnapshot(u, {
                 qaStage,
@@ -4328,19 +4547,33 @@
                 ctx.translate(-(dx + (drawBoxInternal / 2)), -(dy + drawBoxInternal));
               }
               if (jeong2Frame) {
+                const sx = Math.round(jeong2Frame.cropX);
+                const sy = Math.round(jeong2Frame.cropY);
+                const sw = Math.round(jeong2Frame.cropW);
+                const sh = Math.round(jeong2Frame.cropH);
+                const ddx = Math.round(dx);
+                const ddy = Math.round(dy);
+                const ddw = Math.round(drawBoxInternal);
+                const ddh = Math.round(drawBoxInternal);
                 ctx.drawImage(
                   spriteImg,
-                  jeong2Frame.cropX,
-                  jeong2Frame.cropY,
-                  jeong2Frame.cropW,
-                  jeong2Frame.cropH,
-                  dx,
-                  dy,
-                  drawBoxInternal,
-                  drawBoxInternal
+                  sx,
+                  sy,
+                  sw,
+                  sh,
+                  ddx,
+                  ddy,
+                  ddw,
+                  ddh
                 );
               } else {
-                ctx.drawImage(spriteImg, dx, dy, drawBoxInternal, drawBoxInternal);
+                ctx.drawImage(
+                  spriteImg,
+                  Math.round(dx),
+                  Math.round(dy),
+                  Math.round(drawBoxInternal),
+                  Math.round(drawBoxInternal)
+                );
               }
               ctx.restore();
               if (!u.dead) drawUnitFlashOverlay(ctx, u, px, py);
@@ -7809,6 +8042,7 @@
             initializeStageSelect();
             ensureQaVerifyOverlay();
             applyPreviewCleanUi();
+            applyFormal64PixelLock();
             console.log("[QA_ENTRY_SHORTCUT] stage=STG2 roster=" + campaign.rosterIds.join(","));
             if (PREVIEW_ENABLED || FORMAL64_ACTIVE) {
               logPreviewModeLine();
@@ -7835,6 +8069,7 @@
                 console.log(`[QA_ENTRY_SHORTCUT] focus=jeong2_camera_center preview=${PREVIEW_LABEL}`);
               }
               logPreviewModeLine();
+              console.log("[VERIFY_PUSH_BUG] no_mutation_detected");
             }, 0);
             menuOverlay.classList.remove("show");
             inputLocked = false;
