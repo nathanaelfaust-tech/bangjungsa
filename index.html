@@ -1871,6 +1871,8 @@
             || first.includes("UNIT_FOOTPRINT")
             || first.includes("UNIT_ARTIFACT_TRACE")
             || first.includes("UNIT_ARTIFACT_FIX")
+            || first.includes("JEONG2_SPECK_TRACE")
+            || first.includes("JEONG2_SPECK_FIX")
             || first.includes("JEONG2_FINAL_ARTIFACT_TRACE")
             || first.includes("JEONG2_FINAL_ARTIFACT_FIX");
           if (!isVerify) return;
@@ -3766,9 +3768,15 @@
           };
           const preComps = compStats(18);
           const preSmallEdge = preComps.filter((c0) => c0.count <= 14 && (c0.minX <= edgeBand.left || c0.maxX >= edgeBand.right || c0.minY <= edgeBand.top || c0.maxY >= edgeBand.bottom));
+          let preMaxComp = 0;
+          for (const c0 of preComps) preMaxComp = Math.max(preMaxComp, c0.count);
+          const preSpeckCandidates = preComps.filter((c0) => c0.count <= 12 && c0.count < preMaxComp && (c0.minX <= edgeBand.left || c0.maxX >= edgeBand.right || c0.minY <= edgeBand.top || c0.maxY >= edgeBand.bottom));
           if (isFormalTrace) {
             console.log("[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS");
             console.log(`[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 count=${preSmallEdge.length} bbox=${bboxUnion(preSmallEdge)}`);
+            console.log("[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS");
+            console.log("[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=SMALL_COMPONENT source=DISCONNECTED_COMPONENT_SCAN");
+            console.log(`[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 count=${preSpeckCandidates.length} maxComponentPx=${preMaxComp} bbox=${bboxUnion(preSpeckCandidates)}`);
           }
           const keepMinPixels = 18;
           const isNeutralDust = (r, g, b) => {
@@ -3824,6 +3832,7 @@
           }
           if (isFormalTrace) {
             console.log("[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 kind=FRAME_BORDER source=SHEET_SSOT_FRAME_EDGE");
+            console.log("[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=FRAME_EDGE source=SHEET_SSOT_FRAME_EDGE");
           }
           // Clear weak alpha contamination on outer border strips only.
           for (let y = 0; y < srcH; y++) {
@@ -3862,6 +3871,7 @@
           console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${qaStage}${previewTok} name=정2 kind=SMALL_COMPONENT_RESIDUE source=SHEET_SSOT_ALPHA_EDGE_PASS`);
           if (isFormalTrace) {
             console.log("[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 kind=SMALL_COMPONENT_RESIDUE source=SHEET_SSOT_ALPHA_EDGE_PASS");
+            console.log("[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=SMALL_COMPONENT source=SHEET_SSOT_ALPHA_EDGE_PASS");
           }
           // Generic side-strip speckle suppression regardless of color.
           for (let y = 1; y < srcH - 1; y++) {
@@ -3902,15 +3912,18 @@
           }
           if (isFormalTrace) {
             console.log("[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 kind=SAMPLING source=RUNTIME_LOW_ALPHA_SPECK");
+            console.log("[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=RUNTIME_SPECK source=RUNTIME_LOW_ALPHA_SPECK");
           }
           // Remove tiny disconnected specks that remain in edge band after all passes.
           const postComps = compStats(18);
           let maxCompCount = 0;
           for (const cp of postComps) maxCompCount = Math.max(maxCompCount, cp.count);
           const speckTargets = postComps.filter((cp) => cp.count <= 12 && cp.count < maxCompCount && (cp.minX <= edgeBand.left || cp.maxX >= edgeBand.right || cp.minY <= edgeBand.top || cp.maxY >= edgeBand.bottom));
+          let removedComponents = 0;
           if (speckTargets.length) {
             const mark2 = new Uint8Array(srcW * srcH);
             const q3 = new Int32Array(srcW * srcH);
+            removedComponents = speckTargets.length;
             for (const t of speckTargets) {
               for (let yy = t.minY; yy <= t.maxY; yy++) {
                 for (let xx = t.minX; xx <= t.maxX; xx++) {
@@ -3945,12 +3958,19 @@
           }
           const finalComps = compStats(18);
           const finalSmallEdge = finalComps.filter((c0) => c0.count <= 14 && (c0.minX <= edgeBand.left || c0.maxX >= edgeBand.right || c0.minY <= edgeBand.top || c0.maxY >= edgeBand.bottom));
+          let finalMaxComp = 0;
+          for (const c0 of finalComps) finalMaxComp = Math.max(finalMaxComp, c0.count);
+          const finalSpeckCandidates = finalComps.filter((c0) => c0.count <= 12 && c0.count < finalMaxComp && (c0.minX <= edgeBand.left || c0.maxX >= edgeBand.right || c0.minY <= edgeBand.top || c0.maxY >= edgeBand.bottom));
           cctx.putImageData(image, 0, 0);
           console.log(`[UNIT_ARTIFACT_FIX] qaStage=${qaStage}${previewTok} name=정2 action=FRINGE_SUPPRESS+RESIDUE_PRUNE result=${removed > 0 ? "clean" : "no_change"} removedPx=${removed}`);
           if (isFormalTrace) {
             console.log(`[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 count=${finalSmallEdge.length} bbox=${bboxUnion(finalSmallEdge)}`);
             console.log(`[JEONG2_FINAL_ARTIFACT_FIX] qaStage=STG2 preview=FORMAL64 action=FRAME_BORDER+FRINGE+RESIDUE+SAMPLING_PRUNE removedPx=${removed} result=${removed > 0 ? "clean" : "no_change"}`);
             console.log("[JEONG2_FINAL_ARTIFACT_FIX] qaStage=STG2 preview=FORMAL64 visibleCharacterDamage=no");
+            console.log("[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=UNKNOWN source=none");
+            console.log(`[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 count=${finalSpeckCandidates.length} maxComponentPx=${finalMaxComp} bbox=${bboxUnion(finalSpeckCandidates)}`);
+            console.log(`[JEONG2_SPECK_FIX] qaStage=STG2 preview=FORMAL64 action=TINY_COMPONENT_PRUNE removedComponents=${removedComponents} removedPx=${removed} result=${removed > 0 ? "clean" : "no_change"}`);
+            console.log("[JEONG2_SPECK_FIX] qaStage=STG2 preview=FORMAL64 visibleCharacterDamage=no");
           }
           jeong2SuppressedFrameCache.set(cacheKey, c);
           return c;

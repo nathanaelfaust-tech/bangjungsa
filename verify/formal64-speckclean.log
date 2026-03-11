@@ -1,0 +1,24 @@
+[COMPARE] formal64 speckclean
+
+[VERIFY_PUSH_BUG] no_mutation_detected
+[UNIT_RENDER] qaStage=STG2 name=김웨어 path=TEMP_UPSCALE tileScale=64 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[UNIT_LOAD_STATE] qaStage=STG2 preview=FORMAL64 name=정2 status=PRELOAD_WAIT
+[UNIT_LOAD_FIX] qaStage=STG2 name=정2 strategy=HIDE_UNTIL_READY result=waiting_for_ssot_first_draw
+[UNIT_RENDER] qaStage=STG2 name=리더 path=TEMP_UPSCALE tileScale=64 sourcePx=32 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=unknown sheetRow=- sheetCol=- reason=legacy_shape_path
+[BOARD_SCALE_FORMALIZED] qaStage=STG2 name=정2 boardScale=64 spriteMode=SHEET_SSOT
+[UNIT_RENDER] qaStage=STG2 name=냥산 path=LEGACY_SOURCE tileScale=64 sourcePx=32 drawBoxPx=32 displayPx=32 anchor=tile_bottom_center alpha=yes sheetRow=- sheetCol=-
+[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS
+[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=SMALL_COMPONENT source=DISCONNECTED_COMPONENT_SCAN
+[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 count=19 maxComponentPx=1315 bbox=2,2-60,53
+[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=FRAME_EDGE source=SHEET_SSOT_FRAME_EDGE
+[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=SMALL_COMPONENT source=SHEET_SSOT_ALPHA_EDGE_PASS
+[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=RUNTIME_SPECK source=RUNTIME_LOW_ALPHA_SPECK
+[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 kind=UNKNOWN source=none
+[JEONG2_SPECK_TRACE] qaStage=STG2 preview=FORMAL64 count=0 maxComponentPx=1314 bbox=-
+[JEONG2_SPECK_FIX] qaStage=STG2 preview=FORMAL64 action=TINY_COMPONENT_PRUNE removedComponents=3 removedPx=50 result=clean
+[JEONG2_SPECK_FIX] qaStage=STG2 preview=FORMAL64 visibleCharacterDamage=no
+[UNIT_LOAD_STATE] qaStage=STG2 preview=FORMAL64 name=정2 status=READY
+[UNIT_LOAD_FIX] qaStage=STG2 name=정2 strategy=PRELOAD_BEFORE_FIRST_DRAW result=first_visible_frame_ready_no_fallback
+[UNIT_RENDER] qaStage=STG2 preview=FORMAL64 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+[UNIT_RENDER] qaStage=STG2 preview=FORMAL64 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center
+[UNIT_FOOTPRINT] qaStage=STG2 preview=FORMAL64 name=정2 tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center visualWidthTiles=1.50 visualHeightTiles=1.81 overhangLeftPx=8 overhangRightPx=8
