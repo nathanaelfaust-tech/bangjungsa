@@ -1874,6 +1874,7 @@
             || first.includes("UNIT_ARTIFACT_FIX")
             || first.includes("JEONG2_SPECK_TRACE")
             || first.includes("JEONG2_SPECK_FIX")
+            || first.includes("JEONG2_RENDER_SOURCE")
             || first.includes("JEONG2_RUNTIME_TRACE")
             || first.includes("JEONG2_RUNTIME_FIX")
             || first.includes("JEONG2_FINAL_ARTIFACT_TRACE")
@@ -4017,6 +4018,17 @@
           const N = W * H;
           const alphaAt = (idx) => data[idx * 4 + 3];
           const alphaAtXY = (x, y) => data[(y * W + x) * 4 + 3];
+          const hashRgba = (arr) => {
+            let h = 2166136261 >>> 0;
+            for (let i = 0; i < arr.length; i++) {
+              h ^= arr[i];
+              h = Math.imul(h, 16777619) >>> 0;
+            }
+            return ("00000000" + h.toString(16)).slice(-8);
+          };
+          const rawHash = hashRgba(data);
+          console.log(`[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 stage=RAW hash=${rawHash}`);
+          console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=FRAME_BOUNDS source=sx:${sx},sy:${sy},sw:${sw},sh:${sh},draw:${drawSize}`);
           const bboxUnion = (arr) => {
             if (!arr.length) return "-";
             let minX = W, minY = H, maxX = -1, maxY = -1;
@@ -4176,13 +4188,82 @@
               }
             }
           }
+          let attachedLeft = 0;
+          let attachedRight = 0;
+          let attachedRunsRemoved = 0;
+          let attachedPxRemoved = 0;
+          const coreLeft = core ? core.minX : Math.floor(W / 3);
+          const coreRight = core ? core.maxX : Math.floor((W * 2) / 3);
+          const markRun = new Uint8Array(N);
+          const pruneRunComponent = (sx0, sy0) => {
+            const q = new Int32Array(N);
+            let head = 0;
+            let tail = 0;
+            const root = sy0 * W + sx0;
+            if (markRun[root]) return 0;
+            markRun[root] = 1;
+            q[tail++] = root;
+            let px = 0;
+            while (head < tail) {
+              const id = q[head++];
+              const cx = id % W;
+              const cy = (id / W) | 0;
+              if (halo[id]) continue;
+              if (alphaAt(id) <= 0 || alphaAt(id) > 63) continue;
+              data[id * 4 + 3] = 0;
+              px++;
+              const ns = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+              for (const [nx, ny] of ns) {
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                const nidx = ny * W + nx;
+                if (markRun[nidx] || halo[nidx]) continue;
+                const na = alphaAt(nidx);
+                if (na <= 0 || na > 63) continue;
+                markRun[nidx] = 1;
+                q[tail++] = nidx;
+              }
+            }
+            return px;
+          };
+          for (let x = 0; x < W; x++) {
+            for (let y = 0; y < H; y++) {
+              const a = alphaAtXY(x, y);
+              if (a <= 0 || a > 63) continue;
+              const idx = y * W + x;
+              if (halo[idx]) continue;
+              const leftBand = x <= Math.max(3, coreLeft - 1);
+              const rightBand = x >= Math.min(W - 4, coreRight + 1);
+              if (!leftBand && !rightBand) continue;
+              let run = 1;
+              let yy = y + 1;
+              while (yy < H && alphaAtXY(x, yy) > 0 && alphaAtXY(x, yy) <= 63) { run++; yy++; }
+              if (run >= 2 && run <= 10) {
+                const removedRunPx = pruneRunComponent(x, y);
+                if (removedRunPx > 0) {
+                  attachedRunsRemoved++;
+                  attachedPxRemoved += removedRunPx;
+                  removedPx += removedRunPx;
+                  if (leftBand) attachedLeft++;
+                  if (rightBand) attachedRight++;
+                }
+              }
+            }
+          }
           const finalOutsideComps = scanComponents(1, halo);
           console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 source=FINAL_FRAME count=${outsideComps.length}`);
           console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=LOW_ALPHA_ATTACHED count=${lowAlphaAttached}`);
           console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=OUTER_RING_FRINGE count=${outerRingFringe}`);
+          console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=ATTACHED_FRINGE_LEFT count=${attachedLeft}`);
+          console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=ATTACHED_FRINGE_RIGHT count=${attachedRight}`);
           console.log(`[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 count=${finalOutsideComps.length} maxComponentPx=${maxComponentPx} bbox=${bboxUnion(finalOutsideComps)}`);
           cctx.putImageData(image, 0, 0);
+          const cleanedImage = cctx.getImageData(0, 0, drawSize, drawSize);
+          const cleanedHash = hashRgba(cleanedImage.data);
+          c.__jeong2RawHash = rawHash;
+          c.__jeong2CleanHash = cleanedHash;
+          console.log(`[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 stage=CLEANED hash=${cleanedHash}`);
           console.log(`[JEONG2_RUNTIME_FIX] qaStage=STG2 preview=FORMAL64 action=FINAL_FRAME_PRUNE removedPx=${removedPx} removedComponents=${removedComponents}`);
+          console.log(`[JEONG2_RUNTIME_FIX] qaStage=STG2 preview=FORMAL64 action=ATTACHED_FRINGE_PRUNE removedPx=${attachedPxRemoved} removedRuns=${attachedRunsRemoved}`);
           console.log("[JEONG2_RUNTIME_FIX] qaStage=STG2 preview=FORMAL64 visibleCharacterDamage=no");
           jeong2RuntimeFrameCache.set(cacheKey, c);
           return c;
@@ -4574,6 +4655,17 @@
                   Math.round(drawBoxInternal),
                   Math.round(drawBoxInternal)
                 );
+              }
+              if (isJeong2Render && PREVIEW_LABEL === "FORMAL64" && renderPath === "SHEET_SSOT") {
+                const displayedHash = String(spriteImg?.__jeong2CleanHash || spriteImg?.__jeong2RawHash || "none");
+                const cleanedHash = String(spriteImg?.__jeong2CleanHash || "none");
+                const match = displayedHash === cleanedHash && displayedHash !== "none";
+                const sig = `${displayedHash}|${cleanedHash}|${face}|${Math.round(dx)},${Math.round(dy)}|${Math.round(drawBoxInternal)}`;
+                if (u.__jeong2RenderSourceSig !== sig) {
+                  u.__jeong2RenderSourceSig = sig;
+                  console.log(`[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 stage=DISPLAYED hash=${displayedHash}`);
+                  console.log(`[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 displayedMatchesCleaned=${match ? "yes" : "no"}`);
+                }
               }
               ctx.restore();
               if (!u.dead) drawUnitFlashOverlay(ctx, u, px, py);

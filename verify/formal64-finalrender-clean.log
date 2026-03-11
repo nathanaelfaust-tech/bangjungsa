@@ -1,0 +1,20 @@
+[COMPARE] formal64 finalrender clean
+
+[UNIT_LOAD_STATE] qaStage=STG2 preview=FORMAL64 name=정2 status=READY
+[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 stage=RAW hash=2f898da2
+[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=FRAME_BOUNDS source=sx:0,sy:0,sw:64,sh:64,draw:64
+[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 source=FINAL_FRAME count=6
+[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=LOW_ALPHA_ATTACHED count=0
+[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=OUTER_RING_FRINGE count=0
+[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=ATTACHED_FRINGE_LEFT count=0
+[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 kind=ATTACHED_FRINGE_RIGHT count=0
+[JEONG2_RUNTIME_TRACE] qaStage=STG2 preview=FORMAL64 count=6 maxComponentPx=1314 bbox=8,6-54,38
+[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 stage=CLEANED hash=2f898da2
+[JEONG2_RUNTIME_FIX] qaStage=STG2 preview=FORMAL64 action=FINAL_FRAME_PRUNE removedPx=0 removedComponents=0
+[JEONG2_RUNTIME_FIX] qaStage=STG2 preview=FORMAL64 action=ATTACHED_FRINGE_PRUNE removedPx=0 removedRuns=0
+[JEONG2_RUNTIME_FIX] qaStage=STG2 preview=FORMAL64 visibleCharacterDamage=no
+[UNIT_RENDER] qaStage=STG2 preview=FORMAL64 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center alpha=yes sheetRow=top sheetCol=1
+[UNIT_RENDER] qaStage=STG2 preview=FORMAL64 name=정2 path=SHEET_SSOT source=assets/s1/sprites_ssot/jeong2_ssot_F.png tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center
+[UNIT_FOOTPRINT] qaStage=STG2 preview=FORMAL64 name=정2 tileScale=64 sourcePx=64 drawBoxPx=64 displayPx=64 anchor=tile_bottom_center visualWidthTiles=1.50 visualHeightTiles=1.81 overhangLeftPx=8 overhangRightPx=8
+[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 stage=DISPLAYED hash=2f898da2
+[JEONG2_RENDER_SOURCE] qaStage=STG2 preview=FORMAL64 displayedMatchesCleaned=yes
