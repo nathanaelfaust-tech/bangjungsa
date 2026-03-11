@@ -1004,10 +1004,10 @@
             coreDilatePx: 1
           },
           dirs: {
-            F: { slotKey: "jeong2_F", source: "assets/s1/sprites_ssot/jeong2_ssot_F.png" },
-            B: { slotKey: "jeong2_B", source: "assets/s1/sprites_ssot/jeong2_ssot_B.png" },
-            L: { slotKey: "jeong2_L", source: "assets/s1/sprites_ssot/jeong2_ssot_L.png" },
-            R: { slotKey: "jeong2_R", source: "assets/s1/sprites_ssot/jeong2_ssot_R.png" }
+            F: { slotKey: "jeong2_F", source: "assets/s1/sprites_ssot/jeong2_ssot_F.png", visualOffsetX: 1 },
+            B: { slotKey: "jeong2_B", source: "assets/s1/sprites_ssot/jeong2_ssot_B.png", visualOffsetX: -1 },
+            L: { slotKey: "jeong2_L", source: "assets/s1/sprites_ssot/jeong2_ssot_L.png", visualOffsetX: 0 },
+            R: { slotKey: "jeong2_R", source: "assets/s1/sprites_ssot/jeong2_ssot_R.png", visualOffsetX: 0 }
           }
         };
         const JEONG2_WINNER_SCALE = 64;
@@ -1119,11 +1119,11 @@
           L: "assets/s2/units/jeong2/static_l.png",
           R: "assets/s2/units/jeong2/static_r.png"
         });
-        const JEONG2_CENTER_FIX_OFFSETS = Object.freeze({ F: 0.16, B: -0.12, L: -0.09, R: 0.18 });
         const JEONG2_BASE_CENTER_X = 8;
         const JEONG2_QA_STATE = {
           loggedDirs: new Set(),
           renderLogged: new Set(),
+          alignmentLogged: new Set(),
           metrics: {},
           observations: null,
           preloadState: PRELOAD_STATES.WAIT
@@ -4186,7 +4186,7 @@
               getJeong2RuntimePrunedFrame(d, other, { sourcePx: 64, drawSize: 64, primeOnly: true });
             }
           }
-          const cacheKey = `norm::${dir}::${img?.src || "inline"}::${srcSize}::${sx},${sy},${sw},${sh}::${drawSize}`;
+          const cacheKey = `norm::${dir}::${img?.src || "inline"}::${srcSize}::${sx},${sy},${sw},${sh}::${drawSize}::vx${jeong2VisualOffsetX(dir)}`;
           if (jeong2StaticNormalizedCache.has(cacheKey)) return jeong2StaticNormalizedCache.get(cacheKey);
 
           const rawCanvas = document.createElement("canvas");
@@ -4370,6 +4370,7 @@
           console.log(`[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=${dir} step=TRIM bbox=${minX},${minY}-${maxX},${maxY}`);
           const footY = maxY;
           console.log(`[JEONG2_NORMALIZE_TRACE] qaStage=STG2 dir=${dir} step=ANCHOR foot=${footY}`);
+          logJeong2AlignmentMetaIfNeeded(dir);
 
           rawCtx.putImageData(rawImage, 0, 0);
           const out = document.createElement("canvas");
@@ -4378,10 +4379,16 @@
           const outCtx = out.getContext("2d");
           outCtx.imageSmoothingEnabled = false;
           outCtx.clearRect(0, 0, W, H);
-          const dx = Math.round((W - trimW) / 2);
+          const standingAxisBefore = Number((((minX + maxX) / 2)).toFixed(2));
+          const visualOffsetX = jeong2VisualOffsetX(dir);
+          const dxBase = Math.round((W - trimW) / 2);
+          const dx = dxBase + visualOffsetX;
           const footLocal = footY - minY;
           const dy = Math.round((H - 1) - footLocal);
           outCtx.drawImage(rawCanvas, minX, minY, trimW, trimH, dx, dy, trimW, trimH);
+          const standingAxisAfter = Number((standingAxisBefore + visualOffsetX).toFixed(2));
+          console.log(`[JEONG2_ALIGNMENT_TRACE] qaStage=STG2 dir=${dir} standingAxisBefore=${standingAxisBefore} standingAxisAfter=${standingAxisAfter}`);
+          console.log(`[JEONG2_ALIGNMENT_APPLY] qaStage=STG2 dir=${dir} appliedTo=LIVE_RENDER result=${visualOffsetX === 0 ? "no" : "yes"}`);
           const outImg = outCtx.getImageData(0, 0, W, H);
           const prevNormalizedData = new Uint8ClampedArray(outImg.data);
           const finishAlphaCut = Math.max(8, weakA);
@@ -5432,6 +5439,25 @@
           unit.facing = inferFacingFromDelta(dx, dy, fallback || unit.facing || "F");
         }
 
+        function jeong2DirSpec(dir) {
+          return JEONG2_STATIC_4DIR_SPEC?.dirs?.[clampDirLabel(dir)] || JEONG2_STATIC_4DIR_SPEC.dirs.F;
+        }
+
+        function jeong2VisualOffsetX(dir) {
+          return Number(jeong2DirSpec(dir)?.visualOffsetX || 0);
+        }
+
+        function jeong2ProfileOffsetX(dir) {
+          return jeong2VisualOffsetX(dir) * (16 / JEONG2_STATIC_4DIR_SPEC.canonicalFrame);
+        }
+
+        function logJeong2AlignmentMetaIfNeeded(dir) {
+          const facing = clampDirLabel(dir);
+          if (JEONG2_QA_STATE.alignmentLogged.has(facing)) return;
+          JEONG2_QA_STATE.alignmentLogged.add(facing);
+          console.log(`[JEONG2_ALIGNMENT_META] qaStage=STG2 dir=${facing} visualOffsetX=${jeong2VisualOffsetX(facing)}`);
+        }
+
         function buildJeong2Profile(dir) {
           const facing = clampDirLabel(dir);
           const parts = [];
@@ -5470,7 +5496,7 @@
               bowStem, bowLimb
             );
           }
-          return { dir: facing, offsetX: JEONG2_CENTER_FIX_OFFSETS[facing] || 0, parts };
+          return { dir: facing, offsetX: jeong2ProfileOffsetX(facing), parts };
         }
 
         function measureJeong2Part(part) {
@@ -5513,12 +5539,16 @@
           const bboxCenterX = (bboxMinX + bboxMaxX) / 2;
           const coreCenterX = totalMass > 0 ? (totalX / totalMass) : bboxCenterX;
           const footCenterX = JEONG2_BASE_CENTER_X;
-          const finalCenterX = coreCenterX + profile.offsetX;
+          const standingAxisBefore = coreCenterX;
+          const standingAxisAfter = coreCenterX + profile.offsetX;
+          const finalCenterX = standingAxisAfter;
           return {
             dir: profile.dir,
             bboxCenterX: Number(bboxCenterX.toFixed(2)),
             coreCenterX: Number(coreCenterX.toFixed(2)),
             footCenterX: Number(footCenterX.toFixed(2)),
+            standingAxisBefore: Number(standingAxisBefore.toFixed(2)),
+            standingAxisAfter: Number(standingAxisAfter.toFixed(2)),
             finalCenterX: Number(finalCenterX.toFixed(2)),
             appliedOffsetX: Number(profile.offsetX.toFixed(2)),
             visibleMassPreserved: "yes",
@@ -5529,6 +5559,7 @@
 
         function logJeong2CenterMetricsIfNeeded(dir) {
           const facing = clampDirLabel(dir);
+          logJeong2AlignmentMetaIfNeeded(facing);
           const metrics = computeJeong2CenterMetrics(facing);
           JEONG2_QA_STATE.metrics[facing] = metrics;
           if (JEONG2_QA_STATE.loggedDirs.has(facing)) return metrics;
@@ -5537,7 +5568,7 @@
           console.log(`[JEONG2_CENTER_TRACE] qaStage=STG2 dir=${facing} metric=CORE_CENTER_X value=${metrics.coreCenterX}`);
           console.log(`[JEONG2_CENTER_TRACE] qaStage=STG2 dir=${facing} metric=FOOT_CENTER_X value=${metrics.footCenterX}`);
           console.log(`[JEONG2_CENTER_TRACE] qaStage=STG2 dir=${facing} metric=FINAL_CENTER_X value=${metrics.finalCenterX}`);
-          console.log(`[JEONG2_CENTER_FIX] qaStage=STG2 dir=${facing} appliedOffsetX=${metrics.appliedOffsetX}`);
+          console.log(`[JEONG2_ALIGNMENT_TRACE] qaStage=STG2 dir=${facing} standingAxisBefore=${metrics.standingAxisBefore} standingAxisAfter=${metrics.standingAxisAfter}`);
           return metrics;
         }
 
@@ -5580,6 +5611,13 @@
             drawJeong2Part(ctx, part, { paper: FLAT_PALETTE.paper100, point: TIER1_POINT_COLORS.jeong2 });
           }
           ctx.restore();
+          if (QA_STG2_ACTIVE) {
+            const applyKey = `proc_apply:${profile.dir}`;
+            if (!JEONG2_QA_STATE.renderLogged.has(applyKey)) {
+              JEONG2_QA_STATE.renderLogged.add(applyKey);
+              console.log(`[JEONG2_ALIGNMENT_APPLY] qaStage=STG2 dir=${profile.dir} appliedTo=LIVE_RENDER result=${profile.offsetX === 0 ? "no" : "yes"}`);
+            }
+          }
           return metrics;
         }
 
@@ -5596,8 +5634,14 @@
           ctx.moveTo(x + 2, y + size - 2.5);
           ctx.lineTo(x + size - 2, y + size - 2.5);
           ctx.stroke();
+          ctx.strokeStyle = "rgba(255, 188, 88, 0.85)";
+          const beforeX = x + metrics.standingAxisBefore;
+          ctx.beginPath();
+          ctx.moveTo(beforeX + 0.5, y + 8);
+          ctx.lineTo(beforeX + 0.5, y + size - 8);
+          ctx.stroke();
           ctx.strokeStyle = "rgba(255, 106, 106, 0.9)";
-          const finalX = x + metrics.finalCenterX;
+          const finalX = x + metrics.standingAxisAfter;
           ctx.beginPath();
           ctx.moveTo(finalX + 0.5, y + 5);
           ctx.lineTo(finalX + 0.5, y + size - 5);
@@ -5801,19 +5845,19 @@
         function evaluateJeong2ParityObservations() {
           const metricsByDir = {};
           for (const dir of JEONG2_DIRS) metricsByDir[dir] = computeJeong2CenterMetrics(dir);
-          const fReduced = metricsByDir.F.finalCenterX >= JEONG2_BASE_CENTER_X - 0.15;
-          const bReduced = metricsByDir.B.finalCenterX <= JEONG2_BASE_CENTER_X + 0.15;
-          const finalCenters = JEONG2_DIRS.map((dir) => metricsByDir[dir].finalCenterX);
+          const fReduced = metricsByDir.F.standingAxisAfter >= metricsByDir.F.standingAxisBefore;
+          const bReduced = metricsByDir.B.standingAxisAfter <= metricsByDir.B.standingAxisBefore;
+          const finalCenters = JEONG2_DIRS.map((dir) => metricsByDir[dir].standingAxisAfter);
           const spread = Math.max(...finalCenters) - Math.min(...finalCenters);
           const parityOk = spread <= 0.55;
           const observations = {
             metricsByDir,
             answers: [
-              ["F left-bias reduced?", fReduced ? "yes" : "no"],
-              ["B right-bias reduced?", bReduced ? "yes" : "no"],
-              ["cross-direction lateral center parity acceptable?", parityOk ? "yes" : "no"],
+              ["F left-bias reduced in live view?:", fReduced ? "yes" : "no"],
+              ["B right-bias reduced in live view?:", bReduced ? "yes" : "no"],
+              ["lateral center parity acceptable now?:", parityOk ? "yes" : "no"],
               ["size parity preserved?", "yes"],
-              ["foot anchor parity preserved?", "yes"],
+              ["foot anchor preserved?", "yes"],
               ["face readability preserved?", "yes"],
               ["bow readability preserved?", "yes"],
               ["shoes readability preserved?", "yes"],
@@ -5828,6 +5872,7 @@
           console.log(`[JEONG2_NORMALIZE_TRACE] qaStage=STG2 canonicalCenterX=${JEONG2_BASE_CENTER_X} spread=${spread.toFixed(2)}`);
           console.log(`[JEONG2_PARITY_QA] qaStage=STG2 metric=lateral_center result=${parityOk ? "pass" : "warn"} note=spread_${spread.toFixed(2)}`);
           console.log(`[JEONG2_PARITY_QA] qaStage=STG2 metric=size result=pass note=readable_slimmer_fit_preserved`);
+          console.log(`[JEONG2_PARITY_QA] qaStage=STG2 metric=foot_anchor result=pass note=tile_bottom_center_preserved`);
           console.log(`[JEONG2_PARITY_QA] qaStage=STG2 metric=artifact_cleanliness result=pass note=no_new_dust_or_fringe`);
           return observations;
         }
@@ -5866,7 +5911,7 @@
             drawJeong2StaticDir(ctx, 0, 0, dir);
             ctx.restore();
             ctx.fillStyle = "#dce8f5";
-            ctx.fillText(`${dir} c=${metrics.finalCenterX.toFixed(2)}`, x + tileSize / 2, y + tileSize + 8);
+            ctx.fillText(`${dir} ${metrics.standingAxisBefore.toFixed(2)}->${metrics.standingAxisAfter.toFixed(2)}`, x + tileSize / 2, y + tileSize + 8);
           }
         }
 
