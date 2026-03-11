@@ -913,7 +913,7 @@
         })();
         const PREVIEW_ENABLED = QA_MODE_PARAM === "stg2" && !!PREVIEW_MODE;
         const PREVIEW_LABEL = PREVIEW_MODE ? PREVIEW_MODE.toUpperCase() : "NONE";
-        const PREVIEW_A31_PROXY_SOURCE = "assets/s1/sprites_raw_alpha_48/jeong2_{F|B|L|R}.png#A3_FACE_BIAS";
+        const PREVIEW_A31_PROXY_SOURCE = "assets/s1/sprites_raw_alpha/jeong2_{F|B|L|R}.png#A3_FACE_STABLE32";
         const PREVIEW_A32_PROXY_SOURCE = "assets/s1/sprites_raw_alpha_48/jeong2_{F|B|L|R}.png#A3_SILHOUETTE_BIAS";
         const BOARD_TILE_SCALE = (() => {
           if (PREVIEW_ENABLED && (PREVIEW_MODE === "a31" || PREVIEW_MODE === "a32")) return 32;
@@ -3940,14 +3940,18 @@
             let spriteSourceLabel = "";
             const k2 = `${spriteId}_F`;
             if (!spriteImg && previewForceA3Proxy) {
-              const proxyBank = ASSETS.sprites_raw_alpha_48 || {};
+              const proxyBank = PREVIEW_MODE === "a31"
+                ? (ASSETS.sprites_raw_alpha || {})
+                : (ASSETS.sprites_raw_alpha_48 || {});
               const preferKeys = [key, k2, `${spriteId}_B`, `${spriteId}_L`, `${spriteId}_R`];
               for (const k of preferKeys) {
                 const proxy = proxyBank[k];
                 if (proxy && proxy.complete && proxy.naturalWidth > 0) {
                   spriteImg = proxy;
-                  S = Number(proxy.naturalWidth || 48);
-                  spriteSourceLabel = `assets/s1/sprites_raw_alpha_48/jeong2_${k.slice(-1)}.png#${PREVIEW_MODE === "a31" ? "A3-1" : "A3-2"}`;
+                  S = Number(proxy.naturalWidth || (PREVIEW_MODE === "a31" ? 32 : 48));
+                  spriteSourceLabel = PREVIEW_MODE === "a31"
+                    ? `assets/s1/sprites_raw_alpha/jeong2_${k.slice(-1)}.png#A3-1`
+                    : `assets/s1/sprites_raw_alpha_48/jeong2_${k.slice(-1)}.png#A3-2`;
                   break;
                 }
               }
@@ -3996,10 +4000,14 @@
             }
             if (!spriteImg || !spriteImg.complete || spriteImg.naturalWidth === 0) {
               console.log("[VERIFY_SPRITE_MISS]", { uId: u.id, spriteId, face, key, prefer48, assetsReady: ASSETS.ready });
-              if (previewForceA3Proxy && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k2]) {
+              if (previewForceA3Proxy && PREVIEW_MODE === "a31" && ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[k2]) {
+                spriteImg = ASSETS.sprites_raw_alpha[k2];
+                S = Number(spriteImg?.naturalWidth || 32);
+                spriteSourceLabel = "assets/s1/sprites_raw_alpha/jeong2_F.png#A3-1";
+              } else if (previewForceA3Proxy && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k2]) {
                 spriteImg = ASSETS.sprites_raw_alpha_48[k2];
                 S = Number(spriteImg?.naturalWidth || 48);
-                spriteSourceLabel = `assets/s1/sprites_raw_alpha_48/jeong2_F.png#${PREVIEW_MODE === "a31" ? "A3-1" : "A3-2"}`;
+                spriteSourceLabel = "assets/s1/sprites_raw_alpha_48/jeong2_F.png#A3-2";
               } else if (isJeong2Render && stg2AllyVisual && ssotBank && ssotBank[k2]) {
                 spriteImg = ssotBank[k2];
                 S = Number(spriteImg?.naturalWidth || 64);
@@ -4019,7 +4027,7 @@
                 if (!spriteSourceLabel) spriteSourceLabel = `assets/s1/sprites/${spriteId}_F.png`;
               }
             }
-            if (previewForceA3Proxy && spriteImg) {
+            if (previewForceA3Proxy && spriteImg && PREVIEW_MODE === "a32" && Number(spriteImg?.naturalWidth || 0) >= 48) {
               spriteImg = buildJeong2A3Proxy(PREVIEW_MODE, face, spriteImg);
               S = 32;
             } else if (isJeong2Render && stg2AllyVisual && usedSsot && spriteImg) {
