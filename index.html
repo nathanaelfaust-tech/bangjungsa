@@ -1010,6 +1010,87 @@
             R: { slotKey: "jeong2_R", source: "assets/s1/sprites_ssot/jeong2_ssot_R.png", visualOffsetX: 0 }
           }
         };
+        // Jeong2 WALK_MOTION_SPEC_V1 is a spec-only lock for future real walk assets.
+        // It declares slots, tolerances, and QA criteria without activating runtime walk behavior.
+        const JEONG2_WALK_MOTION_SPEC_V1 = {
+          version: "v1",
+          parentSsot: "JEONG2 static 4dir(F/B/L/R) reference-point v1",
+          runtimePolicy: "SPEC_ONLY_NO_RUNTIME_ACTIVATION",
+          directionCount: 4,
+          directions: ["F", "B", "L", "R"],
+          diagonalExpansionAllowed: false,
+          autoMirrorAllowed: false,
+          framesPerDirection: 4,
+          totalExpectedFrames: 16,
+          frameOrder: ["f0", "f1", "f2", "f3"],
+          frameMeaning: {
+            f0: "contact A",
+            f1: "passing A",
+            f2: "contact B",
+            f3: "passing B"
+          },
+          loopOrder: "0->1->2->3->0",
+          motionIntensity: "medium_variation",
+          anchorRule: {
+            anchor: "tile_bottom_center",
+            contactLinePriority: "board_stability_over_motion",
+            targetGroundLineTolerancePx: 1,
+            rejectIfGroundLineShiftPxGte: 2
+          },
+          centerAxisRule: {
+            torsoHeadShiftTargetPx: 1,
+            rejectIfTorsoHeadShiftPxGte: 2,
+            note: "walk must not amplify the static v1 lateral bias"
+          },
+          boardFitRule: {
+            boardScale: 64,
+            preserveOneTileReadability: true,
+            preserveStaticFitPriority: true,
+            forbidSuddenSilhouetteSwelling: true
+          },
+          readabilityRule: {
+            preserveFaceImpression: true,
+            preserveUpperBodyIdentity: true,
+            preserveCharacterRecognitionAtStg2Distance: true
+          },
+          assetProductionPolicy: {
+            sourceOfTruth: "manual derivative set from approved static 4dir",
+            allowedThisStage: [
+              "spec documentation",
+              "slot declaration",
+              "inventory definition",
+              "QA criteria declaration"
+            ],
+            forbiddenThisStage: [
+              "sprite generation",
+              "frame interpolation",
+              "L/R auto mirroring",
+              "static frame duplication as fake walk",
+              "procedural walk fallback"
+            ]
+          },
+          recommendedSlotLayout: {
+            F: { f0: { assetId: "jeong2.walk.F.f0", status: "DECLARED_SLOT" }, f1: { assetId: "jeong2.walk.F.f1", status: "DECLARED_SLOT" }, f2: { assetId: "jeong2.walk.F.f2", status: "DECLARED_SLOT" }, f3: { assetId: "jeong2.walk.F.f3", status: "DECLARED_SLOT" } },
+            B: { f0: { assetId: "jeong2.walk.B.f0", status: "DECLARED_SLOT" }, f1: { assetId: "jeong2.walk.B.f1", status: "DECLARED_SLOT" }, f2: { assetId: "jeong2.walk.B.f2", status: "DECLARED_SLOT" }, f3: { assetId: "jeong2.walk.B.f3", status: "DECLARED_SLOT" } },
+            L: { f0: { assetId: "jeong2.walk.L.f0", status: "DECLARED_SLOT" }, f1: { assetId: "jeong2.walk.L.f1", status: "DECLARED_SLOT" }, f2: { assetId: "jeong2.walk.L.f2", status: "DECLARED_SLOT" }, f3: { assetId: "jeong2.walk.L.f3", status: "DECLARED_SLOT" } },
+            R: { f0: { assetId: "jeong2.walk.R.f0", status: "DECLARED_SLOT" }, f1: { assetId: "jeong2.walk.R.f1", status: "DECLARED_SLOT" }, f2: { assetId: "jeong2.walk.R.f2", status: "DECLARED_SLOT" }, f3: { assetId: "jeong2.walk.R.f3", status: "DECLARED_SLOT" } }
+          },
+          namingRule: "Normalize to jeong2 / walk / <dir> / <f0|f1|f2|f3> semantics even if final filenames follow repo naming style.",
+          inventoryPrep: {
+            completenessTarget: "4dir x 4frame",
+            reportMissingSlotsExplicitly: true,
+            doNotProbeNonexistentPathsAtRuntime: true
+          },
+          qaChecklist: [
+            "idle vs walk f0/f1/f2/f3 size parity",
+            "foot anchor drift <= +/-1px target",
+            "torso/head center wobble <= +/-1px target",
+            "board fit stability at 64 scale",
+            "readability parity against static v1",
+            "no dust/fringe recurrence",
+            "no fake completeness claims"
+          ]
+        };
         const JEONG2_WINNER_SCALE = 64;
         const BOARD_TILE_SCALE = (() => {
           if (FORMAL64_ACTIVE) return JEONG2_WINNER_SCALE;
@@ -1928,6 +2009,7 @@
         let jeong2ParityPanelCanvas = null;
         let jeong2ParityPanelCtx = null;
         let jeong2LoadFixLogged = false;
+        let j2WalkSpecLockedLogged = false;
         const qaVerifyLines = [];
         let qaVerifyEl = null;
         let qaPreviewLogSinkEl = null;
@@ -2140,6 +2222,10 @@
           console.log(`[UNIT_LOAD_STATE] stage=preload state=${PRELOAD_STATES.READY}`);
           console.log(`[JEONG2_ASSET_INVENTORY] season=${season} dirCount=${JEONG2_DIRS.length} normalized=F,B,L,R`);
           console.log(`[JEONG2_ASSET_PIPELINE] season=${season} normalizedAssetPath=F/B/L/R preloadFirstDraw=yes anchor=tile_bottom_center readableSlimmerFit=yes`);
+          if (!j2WalkSpecLockedLogged) {
+            j2WalkSpecLockedLogged = true;
+            console.log("[J2_WALK_SPEC_LOCKED] version=v1 dirs=4 framesPerDir=4 runtime=spec_only");
+          }
           renderJeong2ParityQa();
         }
 
