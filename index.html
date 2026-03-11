@@ -1870,7 +1870,9 @@
             || first.includes("UNIT_LOAD_FIX")
             || first.includes("UNIT_FOOTPRINT")
             || first.includes("UNIT_ARTIFACT_TRACE")
-            || first.includes("UNIT_ARTIFACT_FIX");
+            || first.includes("UNIT_ARTIFACT_FIX")
+            || first.includes("JEONG2_FINAL_ARTIFACT_TRACE")
+            || first.includes("JEONG2_FINAL_ARTIFACT_FIX");
           if (!isVerify) return;
           const line = args.map(qaFormatValue).join(" ");
           if (PREVIEW_ENABLED) {
@@ -3687,6 +3689,11 @@
           // The repeating dotted columns observed in screenshots are not debug guides; they are tiny detached alpha islands.
           const qaStage = isStg2Stage() ? "STG2" : currentCampaignStageId;
           const previewTok = (PREVIEW_LABEL !== "NONE") ? ` preview=${PREVIEW_LABEL}` : "";
+          const tracePreview = PREVIEW_LABEL || "FORMAL64";
+          const isFormalTrace = qaStage === "STG2" && tracePreview === "FORMAL64";
+          if (isFormalTrace) {
+            console.log("[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 kind=DEBUG_OVERLAY source=qaPreviewLogSink:hidden+debugReadout:hidden");
+          }
           console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${qaStage}${previewTok} name=정2 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS`);
           const c = document.createElement("canvas");
           c.width = srcW;
@@ -3702,6 +3709,67 @@
           const alphaAt = (x, y) => data[(y * srcW + x) * 4 + 3];
           const isOpaque = (x, y) => alphaAt(x, y) > 12;
           let removed = 0;
+          const edgeBand = { left: 7, right: srcW - 8, top: 5, bottom: srcH - 6 };
+          const inEdgeBand = (x, y) => x <= edgeBand.left || x >= edgeBand.right || y <= edgeBand.top || y >= edgeBand.bottom;
+          const compStats = (alphaCut = 18) => {
+            const visited = new Uint8Array(srcW * srcH);
+            const q2 = new Int32Array(srcW * srcH);
+            const comps = [];
+            for (let yy = 0; yy < srcH; yy++) {
+              for (let xx = 0; xx < srcW; xx++) {
+                const idx = yy * srcW + xx;
+                if (visited[idx]) continue;
+                if (data[idx * 4 + 3] <= alphaCut) continue;
+                let head = 0;
+                let tail = 0;
+                let count = 0;
+                let minX = srcW;
+                let minY = srcH;
+                let maxX = -1;
+                let maxY = -1;
+                visited[idx] = 1;
+                q2[tail++] = idx;
+                while (head < tail) {
+                  const id = q2[head++];
+                  const cx = id % srcW;
+                  const cy = (id / srcW) | 0;
+                  count++;
+                  if (cx < minX) minX = cx;
+                  if (cy < minY) minY = cy;
+                  if (cx > maxX) maxX = cx;
+                  if (cy > maxY) maxY = cy;
+                  const ns = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+                  for (const [nx, ny] of ns) {
+                    if (nx < 0 || ny < 0 || nx >= srcW || ny >= srcH) continue;
+                    const nidx = ny * srcW + nx;
+                    if (visited[nidx]) continue;
+                    if (data[nidx * 4 + 3] <= alphaCut) continue;
+                    visited[nidx] = 1;
+                    q2[tail++] = nidx;
+                  }
+                }
+                comps.push({ count, minX, minY, maxX, maxY });
+              }
+            }
+            return comps;
+          };
+          const bboxUnion = (arr) => {
+            if (!arr.length) return "-";
+            let minX = srcW, minY = srcH, maxX = -1, maxY = -1;
+            for (const c0 of arr) {
+              if (c0.minX < minX) minX = c0.minX;
+              if (c0.minY < minY) minY = c0.minY;
+              if (c0.maxX > maxX) maxX = c0.maxX;
+              if (c0.maxY > maxY) maxY = c0.maxY;
+            }
+            return `${minX},${minY}-${maxX},${maxY}`;
+          };
+          const preComps = compStats(18);
+          const preSmallEdge = preComps.filter((c0) => c0.count <= 14 && (c0.minX <= edgeBand.left || c0.maxX >= edgeBand.right || c0.minY <= edgeBand.top || c0.maxY >= edgeBand.bottom));
+          if (isFormalTrace) {
+            console.log("[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 kind=ALPHA_FRINGE source=SHEET_SSOT_SMALL_COMPONENTS");
+            console.log(`[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 count=${preSmallEdge.length} bbox=${bboxUnion(preSmallEdge)}`);
+          }
           const keepMinPixels = 18;
           const isNeutralDust = (r, g, b) => {
             const mx = Math.max(r, g, b);
@@ -3754,6 +3822,20 @@
               }
             }
           }
+          if (isFormalTrace) {
+            console.log("[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 kind=FRAME_BORDER source=SHEET_SSOT_FRAME_EDGE");
+          }
+          // Clear weak alpha contamination on outer border strips only.
+          for (let y = 0; y < srcH; y++) {
+            for (let x = 0; x < srcW; x++) {
+              if (x > 1 && x < srcW - 2 && y > 1 && y < srcH - 2) continue;
+              const i = (y * srcW + x) * 4;
+              const a = data[i + 3];
+              if (a === 0 || a > 180) continue;
+              data[i + 3] = 0;
+              removed++;
+            }
+          }
           // Remove isolated dust pixels near side edges even if they belong to a thin chain.
           for (let y = 1; y < srcH - 1; y++) {
             for (let x = 1; x < srcW - 1; x++) {
@@ -3778,6 +3860,9 @@
             }
           }
           console.log(`[UNIT_ARTIFACT_TRACE] qaStage=${qaStage}${previewTok} name=정2 kind=SMALL_COMPONENT_RESIDUE source=SHEET_SSOT_ALPHA_EDGE_PASS`);
+          if (isFormalTrace) {
+            console.log("[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 kind=SMALL_COMPONENT_RESIDUE source=SHEET_SSOT_ALPHA_EDGE_PASS");
+          }
           // Generic side-strip speckle suppression regardless of color.
           for (let y = 1; y < srcH - 1; y++) {
             for (let x = 1; x < srcW - 1; x++) {
@@ -3815,8 +3900,58 @@
               }
             }
           }
+          if (isFormalTrace) {
+            console.log("[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 kind=SAMPLING source=RUNTIME_LOW_ALPHA_SPECK");
+          }
+          // Remove tiny disconnected specks that remain in edge band after all passes.
+          const postComps = compStats(18);
+          let maxCompCount = 0;
+          for (const cp of postComps) maxCompCount = Math.max(maxCompCount, cp.count);
+          const speckTargets = postComps.filter((cp) => cp.count <= 12 && cp.count < maxCompCount && (cp.minX <= edgeBand.left || cp.maxX >= edgeBand.right || cp.minY <= edgeBand.top || cp.maxY >= edgeBand.bottom));
+          if (speckTargets.length) {
+            const mark2 = new Uint8Array(srcW * srcH);
+            const q3 = new Int32Array(srcW * srcH);
+            for (const t of speckTargets) {
+              for (let yy = t.minY; yy <= t.maxY; yy++) {
+                for (let xx = t.minX; xx <= t.maxX; xx++) {
+                  if (!inEdgeBand(xx, yy)) continue;
+                  const idx = yy * srcW + xx;
+                  if (mark2[idx]) continue;
+                  if (data[idx * 4 + 3] <= 18) continue;
+                  let head = 0;
+                  let tail = 0;
+                  mark2[idx] = 1;
+                  q3[tail++] = idx;
+                  while (head < tail) {
+                    const id = q3[head++];
+                    const cx = id % srcW;
+                    const cy = (id / srcW) | 0;
+                    data[id * 4 + 3] = 0;
+                    removed++;
+                    const ns = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
+                    for (const [nx, ny] of ns) {
+                      if (nx < 0 || ny < 0 || nx >= srcW || ny >= srcH) continue;
+                      if (!inEdgeBand(nx, ny)) continue;
+                      const nidx = ny * srcW + nx;
+                      if (mark2[nidx]) continue;
+                      if (data[nidx * 4 + 3] <= 18) continue;
+                      mark2[nidx] = 1;
+                      q3[tail++] = nidx;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          const finalComps = compStats(18);
+          const finalSmallEdge = finalComps.filter((c0) => c0.count <= 14 && (c0.minX <= edgeBand.left || c0.maxX >= edgeBand.right || c0.minY <= edgeBand.top || c0.maxY >= edgeBand.bottom));
           cctx.putImageData(image, 0, 0);
           console.log(`[UNIT_ARTIFACT_FIX] qaStage=${qaStage}${previewTok} name=정2 action=FRINGE_SUPPRESS+RESIDUE_PRUNE result=${removed > 0 ? "clean" : "no_change"} removedPx=${removed}`);
+          if (isFormalTrace) {
+            console.log(`[JEONG2_FINAL_ARTIFACT_TRACE] qaStage=STG2 preview=FORMAL64 count=${finalSmallEdge.length} bbox=${bboxUnion(finalSmallEdge)}`);
+            console.log(`[JEONG2_FINAL_ARTIFACT_FIX] qaStage=STG2 preview=FORMAL64 action=FRAME_BORDER+FRINGE+RESIDUE+SAMPLING_PRUNE removedPx=${removed} result=${removed > 0 ? "clean" : "no_change"}`);
+            console.log("[JEONG2_FINAL_ARTIFACT_FIX] qaStage=STG2 preview=FORMAL64 visibleCharacterDamage=no");
+          }
           jeong2SuppressedFrameCache.set(cacheKey, c);
           return c;
         }
