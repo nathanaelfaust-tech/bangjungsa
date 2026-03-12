@@ -4250,11 +4250,11 @@
             jeong2WalkCandidateResultLogged = true;
             console.log(`[JEONG2_WALK_CANDIDATE_RESULT] result=${candidateInfo.result} reason=${candidateInfo.reason}`);
           }
-          if (!jeong2WalkArtifactLogged) {
+          if (!jeong2WalkArtifactLogged && !getJeong2WalkV2Asset()) {
             jeong2WalkArtifactLogged = true;
             console.log("[JEONG2_WALK_ARTIFACT] dust=NO dottedEdge=NO alphaBleed=NO");
           }
-          if (!jeong2WalkRuntimeLogged) {
+          if (!jeong2WalkRuntimeLogged && !getJeong2WalkV2Asset()) {
             jeong2WalkRuntimeLogged = true;
             console.log("[JEONG2_WALK_RUNTIME] idle=static move=static reason=pending_asset_qa");
           }
