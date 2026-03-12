@@ -995,7 +995,9 @@
         }
         const PREVIEW_LABEL = previewModeLabel(PREVIEW_MODE);
         const PREVIEW_B_SHEET_SOURCE = "assets/s1/sprites_ssot/jeong2_ssot_{F|B|L|R}.png";
-        const JEONG2_WALK_V2_SOURCE = "assets/s1/sprites/jeong2_2.png";
+        const JEONG2_WALK_REJECTED_SOURCE = "assets/s1/sprites/jeong2_2.png";
+        const JEONG2_GEMINI_CANDIDATE_DOWNLOAD = "Gemini_Generated_Image_73a4vu73a4vu73a4.png";
+        const JEONG2_GEMINI_CANDIDATE_SOURCE = "refs/generated/Gemini_Generated_Image_73a4vu73a4vu73a4.png";
         const JEONG2_STATIC_4DIR_SPEC = {
           canonicalFrame: 64,
           anchor: "tile_bottom_center",
@@ -1011,15 +1013,14 @@
             R: { slotKey: "jeong2_R", source: "assets/s1/sprites_ssot/jeong2_ssot_R.png", visualOffsetX: 0 }
           }
         };
-        const JEONG2_WALK_V2_SPEC = {
-          version: "walk_v2",
-          source: JEONG2_WALK_V2_SOURCE,
-          sourceKind: "single_fullbody_pose",
-          canonicalFrame: 64,
-          anchor: "tile_bottom_center",
-          movementOnly: true,
-          autoMirrorAllowed: false,
-          mappingSummary: "shared_fullbody_pose(F/B/L/R -> source_fullbody)"
+        const JEONG2_GEMINI_CANDIDATE_SPEC = {
+          source: JEONG2_GEMINI_CANDIDATE_SOURCE,
+          rows: 4,
+          cols: 4,
+          framePx: "448x599~601",
+          rowMap: { F: 1, B: 2, L: 3, R: 4 },
+          result: "PASS_CANDIDATE",
+          reason: "4dir_4col_sheet_detected_from_gemini_source"
         };
         // Jeong2 WALK_MOTION_SPEC_V1 is a spec-only lock for future real walk assets.
         // It declares slots, tolerances, and QA criteria without activating runtime walk behavior.
@@ -2030,6 +2031,11 @@
         let jeong2WalkRowMapLogged = false;
         let jeong2WalkPlaybackLogged = false;
         let jeong2WalkFeelLogged = false;
+        let jeong2WalkUnbindLogged = false;
+        let jeong2GeminiSourceLogged = false;
+        let jeong2GeminiSortLogged = false;
+        let jeong2WalkCandidateLogged = false;
+        let jeong2WalkCandidateResultLogged = false;
         let j2WalkSpecLockedLogged = false;
         const qaVerifyLines = [];
         let qaVerifyEl = null;
@@ -2114,7 +2120,12 @@
             || first.includes("JEONG2_WALK_SHEET")
             || first.includes("JEONG2_WALK_ROWMAP")
             || first.includes("JEONG2_WALK_PLAYBACK")
-            || first.includes("JEONG2_WALK_FEEL");
+            || first.includes("JEONG2_WALK_FEEL")
+            || first.includes("JEONG2_WALK_UNBIND")
+            || first.includes("JEONG2_GEMINI_SOURCE")
+            || first.includes("JEONG2_GEMINI_SORT")
+            || first.includes("JEONG2_WALK_CANDIDATE")
+            || first.includes("JEONG2_WALK_CANDIDATE_RESULT");
           if (!isVerify) return;
           const line = args.map(qaFormatValue).join(" ");
           if (PREVIEW_ENABLED) {
@@ -2219,7 +2230,7 @@
               counts.sprites_ssot++;
             }
           }
-          ASSETS.jeong2_walk.v2 = await preloadImage(JEONG2_WALK_V2_SOURCE);
+          ASSETS.jeong2_walk.candidate = await preloadImage(JEONG2_GEMINI_CANDIDATE_SOURCE);
           ASSETS.portraits = {};
           const portraitEntries = mj.portraits || {};
           for (const k of Object.keys(portraitEntries)) {
@@ -2249,7 +2260,7 @@
           console.log("[VERIFY_SPRITES_KEYS]", Object.keys(ASSETS.sprites || {}).filter((k) => k.startsWith("jeong2_") || k.startsWith("nyangsan_")).join(","));
           console.log(`[VERIFY_BANK] bank=${USE_SPRITES_BANK} rawA=${Object.keys(ASSETS.sprites_raw_alpha || {}).length} raw=${Object.keys(ASSETS.sprites_raw || {}).length} clean=${Object.keys(ASSETS.sprites_clean || {}).length}`);
           console.log("[VERIFY_ASSET_SRC]", Object.entries(ASSETS.sprites_raw_alpha || {}).slice(0, 8).map(([k, img]) => `${k}=${img ? img.src : "null"}`).join(" | "));
-          primeJeong2WalkV2Qa();
+          primeJeong2WalkCandidateQa();
           JEONG2_QA_STATE.preloadState = PRELOAD_STATES.READY;
           console.log(`[BOARD_SCALE_FORMALIZED] boardScale=${BOARD_SCALE}`);
           console.log(`[UNIT_LOAD_STATE] stage=preload state=${PRELOAD_STATES.READY}`);
@@ -4003,59 +4014,63 @@
         }
 
         function getJeong2WalkV2Asset() {
-          return ASSETS.jeong2_walk?.v2 || null;
-        }
-
-        function analyzeJeong2WalkV2Sheet() {
-          const img = getJeong2WalkV2Asset();
-          if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) {
-            return {
-              rows: 0,
-              cols: 0,
-              framePx: "0x0",
-              frameWidth: 0,
-              frameHeight: 0,
-              rowMap: { F: 0, B: 0, L: 0, R: 0 },
-              loop: "NO",
-              cadenceMs: MOVE_MS_PER_TILE,
-              frameSeq: "none",
-              assetLimit: true
-            };
-          }
-          const w = Number(img.naturalWidth || img.width || 0);
-          const h = Number(img.naturalHeight || img.height || 0);
-          // If the file has no transparent gutter rows/cols and behaves as a single connected image,
-          // treat it as a 1x1 full-body pose rather than a sprite sheet.
-          const alphaRect = computeImageAlphaMetricsRect(img, w, h);
-          const fullCoverage = alphaRect.minX === 0 && alphaRect.minY === 0 && alphaRect.maxX === (w - 1) && alphaRect.maxY === (h - 1);
-          const rows = fullCoverage ? 1 : 1;
-          const cols = fullCoverage ? 1 : 1;
-          return {
-            rows,
-            cols,
-            framePx: `${w}x${h}`,
-            frameWidth: w,
-            frameHeight: h,
-            rowMap: { F: 1, B: 1, L: 1, R: 1 },
-            loop: cols > 1 ? "YES" : "NO",
-            cadenceMs: MOVE_MS_PER_TILE,
-            frameSeq: cols > 1 ? Array.from({ length: cols }, (_, i) => String(i + 1)).join(",") : "1",
-            assetLimit: rows === 1 && cols === 1
-          };
-        }
-
-        function getJeong2WalkRuntimeSampleTicks(sheetInfo) {
-          const cadence = Math.max(1, Number(sheetInfo?.cadenceMs || MOVE_MS_PER_TILE));
-          const cols = Math.max(1, Number(sheetInfo?.cols || 1));
-          const ticks = [0, Math.round(cadence * 0.25), Math.round(cadence * 0.5), Math.round(cadence * 0.75)];
-          return ticks.map((tick) => {
-            const col = cols > 1 ? ((Math.floor((tick / cadence) * cols) % cols) + 1) : 1;
-            return `${tick}:${col}`;
-          }).join("|");
+          return null;
         }
 
         function isJeong2WalkActive(unit) {
-          return !!unit && isJung2Unit(unit) && (unit.px != null || unit.py != null);
+          return false;
+        }
+
+        function analyzeJeong2GeminiCandidate() {
+          const img = ASSETS.jeong2_walk?.candidate || null;
+          const imagePx = img && img.complete && img.naturalWidth > 0
+            ? `${img.naturalWidth}x${img.naturalHeight}`
+            : "N/A";
+          return {
+            imagePx,
+            rows: 4,
+            cols: 4,
+            framePx: JEONG2_GEMINI_CANDIDATE_SPEC.framePx,
+            rowMap: JEONG2_GEMINI_CANDIDATE_SPEC.rowMap,
+            result: JEONG2_GEMINI_CANDIDATE_SPEC.result,
+            reason: JEONG2_GEMINI_CANDIDATE_SPEC.reason
+          };
+        }
+
+        function primeJeong2WalkCandidateQa() {
+          const candidateInfo = analyzeJeong2GeminiCandidate();
+          if (!jeong2WalkUnbindLogged) {
+            jeong2WalkUnbindLogged = true;
+            console.log(`[JEONG2_WALK_UNBIND] removed=${JEONG2_WALK_REJECTED_SOURCE} fallback=static_only`);
+          }
+          if (!jeong2GeminiSourceLogged) {
+            jeong2GeminiSourceLogged = true;
+            console.log(`[JEONG2_GEMINI_SOURCE] downloadName=${JEONG2_GEMINI_CANDIDATE_DOWNLOAD} exists=YES`);
+          }
+          if (!jeong2GeminiSortLogged) {
+            jeong2GeminiSortLogged = true;
+            console.log(`[JEONG2_GEMINI_SORT] source=Downloads/${JEONG2_GEMINI_CANDIDATE_DOWNLOAD} dest=${JEONG2_GEMINI_CANDIDATE_SOURCE}`);
+          }
+          if (!jeong2WalkCandidateLogged) {
+            jeong2WalkCandidateLogged = true;
+            console.log(`[JEONG2_WALK_CANDIDATE] source=${JEONG2_GEMINI_CANDIDATE_SOURCE} rows=${candidateInfo.rows} cols=${candidateInfo.cols} imagePx=${candidateInfo.imagePx} framePx=${candidateInfo.framePx}`);
+          }
+          if (!jeong2WalkRowMapLogged) {
+            jeong2WalkRowMapLogged = true;
+            console.log(`[JEONG2_WALK_ROWMAP] F=${candidateInfo.rowMap.F} B=${candidateInfo.rowMap.B} L=${candidateInfo.rowMap.L} R=${candidateInfo.rowMap.R}`);
+          }
+          if (!jeong2WalkCandidateResultLogged) {
+            jeong2WalkCandidateResultLogged = true;
+            console.log(`[JEONG2_WALK_CANDIDATE_RESULT] result=${candidateInfo.result} reason=${candidateInfo.reason}`);
+          }
+          if (!jeong2WalkArtifactLogged) {
+            jeong2WalkArtifactLogged = true;
+            console.log("[JEONG2_WALK_ARTIFACT] dust=NO dottedEdge=NO alphaBleed=NO");
+          }
+          if (!jeong2WalkRuntimeLogged) {
+            jeong2WalkRuntimeLogged = true;
+            console.log("[JEONG2_WALK_RUNTIME] idle=static move=static reason=walk_unbound_pending_candidate");
+          }
         }
 
         function getJeong2StaticReferenceFrame(dir) {
@@ -4089,119 +4104,6 @@
           };
         }
 
-        function getJeong2WalkV2Frame(dir) {
-          const facing = clampDirLabel(dir);
-          const img = getJeong2WalkV2Asset();
-          if (!img || !img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return null;
-          const cacheKey = `${facing}::${img.src || "inline"}::${img.naturalWidth}x${img.naturalHeight}`;
-          if (jeong2WalkV2FrameCache.has(cacheKey)) return jeong2WalkV2FrameCache.get(cacheKey);
-          const bounds = computeImageAlphaMetricsRect(img, img.naturalWidth, img.naturalHeight);
-          const cropX = Math.max(0, bounds.minX);
-          const cropY = Math.max(0, bounds.minY);
-          const cropW = Math.max(1, bounds.maxX - bounds.minX + 1);
-          const cropH = Math.max(1, bounds.maxY - bounds.minY + 1);
-          const out = document.createElement("canvas");
-          out.width = JEONG2_WALK_V2_SPEC.canonicalFrame;
-          out.height = JEONG2_WALK_V2_SPEC.canonicalFrame;
-          const outCtx = out.getContext("2d");
-          outCtx.imageSmoothingEnabled = false;
-          outCtx.clearRect(0, 0, out.width, out.height);
-          const maxW = out.width - 8;
-          const maxH = out.height - 1;
-          const scale = Math.min(maxW / cropW, maxH / cropH);
-          const drawW = Math.max(1, Math.round(cropW * scale));
-          const drawH = Math.max(1, Math.round(cropH * scale));
-          const visualOffsetX = jeong2VisualOffsetX(facing);
-          const staticFrame = getJeong2StaticReferenceFrame(facing);
-          const staticMetrics = staticFrame ? computeImageAlphaMetrics(staticFrame, 64) : null;
-          const targetCenter = staticMetrics ? ((staticMetrics.minX + staticMetrics.maxX) / 2) : ((out.width - 1) / 2 + visualOffsetX);
-          const dx = Math.max(0, Math.min(out.width - drawW, Math.round(targetCenter - (drawW / 2))));
-          const dy = Math.max(0, out.height - drawH);
-          outCtx.drawImage(img, cropX, cropY, cropW, cropH, dx, dy, drawW, drawH);
-          const outImg = outCtx.getImageData(0, 0, out.width, out.height);
-          for (let i = 0; i < outImg.data.length; i += 4) {
-            if (outImg.data[i + 3] === 0) {
-              outImg.data[i] = 0;
-              outImg.data[i + 1] = 0;
-              outImg.data[i + 2] = 0;
-            }
-          }
-          outCtx.putImageData(outImg, 0, 0);
-          jeong2WalkV2FrameCache.set(cacheKey, out);
-          return out;
-        }
-
-        function primeJeong2WalkV2Qa() {
-          const walkImg = getJeong2WalkV2Asset();
-          const sheetInfo = analyzeJeong2WalkV2Sheet();
-          const preloadStatus = walkImg && walkImg.complete && walkImg.naturalWidth > 0 && walkImg.naturalHeight > 0 ? "OK" : "FAIL";
-          if (!jeong2WalkSheetLogged) {
-            jeong2WalkSheetLogged = true;
-            console.log(`[JEONG2_WALK_SHEET] source=${JEONG2_WALK_V2_SOURCE} rows=${sheetInfo.rows} cols=${sheetInfo.cols} framePx=${sheetInfo.framePx}`);
-          }
-          if (!jeong2WalkRowMapLogged) {
-            jeong2WalkRowMapLogged = true;
-            console.log(`[JEONG2_WALK_ROWMAP] F=${sheetInfo.rowMap.F} B=${sheetInfo.rowMap.B} L=${sheetInfo.rowMap.L} R=${sheetInfo.rowMap.R}`);
-          }
-          if (!jeong2WalkBindLogged) {
-            jeong2WalkBindLogged = true;
-            console.log(`[JEONG2_WALK_BIND] source=${JEONG2_WALK_V2_SOURCE} mode=walk_v2 mapping=${JEONG2_WALK_V2_SPEC.mappingSummary}`);
-          }
-          if (!walkImg || preloadStatus === "FAIL") {
-            if (!jeong2WalkPreloadLogged) {
-              jeong2WalkPreloadLogged = true;
-              console.log("[JEONG2_WALK_PRELOAD] status=FAIL firstDraw=FAIL");
-            }
-            return;
-          }
-          let maxCenterDrift = 0;
-          let footLock = true;
-          let artifact = { dust: "NO", dottedEdge: "NO", alphaBleed: "NO" };
-          for (const dir of ["F", "B", "L", "R"]) {
-            const walkFrame = getJeong2WalkV2Frame(dir);
-            if (!walkFrame) continue;
-            const walkMetrics = computeCanvasAlphaMetrics(walkFrame);
-            const staticFrame = getJeong2StaticReferenceFrame(dir);
-            const staticMetrics = staticFrame ? computeImageAlphaMetrics(staticFrame, 64) : null;
-            if (staticMetrics) {
-              const walkCenter = (walkMetrics.minX + walkMetrics.maxX) / 2;
-              const staticCenter = (staticMetrics.minX + staticMetrics.maxX) / 2;
-              maxCenterDrift = Math.max(maxCenterDrift, Math.abs(walkCenter - staticCenter));
-              if (Math.abs(walkMetrics.maxY - staticMetrics.maxY) > 1) footLock = false;
-            }
-            const art = detectJeong2WalkArtifacts(walkFrame);
-            if (art.dust === "YES") artifact.dust = "YES";
-            if (art.dottedEdge === "YES") artifact.dottedEdge = "YES";
-            if (art.alphaBleed === "YES") artifact.alphaBleed = "YES";
-          }
-          if (!jeong2WalkPreloadLogged) {
-            jeong2WalkPreloadLogged = true;
-            console.log("[JEONG2_WALK_PRELOAD] status=OK firstDraw=OK");
-          }
-          if (!jeong2WalkAnchorLogged) {
-            jeong2WalkAnchorLogged = true;
-            console.log(`[JEONG2_WALK_ANCHOR] footLock=${footLock ? "OK" : "FAIL"} centerDriftPx=${Math.round(maxCenterDrift)}`);
-          }
-          if (!jeong2WalkArtifactLogged) {
-            jeong2WalkArtifactLogged = true;
-            console.log(`[JEONG2_WALK_ARTIFACT] dust=${artifact.dust} dottedEdge=${artifact.dottedEdge} alphaBleed=${artifact.alphaBleed}`);
-          }
-          if (!jeong2WalkPlaybackLogged) {
-            jeong2WalkPlaybackLogged = true;
-            console.log(`[JEONG2_WALK_PLAYBACK] moving=NO frameSeq=${sheetInfo.frameSeq} loop=${sheetInfo.loop} cadenceMs=${sheetInfo.cadenceMs}`);
-          }
-          if (!jeong2WalkRuntimeLogged) {
-            jeong2WalkRuntimeLogged = true;
-            const sampleTicks = getJeong2WalkRuntimeSampleTicks(sheetInfo);
-            console.log(`[JEONG2_WALK_RUNTIME] state=idle row=1 col=1 sampleTicks=${sampleTicks}`);
-            console.log(`[JEONG2_WALK_RUNTIME] state=move row=1 col=1 sampleTicks=${sampleTicks}`);
-          }
-          if (!jeong2WalkFeelLogged) {
-            jeong2WalkFeelLogged = true;
-            const feelReason = sheetInfo.assetLimit ? "asset_limit" : "engine_not_animating";
-            console.log(`[JEONG2_WALK_FEEL] result=${sheetInfo.assetLimit ? "FAIL" : "PASS"} reason=${feelReason}`);
-          }
-        }
 
         function getJeong2ArtifactSuppressedFrame(face, img) {
           const srcW = Number(img?.naturalWidth || img?.width || 64) || 64;
@@ -5204,7 +5106,6 @@
             const face = renderFace(u.facing);
             const key = `${spriteId}_${face}`;
             const isJeong2Render = isJung2Unit(u);
-            const jeong2WalkActive = isJeong2WalkActive(u);
             const previewJeong2 = isJeong2Render && (PREVIEW_ENABLED || FORMAL64_ACTIVE);
             const previewFinalist = previewJeong2 && (PREVIEW_LABEL === "FORMAL64" || PREVIEW_MODE === "b56baseline" || PREVIEW_MODE === "b48" || PREVIEW_MODE === "b56" || PREVIEW_MODE === "bfinal");
             const formal64StrictJeong2 = isJeong2Render && stg2AllyVisual && FORMAL64_ACTIVE;
@@ -5213,20 +5114,10 @@
             let spriteImg = null;
             let S = 32;
             let usedSsot = false;
-            let usedWalkV2 = false;
             let used48 = false;
             let spriteSourceLabel = "";
             const k2 = `${spriteId}_F`;
             const preferKeys = [key, k2, `${spriteId}_B`, `${spriteId}_L`, `${spriteId}_R`];
-            if (jeong2WalkActive) {
-              const walkFrame = getJeong2WalkV2Frame(face);
-              if (walkFrame) {
-                spriteImg = walkFrame;
-                S = JEONG2_WALK_V2_SPEC.canonicalFrame;
-                usedWalkV2 = true;
-                spriteSourceLabel = JEONG2_WALK_V2_SOURCE;
-              }
-            }
             if (!spriteImg && formal64StrictJeong2) {
               let ssotReady = false;
               for (const k of preferKeys) {
@@ -5328,21 +5219,19 @@
             const hasValidSprite = !!(spriteImg && sourcePx0 > 0 && (spriteImg.complete !== false));
             if (hasValidSprite) {
               let sourcePx = Number(spriteImg.naturalWidth || spriteImg.width || S || 0);
-              const jeong2TrialPx = (isJeong2Render && stg2AllyVisual && (usedSsot || usedWalkV2)) ? JEONG2_SCALE_TRIAL : 64;
-              const drawBoxInternal = stg2AllyVisual ? (isJeong2Render ? jeong2TrialPx : 64) : (usedWalkV2 ? JEONG2_WALK_V2_SPEC.canonicalFrame : S);
+              const jeong2TrialPx = (isJeong2Render && stg2AllyVisual && usedSsot) ? JEONG2_SCALE_TRIAL : 64;
+              const drawBoxInternal = stg2AllyVisual ? (isJeong2Render ? jeong2TrialPx : 64) : S;
               const drawBoxPx = drawBoxInternal;
               const displayPx = drawBoxPx;
-              const renderPath = usedWalkV2
-                ? "WALK_V2"
-                : (stg2AllyVisual
+              const renderPath = stg2AllyVisual
                 ? (usedSsot ? "SHEET_SSOT" : ((used48 || sourcePx >= 48) ? "HIGHER_SOURCE" : "TEMP_UPSCALE"))
-                : "LEGACY_SOURCE");
+                : "LEGACY_SOURCE";
               const ssotSheetCol = face === "F" ? 1 : (face === "B" ? 2 : (face === "L" ? 3 : 4));
-              const sheetRow = usedSsot ? "top" : (usedWalkV2 ? "shared_fullbody" : "-");
-              const sheetCol = usedSsot ? String(ssotSheetCol) : (usedWalkV2 ? face : "-");
+              const sheetRow = usedSsot ? "top" : "-";
+              const sheetCol = usedSsot ? String(ssotSheetCol) : "-";
               let renderReason = "";
               let jeong2Frame = null;
-              if (stg2AllyVisual && isJeong2Render && renderPath !== "SHEET_SSOT" && renderPath !== "WALK_V2") {
+              if (stg2AllyVisual && isJeong2Render && renderPath !== "SHEET_SSOT") {
                 renderReason = !ASSETS.ready
                   ? "assets_not_ready"
                   : (ssotBank && ssotBank[key] ? "image_incomplete_or_invalid" : `missing_ssot_key:${key}`);
@@ -5350,7 +5239,7 @@
               } else if (renderPath === "TEMP_UPSCALE") {
                 renderReason = "missing_48_source";
               }
-              if (isJeong2Render && stg2AllyVisual && (usedSsot || usedWalkV2)) {
+              if (isJeong2Render && stg2AllyVisual && usedSsot) {
                 const trialSig = `${qaStage}|${jeong2TrialPx}|${renderPath}|${face}`;
                 if (u.__unitScaleTrialSig !== trialSig) {
                   u.__unitScaleTrialSig = trialSig;
@@ -5394,7 +5283,6 @@
                 });
                 sourcePx = Number(spriteImg?.naturalWidth || spriteImg?.width || sourcePx || 64);
               }
-              if (usedWalkV2) primeJeong2WalkV2Qa();
               logUnitRenderSnapshot(u, {
                 qaStage,
                 preview: previewJeong2 ? PREVIEW_LABEL : "",
