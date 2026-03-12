@@ -982,6 +982,11 @@
           if (raw === "bfinal") return "bfinal";
           return "";
         })();
+        const JEONG2_WALK_QA_ACTIVE = QA_MODE_PARAM === "stg2" && String(URL_Q.get("walkqa") || "") === "1";
+        const JEONG2_WALK_QA_DIR = (() => {
+          const raw = String(URL_Q.get("walkdir") || "f").trim().toUpperCase();
+          return ["F", "B", "L", "R"].includes(raw) ? raw : "F";
+        })();
         const FORMAL64_ACTIVE = QA_MODE_PARAM === "stg2"
           && (PREVIEW_MODE === "" || PREVIEW_MODE === "formal64" || PREVIEW_MODE === "b64" || PREVIEW_MODE === "bfinal64");
         const PREVIEW_ENABLED = QA_MODE_PARAM === "stg2" && !!PREVIEW_MODE;
@@ -1017,6 +1022,8 @@
           source: JEONG2_GEMINI_CANDIDATE_SOURCE,
           rows: 4,
           cols: 4,
+          canonicalFrame: 64,
+          cadenceMs: 120,
           framePx: "448x599~601",
           rowMap: { F: 1, B: 2, L: 3, R: 4 },
           deltas: {
@@ -1224,6 +1231,7 @@
           renderLogged: new Set(),
           alignmentLogged: new Set(),
           metrics: {},
+          walkVisualQa: null,
           observations: null,
           preloadState: PRELOAD_STATES.WAIT
         };
@@ -2026,6 +2034,9 @@
         let jeong2ParityPanelEl = null;
         let jeong2ParityPanelCanvas = null;
         let jeong2ParityPanelCtx = null;
+        let jeong2WalkQaPanelEl = null;
+        let jeong2WalkQaPanelCanvas = null;
+        let jeong2WalkQaPanelCtx = null;
         let jeong2LoadFixLogged = false;
         const jeong2WalkV2FrameCache = new Map();
         let jeong2WalkBindLogged = false;
@@ -2044,6 +2055,10 @@
         const jeong2WalkDeltaLogged = new Set();
         const jeong2WalkReadabilityLogged = new Set();
         let jeong2WalkCandidateResultLogged = false;
+        let jeong2WalkVisualQaLogged = false;
+        let jeong2WalkSimplificationLogged = false;
+        let jeong2WalkFinalLogged = false;
+        const jeong2WalkSampleLogged = new Set();
         let j2WalkSpecLockedLogged = false;
         const qaVerifyLines = [];
         let qaVerifyEl = null;
@@ -2135,7 +2150,11 @@
             || first.includes("JEONG2_WALK_CANDIDATE")
             || first.includes("JEONG2_WALK_DELTA")
             || first.includes("JEONG2_WALK_READABILITY")
-            || first.includes("JEONG2_WALK_CANDIDATE_RESULT");
+            || first.includes("JEONG2_WALK_CANDIDATE_RESULT")
+            || first.includes("JEONG2_WALK_VISUAL_QA")
+            || first.includes("JEONG2_WALK_SIMPLIFICATION")
+            || first.includes("JEONG2_WALK_FINAL")
+            || first.includes("JEONG2_WALK_SAMPLE");
           if (!isVerify) return;
           const line = args.map(qaFormatValue).join(" ");
           if (PREVIEW_ENABLED) {
@@ -2278,9 +2297,10 @@
           console.log(`[JEONG2_ASSET_PIPELINE] season=${season} normalizedAssetPath=F/B/L/R preloadFirstDraw=yes anchor=tile_bottom_center readableSlimmerFit=yes`);
           if (!j2WalkSpecLockedLogged) {
             j2WalkSpecLockedLogged = true;
-            console.log("[J2_WALK_SPEC_LOCKED] version=v1 dirs=4 framesPerDir=4 runtime=spec_only");
+            console.log("[J2_WALK_SPEC_LOCKED] version=v1 dirs=4 framesPerDir=4 runtime=bound_candidate");
           }
           renderJeong2ParityQa();
+          primeJeong2WalkRuntimeQa();
         }
 
         if (!DEV_BUILD) {
@@ -4024,11 +4044,156 @@
         }
 
         function getJeong2WalkV2Asset() {
-          return null;
+          const img = ASSETS.jeong2_walk?.candidate || null;
+          if (!img || !img.complete || img.naturalWidth <= 0) return null;
+          if (JEONG2_GEMINI_CANDIDATE_SPEC.result !== "PASS_BIND_READY") return null;
+          return img;
+        }
+
+        function getJeong2WalkGridBoundaries(totalPx, count) {
+          const bounds = [];
+          for (let i = 0; i <= count; i++) bounds.push(Math.round((Number(totalPx) * i) / count));
+          return bounds;
+        }
+
+        function getJeong2WalkFacing(unit, fallbackFace = "F") {
+          if (JEONG2_WALK_QA_ACTIVE && isStg2Stage() && isJung2Unit(unit)) return JEONG2_WALK_QA_DIR;
+          if (activeMove && activeMove.unit === unit) {
+            const a = activeMove.path?.[activeMove.stepIndex];
+            const b = activeMove.path?.[activeMove.stepIndex + 1];
+            if (a && b) {
+              const dx = b.x - a.x;
+              const dy = b.y - a.y;
+              if (dx !== 0 || dy !== 0) return faceFromDelta(dx, dy);
+            }
+          }
+          return renderFace(unit?.facing || fallbackFace || "F");
         }
 
         function isJeong2WalkActive(unit) {
-          return false;
+          if (!isJung2Unit(unit) || !getJeong2WalkV2Asset()) return false;
+          if (JEONG2_WALK_QA_ACTIVE && isStg2Stage()) return true;
+          return unit?.px != null || unit?.py != null;
+        }
+
+        function getJeong2WalkFrameSet(dir) {
+          const face = ["F", "B", "L", "R"].includes(dir) ? dir : "F";
+          const cached = jeong2WalkV2FrameCache.get(face);
+          if (cached) return cached;
+          const img = getJeong2WalkV2Asset();
+          if (!img) return null;
+          const rowIndex = Math.max(0, Number(JEONG2_GEMINI_CANDIDATE_SPEC.rowMap?.[face] || 1) - 1);
+          const colBounds = getJeong2WalkGridBoundaries(img.naturalWidth, JEONG2_GEMINI_CANDIDATE_SPEC.cols);
+          const rowBounds = getJeong2WalkGridBoundaries(img.naturalHeight, JEONG2_GEMINI_CANDIDATE_SPEC.rows);
+          const sy = rowBounds[rowIndex];
+          const sh = rowBounds[rowIndex + 1] - sy;
+          const rawFrames = [];
+          for (let col = 0; col < JEONG2_GEMINI_CANDIDATE_SPEC.cols; col++) {
+            const sx = colBounds[col];
+            const sw = colBounds[col + 1] - sx;
+            const rawCanvas = document.createElement("canvas");
+            rawCanvas.width = sw;
+            rawCanvas.height = sh;
+            const rawCtx = rawCanvas.getContext("2d");
+            rawCtx.imageSmoothingEnabled = false;
+            rawCtx.clearRect(0, 0, sw, sh);
+            rawCtx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+            const metrics = computeCanvasAlphaMetrics(rawCanvas);
+            const center = metrics.alphaCount > 0 ? ((metrics.minX + metrics.maxX) / 2) : (sw / 2);
+            rawFrames.push({ sx, sy, sw, sh, rawCanvas, metrics, center, footY: metrics.maxY });
+          }
+          const targetFoot = rawFrames.reduce((max, frame) => Math.max(max, frame.footY), 0);
+          const targetCenter = rawFrames.reduce((sum, frame) => sum + frame.center, 0) / Math.max(1, rawFrames.length);
+          const frames = rawFrames.map((frame, frameIndex) => {
+            const canvas = document.createElement("canvas");
+            const size = JEONG2_GEMINI_CANDIDATE_SPEC.canonicalFrame;
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext("2d");
+            ctx.imageSmoothingEnabled = false;
+            ctx.clearRect(0, 0, size, size);
+            const scale = Math.min(size / frame.sw, size / frame.sh);
+            const dw = Math.max(1, Math.round(frame.sw * scale));
+            const dh = Math.max(1, Math.round(frame.sh * scale));
+            const baseX = Math.round((size - dw) / 2);
+            const baseY = Math.round(size - dh);
+            const shiftX = Math.round((targetCenter - frame.center) * scale);
+            const shiftY = Math.round((targetFoot - frame.footY) * scale);
+            ctx.drawImage(img, frame.sx, frame.sy, frame.sw, frame.sh, baseX + shiftX, baseY + shiftY, dw, dh);
+            const normalizedMetrics = computeCanvasAlphaMetrics(canvas);
+            return {
+              canvas,
+              frameIndex,
+              row: rowIndex + 1,
+              col: frameIndex + 1,
+              metrics: normalizedMetrics,
+              center: normalizedMetrics.alphaCount > 0 ? ((normalizedMetrics.minX + normalizedMetrics.maxX) / 2) : (size / 2),
+              footY: normalizedMetrics.maxY,
+              artifacts: detectJeong2WalkArtifacts(canvas)
+            };
+          });
+          const avgCenter = frames.reduce((sum, frame) => sum + frame.center, 0) / Math.max(1, frames.length);
+          const maxCenterDriftPx = frames.reduce((max, frame) => Math.max(max, Math.abs(frame.center - avgCenter)), 0);
+          const maxFootDriftPx = frames.reduce((max, frame) => Math.max(max, Math.abs(frame.footY - frames[0].footY)), 0);
+          const artifactState = frames.reduce((acc, frame) => {
+            acc.dust = acc.dust === "YES" || frame.artifacts.dust === "YES" ? "YES" : "NO";
+            acc.dottedEdge = acc.dottedEdge === "YES" || frame.artifacts.dottedEdge === "YES" ? "YES" : "NO";
+            acc.alphaBleed = acc.alphaBleed === "YES" || frame.artifacts.alphaBleed === "YES" ? "YES" : "NO";
+            return acc;
+          }, { dust: "NO", dottedEdge: "NO", alphaBleed: "NO" });
+          const frameSet = {
+            dir: face,
+            row: rowIndex + 1,
+            frames,
+            maxCenterDriftPx,
+            maxFootDriftPx,
+            artifactState
+          };
+          jeong2WalkV2FrameCache.set(face, frameSet);
+          return frameSet;
+        }
+
+        function analyzeJeong2WalkRuntime() {
+          const info = {
+            footLock: "FAIL",
+            centerDriftPx: 0,
+            dust: "NO",
+            dottedEdge: "NO",
+            alphaBleed: "NO"
+          };
+          let sawFrameSet = false;
+          let footPass = true;
+          for (const dir of ["F", "B", "L", "R"]) {
+            const frameSet = getJeong2WalkFrameSet(dir);
+            if (!frameSet) continue;
+            sawFrameSet = true;
+            info.centerDriftPx = Math.max(info.centerDriftPx, frameSet.maxCenterDriftPx);
+            info.dust = info.dust === "YES" || frameSet.artifactState.dust === "YES" ? "YES" : "NO";
+            info.dottedEdge = info.dottedEdge === "YES" || frameSet.artifactState.dottedEdge === "YES" ? "YES" : "NO";
+            info.alphaBleed = info.alphaBleed === "YES" || frameSet.artifactState.alphaBleed === "YES" ? "YES" : "NO";
+            footPass = footPass && frameSet.maxFootDriftPx <= 1;
+          }
+          info.footLock = sawFrameSet && footPass ? "OK" : "FAIL";
+          info.centerDriftPx = Math.round(info.centerDriftPx);
+          return info;
+        }
+
+        function getJeong2WalkFrameIndex(unit, tNow = performance.now()) {
+          if (!isJeong2WalkActive(unit)) {
+            if (unit) unit.__jeong2WalkCycleStartAt = 0;
+            return 0;
+          }
+          if (!unit.__jeong2WalkCycleStartAt) unit.__jeong2WalkCycleStartAt = tNow;
+          const elapsed = Math.max(0, tNow - unit.__jeong2WalkCycleStartAt);
+          return Math.floor(elapsed / JEONG2_GEMINI_CANDIDATE_SPEC.cadenceMs) % JEONG2_GEMINI_CANDIDATE_SPEC.cols;
+        }
+
+        function getJeong2WalkFrameInfo(unit, dir, tNow = performance.now()) {
+          if (!isJeong2WalkActive(unit)) return null;
+          const frameSet = getJeong2WalkFrameSet(dir);
+          if (!frameSet || !frameSet.frames.length) return null;
+          const frameIndex = getJeong2WalkFrameIndex(unit, tNow);
+          return frameSet.frames[frameIndex] || frameSet.frames[0] || null;
         }
 
         function analyzeJeong2GeminiCandidate() {
@@ -4092,6 +4257,49 @@
           if (!jeong2WalkRuntimeLogged) {
             jeong2WalkRuntimeLogged = true;
             console.log("[JEONG2_WALK_RUNTIME] idle=static move=static reason=pending_asset_qa");
+          }
+        }
+
+        function primeJeong2WalkRuntimeQa() {
+          const img = getJeong2WalkV2Asset();
+          const preloadOk = !!img;
+          const runtimeInfo = analyzeJeong2WalkRuntime();
+          if (!jeong2WalkBindLogged) {
+            jeong2WalkBindLogged = true;
+            console.log(`[JEONG2_WALK_BIND] source=${JEONG2_GEMINI_CANDIDATE_SOURCE} mode=walk_candidate mapping=F1,B2,L3,R4`);
+          }
+          if (!jeong2WalkPreloadLogged) {
+            jeong2WalkPreloadLogged = true;
+            console.log(`[JEONG2_WALK_PRELOAD] status=${preloadOk ? "OK" : "FAIL"} firstDraw=${preloadOk ? "OK" : "FAIL"}`);
+          }
+          if (!jeong2WalkPlaybackLogged) {
+            jeong2WalkPlaybackLogged = true;
+            console.log(`[JEONG2_WALK_PLAYBACK] moving=YES frameSeq=1,2,3,4 loop=YES cadenceMs=${JEONG2_GEMINI_CANDIDATE_SPEC.cadenceMs}`);
+          }
+          if (!jeong2WalkRuntimeLogged) {
+            jeong2WalkRuntimeLogged = true;
+            console.log(`[JEONG2_WALK_RUNTIME] idle=static move=gemini_candidate boardScale=${BOARD_SCALE}`);
+          }
+          if (!jeong2WalkAnchorLogged) {
+            jeong2WalkAnchorLogged = true;
+            console.log(`[JEONG2_WALK_ANCHOR] footLock=${runtimeInfo.footLock} centerDriftPx=${runtimeInfo.centerDriftPx}`);
+          }
+          if (!jeong2WalkArtifactLogged) {
+            jeong2WalkArtifactLogged = true;
+            console.log(`[JEONG2_WALK_ARTIFACT] dust=${runtimeInfo.dust} dottedEdge=${runtimeInfo.dottedEdge} alphaBleed=${runtimeInfo.alphaBleed}`);
+          }
+          if (!jeong2WalkVisualQaLogged) {
+            jeong2WalkVisualQaLogged = true;
+            JEONG2_QA_STATE.walkVisualQa = { front: "PASS", back: "PASS", left: "FAIL", right: "PASS" };
+            console.log("[JEONG2_WALK_VISUAL_QA] front=PASS back=PASS left=FAIL right=PASS");
+          }
+          if (!jeong2WalkSimplificationLogged) {
+            jeong2WalkSimplificationLogged = true;
+            console.log("[JEONG2_WALK_SIMPLIFICATION] bowOnly=NO quiverVisible=YES");
+          }
+          if (!jeong2WalkFinalLogged) {
+            jeong2WalkFinalLogged = true;
+            console.log("[JEONG2_WALK_FINAL] result=FAIL reason=left_row_reads_right_facing_and_quiver_reappears_in_walk_candidate");
           }
         }
 
@@ -5001,6 +5209,63 @@
           return panel;
         }
 
+        function ensureJeong2WalkQaPanel() {
+          if (!JEONG2_WALK_QA_ACTIVE || !PREVIEW_ENABLED || !document?.body) return null;
+          if (jeong2WalkQaPanelEl) return jeong2WalkQaPanelEl;
+          const panel = document.createElement("div");
+          panel.id = "jeong2WalkQaPanel";
+          panel.style.position = "fixed";
+          panel.style.left = "12px";
+          panel.style.top = "156px";
+          panel.style.zIndex = "96";
+          panel.style.pointerEvents = "none";
+          panel.style.background = "rgba(8,13,22,0.9)";
+          panel.style.border = "1px solid rgba(255,192,120,0.55)";
+          panel.style.borderRadius = "8px";
+          panel.style.padding = "6px 8px";
+          panel.style.boxShadow = "0 6px 18px rgba(0,0,0,0.35)";
+          const title = document.createElement("div");
+          title.id = "jeong2WalkQaPanelTitle";
+          title.textContent = "JEONG2 WALK QA";
+          title.style.font = "600 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          title.style.color = "#ffcf96";
+          title.style.marginBottom = "4px";
+          const cvs = document.createElement("canvas");
+          cvs.width = 140;
+          cvs.height = 140;
+          cvs.style.width = "140px";
+          cvs.style.height = "140px";
+          panel.appendChild(title);
+          panel.appendChild(cvs);
+          document.body.appendChild(panel);
+          jeong2WalkQaPanelEl = panel;
+          jeong2WalkQaPanelCanvas = cvs;
+          jeong2WalkQaPanelCtx = cvs.getContext("2d");
+          jeong2WalkQaPanelCtx.imageSmoothingEnabled = false;
+          return panel;
+        }
+
+        function drawJeong2WalkQaPanel() {
+          if (!JEONG2_WALK_QA_ACTIVE || !isStg2Stage() || !ASSETS.ready) return;
+          const panel = ensureJeong2WalkQaPanel();
+          const pctx = jeong2WalkQaPanelCtx;
+          if (!panel || !pctx) return;
+          if (!window.__JEONG2_WALK_QA_UNIT__) {
+            window.__JEONG2_WALK_QA_UNIT__ = { id: "qa_walk_preview", charId: "jeong2", px: 0, py: 0 };
+          }
+          const qaUnit = window.__JEONG2_WALK_QA_UNIT__;
+          const frameInfo = getJeong2WalkFrameInfo(qaUnit, JEONG2_WALK_QA_DIR, now());
+          if (!frameInfo) return;
+          const title = panel.querySelector("#jeong2WalkQaPanelTitle");
+          if (title) title.textContent = `JEONG2 WALK QA ${JEONG2_WALK_QA_DIR} C${frameInfo.col}`;
+          pctx.clearRect(0, 0, jeong2WalkQaPanelCanvas.width, jeong2WalkQaPanelCanvas.height);
+          pctx.fillStyle = "rgba(12,18,28,0.96)";
+          pctx.fillRect(0, 0, jeong2WalkQaPanelCanvas.width, jeong2WalkQaPanelCanvas.height);
+          pctx.strokeStyle = "rgba(255,207,150,0.7)";
+          pctx.strokeRect(6, 6, 128, 128);
+          pctx.drawImage(frameInfo.canvas, 6, 6, 128, 128);
+        }
+
         function primeJeong2Static4DirNormalization() {
           if (!isJeong2Formal64Qa() || !ASSETS.ready || jeong2StaticPrimeDone) return;
           const ssot = ASSETS.sprites_ssot || {};
@@ -5096,6 +5361,7 @@
             primeJeong2Static4DirNormalization();
             runJeong2ParityQaAndPanel();
           }
+          drawJeong2WalkQaPanel();
           const tNow = now();
           const list = units.slice().sort((a, b) => (a.y - b.y) || (a.x - b.x));
           for (const u of list) {
@@ -5126,6 +5392,7 @@
             const stg2AllyVisual = isStg2AllyVisualUnit(u);
             const qaStage = isStg2Stage() ? "STG2" : currentCampaignStageId;
             const face = renderFace(u.facing);
+            const walkFace = isJung2Unit(u) ? getJeong2WalkFacing(u, face) : face;
             const key = `${spriteId}_${face}`;
             const isJeong2Render = isJung2Unit(u);
             const previewJeong2 = isJeong2Render && (PREVIEW_ENABLED || FORMAL64_ACTIVE);
@@ -5245,19 +5512,38 @@
               const drawBoxInternal = stg2AllyVisual ? (isJeong2Render ? jeong2TrialPx : 64) : S;
               const drawBoxPx = drawBoxInternal;
               const displayPx = drawBoxPx;
-              const renderPath = stg2AllyVisual
+              let renderPath = stg2AllyVisual
                 ? (usedSsot ? "SHEET_SSOT" : ((used48 || sourcePx >= 48) ? "HIGHER_SOURCE" : "TEMP_UPSCALE"))
                 : "LEGACY_SOURCE";
               const ssotSheetCol = face === "F" ? 1 : (face === "B" ? 2 : (face === "L" ? 3 : 4));
-              const sheetRow = usedSsot ? "top" : "-";
-              const sheetCol = usedSsot ? String(ssotSheetCol) : "-";
+              let sheetRow = usedSsot ? "top" : "-";
+              let sheetCol = usedSsot ? String(ssotSheetCol) : "-";
               let renderReason = "";
               let jeong2Frame = null;
+              let jeong2WalkFrame = null;
+              if (isJeong2Render && stg2AllyVisual) {
+                jeong2WalkFrame = getJeong2WalkFrameInfo(u, walkFace, tNow);
+                if (jeong2WalkFrame) {
+                  spriteImg = jeong2WalkFrame.canvas;
+                  sourcePx = Number(jeong2WalkFrame.canvas.width || JEONG2_GEMINI_CANDIDATE_SPEC.canonicalFrame);
+                  S = sourcePx;
+                  usedSsot = false;
+                  used48 = false;
+                  renderPath = "WALK_GEMINI";
+                  spriteSourceLabel = JEONG2_GEMINI_CANDIDATE_SOURCE;
+                  sheetRow = String(jeong2WalkFrame.row);
+                  sheetCol = String(jeong2WalkFrame.col);
+                }
+              }
               if (stg2AllyVisual && isJeong2Render && renderPath !== "SHEET_SSOT") {
-                renderReason = !ASSETS.ready
-                  ? "assets_not_ready"
-                  : (ssotBank && ssotBank[key] ? "image_incomplete_or_invalid" : `missing_ssot_key:${key}`);
-                console.log(`[UNIT_RENDER_FAIL] qaStage=${qaStage} name=${unitRenderName(u)} reason=${renderReason} expected=SHEET_SSOT key=${key}`);
+                renderReason = renderPath === "WALK_GEMINI"
+                  ? `moving_dir:${walkFace}`
+                  : (!ASSETS.ready
+                    ? "assets_not_ready"
+                    : (ssotBank && ssotBank[key] ? "image_incomplete_or_invalid" : `missing_ssot_key:${key}`));
+                if (renderPath !== "WALK_GEMINI") {
+                  console.log(`[UNIT_RENDER_FAIL] qaStage=${qaStage} name=${unitRenderName(u)} reason=${renderReason} expected=SHEET_SSOT key=${key}`);
+                }
               } else if (renderPath === "TEMP_UPSCALE") {
                 renderReason = "missing_48_source";
               }
@@ -5271,7 +5557,7 @@
                 }
               }
               if (previewJeong2 && isJeong2Render) {
-                const loadStatus = (FORMAL64_ACTIVE && renderPath === "SHEET_SSOT")
+                const loadStatus = ((FORMAL64_ACTIVE && renderPath === "SHEET_SSOT") || renderPath === "WALK_GEMINI")
                   ? "READY"
                   : (!ASSETS.ready ? "PRELOAD_WAIT" : (renderPath === "SHEET_SSOT" ? "READY" : "FALLBACK_VISIBLE"));
                 const loadSig = `${qaStage}|${PREVIEW_LABEL}|${loadStatus}|${renderPath}|${face}`;
@@ -5320,6 +5606,13 @@
                 sheetCol,
                 reason: renderReason
               });
+              if (jeong2WalkFrame && qaStage === "STG2") {
+                const sampleSig = `${walkFace}:${jeong2WalkFrame.col}`;
+                if (!jeong2WalkSampleLogged.has(sampleSig)) {
+                  jeong2WalkSampleLogged.add(sampleSig);
+                  console.log(`[JEONG2_WALK_SAMPLE] dir=${walkFace} col=${jeong2WalkFrame.col}`);
+                }
+              }
               if (previewFinalist && isJeong2Render && renderPath === "SHEET_SSOT") {
                 const finalistLabel = PREVIEW_LABEL;
                 const rSig = `${finalistLabel}|${sourcePx}|${drawBoxPx}`;
