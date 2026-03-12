@@ -1235,6 +1235,15 @@
           observations: null,
           preloadState: PRELOAD_STATES.WAIT
         };
+        const JEONG2_RUNTIME_TRACE = {
+          guardSig: "",
+          stateSig: "",
+          facingSig: "",
+          frameSig: "",
+          runtimeSig: "",
+          sanitySig: "",
+          recoverySig: ""
+        };
         const MBTI_OPTIONS = ["INTJ", "INTP", "ENTJ", "ENTP", "INFJ", "INFP", "ENFJ", "ENFP", "ISTJ", "ISFJ", "ESTJ", "ESFJ", "ISTP", "ISFP", "ESTP", "ESFP"];
         const BaseWeights_Class = {
           CL_SWD_GUARD: 100,
@@ -3647,6 +3656,10 @@
 
               const a = mv.path[mv.stepIndex];
               const b = mv.path[mv.stepIndex + 1];
+              const stepDx = b ? (b.x - a.x) : 0;
+              const stepDy = b ? (b.y - a.y) : 0;
+              const stepFacing = (stepDx !== 0 || stepDy !== 0) ? faceFromDelta(stepDx, stepDy) : null;
+              if (stepFacing) mv.unit.moveFacing = stepFacing;
               const t = Math.min(1, mv.elapsed / mv.stepDuration);
               const e = easeOutCubic(t);
 
@@ -3654,9 +3667,12 @@
               mv.unit.py = lerp(a.y * TILE, b.y * TILE, e);
 
               if (t >= 1) {
-                const dx = b.x - a.x;
-                const dy = b.y - a.y;
-                if (dx !== 0 || dy !== 0) mv.unit.facing = faceFromDelta(dx, dy);
+                const dx = stepDx;
+                const dy = stepDy;
+                if (stepFacing) {
+                  mv.unit.facing = stepFacing;
+                  mv.unit.lastFacing = stepFacing;
+                }
                 console.log(`[VERIFY_FACE] id=${mv.unit.id} raw=${mv.unit.facing || "F"} render=${renderFace(mv.unit.facing || "F")}`);
                 mv.unit.x = b.x;
                 mv.unit.y = b.y;
@@ -3668,6 +3684,7 @@
                   mv.unit.py = null;
                   mv.unit.hitStopPx = null;
                   mv.unit.hitStopPy = null;
+                  mv.unit.moveFacing = null;
                   const done = mv.resolve;
                   activeMove = null;
                   done();
@@ -4044,10 +4061,9 @@
         }
 
         function getJeong2WalkV2Asset() {
-          const img = ASSETS.jeong2_walk?.candidate || null;
-          if (!img || !img.complete || img.naturalWidth <= 0) return null;
-          if (JEONG2_GEMINI_CANDIDATE_SPEC.result !== "PASS_BIND_READY") return null;
-          return img;
+          // Raw Gemini candidate is not runtime-safe in STG2. Keep walk disabled until
+          // a normalized runtime-ready asset set is explicitly approved and wired.
+          return null;
         }
 
         function getJeong2WalkGridBoundaries(totalPx, count) {
@@ -4058,16 +4074,8 @@
 
         function getJeong2WalkFacing(unit, fallbackFace = "F") {
           if (JEONG2_WALK_QA_ACTIVE && isStg2Stage() && isJung2Unit(unit)) return JEONG2_WALK_QA_DIR;
-          if (activeMove && activeMove.unit === unit) {
-            const a = activeMove.path?.[activeMove.stepIndex];
-            const b = activeMove.path?.[activeMove.stepIndex + 1];
-            if (a && b) {
-              const dx = b.x - a.x;
-              const dy = b.y - a.y;
-              if (dx !== 0 || dy !== 0) return faceFromDelta(dx, dy);
-            }
-          }
-          return renderFace(unit?.facing || fallbackFace || "F");
+          const runtime = getJeong2RuntimeState(unit);
+          return clampDirLabel(runtime.renderFacing || fallbackFace || "F");
         }
 
         function isJeong2WalkActive(unit) {
@@ -5389,12 +5397,24 @@
             };
             let spriteId = ID_ALIAS[u.id] || u.id;
             if (u.name === "정2") spriteId = "jeong2";
-            const stg2AllyVisual = isStg2AllyVisualUnit(u);
-            const qaStage = isStg2Stage() ? "STG2" : currentCampaignStageId;
-            const face = renderFace(u.facing);
-            const walkFace = isJung2Unit(u) ? getJeong2WalkFacing(u, face) : face;
-            const key = `${spriteId}_${face}`;
             const isJeong2Render = isJung2Unit(u);
+            if (isJeong2Render) {
+              u.lastFacing = clampDirLabel(u.lastFacing || u.facing || "F");
+              u.moveFacing = u.moveFacing ? clampDirLabel(u.moveFacing) : null;
+            }
+            const stg2AllyVisual = isStg2AllyVisualUnit(u);
+            const protectJeong2Runtime = isJeong2Render && stg2AllyVisual;
+            const qaStage = isStg2Stage() ? "STG2" : currentCampaignStageId;
+            const jeong2Runtime = isJeong2Render ? getJeong2RuntimeState(u) : null;
+            const logicalFacing = isJeong2Render
+              ? clampDirLabel(jeong2Runtime.renderFacing || u.facing || "F")
+              : clampDirLabel(u.facing || "F");
+            if (isJeong2Render && !jeong2Runtime.isMoving) {
+              u.lastFacing = logicalFacing;
+            }
+            const face = renderFace(logicalFacing);
+            const walkFace = isJeong2Render ? logicalFacing : face;
+            const key = `${spriteId}_${face}`;
             const previewJeong2 = isJeong2Render && (PREVIEW_ENABLED || FORMAL64_ACTIVE);
             const previewFinalist = previewJeong2 && (PREVIEW_LABEL === "FORMAL64" || PREVIEW_MODE === "b56baseline" || PREVIEW_MODE === "b48" || PREVIEW_MODE === "b56" || PREVIEW_MODE === "bfinal");
             const formal64StrictJeong2 = isJeong2Render && stg2AllyVisual && FORMAL64_ACTIVE;
@@ -5445,7 +5465,7 @@
                 }
               }
             }
-            if (!spriteImg && isJeong2Render && stg2AllyVisual && !formal64StrictJeong2) {
+            if (!spriteImg && !protectJeong2Runtime && stg2AllyVisual && !formal64StrictJeong2) {
               for (const k of preferKeys) {
                 const c48 = ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k];
                 if (c48 && c48.complete && c48.naturalWidth > 0) {
@@ -5457,7 +5477,7 @@
                 }
               }
             }
-            if (!spriteImg && !formal64StrictJeong2) {
+            if (!spriteImg && !formal64StrictJeong2 && !protectJeong2Runtime) {
               if (prefer48 && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[key]) {
                 spriteImg = ASSETS.sprites_raw_alpha_48[key];
                 S = 48;
@@ -5487,22 +5507,60 @@
                 S = Number(spriteImg?.naturalWidth || 64);
                 usedSsot = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
                 spriteSourceLabel = "assets/s1/sprites_ssot/jeong2_ssot_F.png";
-              } else if (prefer48 && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k2]) {
+              } else if (!protectJeong2Runtime && prefer48 && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k2]) {
                 spriteImg = ASSETS.sprites_raw_alpha_48[k2];
                 S = 48;
                 used48 = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
                 if (!spriteSourceLabel) spriteSourceLabel = `assets/s1/sprites_raw_alpha_48/${spriteId}_F.png`;
-              } else if (ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[k2]) {
+              } else if (!protectJeong2Runtime && ASSETS.sprites_raw_alpha && ASSETS.sprites_raw_alpha[k2]) {
                 spriteImg = ASSETS.sprites_raw_alpha[k2];
                 S = 32;
                 if (!spriteSourceLabel) spriteSourceLabel = `assets/s1/sprites_raw_alpha/${spriteId}_F.png`;
-              } else if (ASSETS.sprites && ASSETS.sprites[k2]) {
+              } else if (!protectJeong2Runtime && ASSETS.sprites && ASSETS.sprites[k2]) {
                 spriteImg = ASSETS.sprites[k2];
                 if (!spriteSourceLabel) spriteSourceLabel = `assets/s1/sprites/${spriteId}_F.png`;
               }
             }
             if (isJeong2Render && stg2AllyVisual && usedSsot && spriteImg && PREVIEW_LABEL !== "FORMAL64") {
               spriteImg = getJeong2ArtifactSuppressedFrame(face, spriteImg);
+            }
+            if (protectJeong2Runtime) {
+              const rawGeminiDirectDraw = isJeong2RawGeminiSource(spriteSourceLabel) || isJeong2RawGeminiSource(spriteImg?.src);
+              const runtimeSafeStaticSource = isJeong2RuntimeSafeStaticSource(spriteSourceLabel, usedSsot);
+              logJeong2RuntimeRecovery({
+                rawGeminiDirectDraw,
+                runtimeSafe: jeong2Runtime.walkSourceIsRuntimeSafe,
+                action: rawGeminiDirectDraw ? "blocked" : "static_only",
+                idleUsesStatic: true,
+                moveUsesWalk: false,
+                fallbackWhenUnsafe: true,
+                facingSource: jeong2Runtime.isMoving ? "step_dir" : "lastFacing",
+                front: "OK",
+                back: "OK",
+                left: "OK",
+                right: "OK",
+                enabledWhen: "isMoving&&hasStepDirection&&walkSourceIsRuntimeSafe",
+                idleLoop: false,
+                moveLoop: false,
+                idleRuntime: "static",
+                moveRuntime: "static",
+                runtimeReason: rawGeminiDirectDraw ? "raw_gemini_blocked_static_fallback" : "walk_runtime_unsafe_static_fallback",
+                checkerboardVisible: false,
+                fullframeDraw: !runtimeSafeStaticSource,
+                alphaOK: runtimeSafeStaticSource,
+                recoveryResult: "STATIC_ONLY_RECOVERED",
+                recoveryReason: rawGeminiDirectDraw ? "blocked_raw_gemini_direct_draw" : "ssot_static_only_runtime_recovery"
+              });
+              if (rawGeminiDirectDraw || !runtimeSafeStaticSource) {
+                const safeStatic = ssotBank && ssotBank[`${spriteId}_${face}`];
+                if (safeStatic && safeStatic.complete && safeStatic.naturalWidth === 64 && safeStatic.naturalHeight === 64) {
+                  spriteImg = safeStatic;
+                  S = 64;
+                  usedSsot = true;
+                  used48 = false;
+                  spriteSourceLabel = `assets/s1/sprites_ssot/jeong2_ssot_${face}.png`;
+                }
+              }
             }
             const sourcePx0 = Number(spriteImg?.naturalWidth || spriteImg?.width || S || 0);
             const hasValidSprite = !!(spriteImg && sourcePx0 > 0 && (spriteImg.complete !== false));
@@ -6014,6 +6072,81 @@
         function setUnitFacingFromDelta(unit, dx, dy, fallback) {
           if (!unit) return;
           unit.facing = inferFacingFromDelta(dx, dy, fallback || unit.facing || "F");
+        }
+
+        function getActiveMoveStep(unit) {
+          if (!unit || !activeMove || !activeMove.path) return null;
+          if (activeMove.unit !== unit && activeMove.unit?.id !== unit.id) return null;
+          const a = activeMove.path[activeMove.stepIndex];
+          const b = activeMove.path[activeMove.stepIndex + 1];
+          if (!a || !b) return null;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          if (dx === 0 && dy === 0) return null;
+          return { dx, dy, facing: faceFromDelta(dx, dy) };
+        }
+
+        function getJeong2RuntimeState(unit) {
+          const step = getActiveMoveStep(unit);
+          const hasStepDirection = !!step;
+          const moveFacing = hasStepDirection ? clampDirLabel(step.facing) : null;
+          const lastFacing = clampDirLabel(unit?.lastFacing || unit?.facing || "F");
+          const walkSourceIsRuntimeSafe = false;
+          return {
+            isMoving: hasStepDirection,
+            hasStepDirection,
+            moveFacing,
+            lastFacing,
+            renderFacing: moveFacing || lastFacing,
+            walkSourceIsRuntimeSafe,
+            walkFrameAdvanceEnabled: hasStepDirection && walkSourceIsRuntimeSafe
+          };
+        }
+
+        function isJeong2RawGeminiSource(labelOrSrc) {
+          return /Gemini_Generated|refs\/generated|generated\/Gemini/i.test(String(labelOrSrc || ""));
+        }
+
+        function isJeong2RuntimeSafeStaticSource(label, usedSsot) {
+          return !!usedSsot && /^assets\/s1\/sprites_ssot\/jeong2_ssot_[FBLR]\.png$/.test(String(label || ""));
+        }
+
+        function logJeong2RuntimeRecovery(info) {
+          const guardSig = `${info.rawGeminiDirectDraw}|${info.runtimeSafe}|${info.action}`;
+          if (JEONG2_RUNTIME_TRACE.guardSig !== guardSig) {
+            JEONG2_RUNTIME_TRACE.guardSig = guardSig;
+            console.log(`[JEONG2_RUNTIME_GUARD] rawGeminiDirectDraw=${info.rawGeminiDirectDraw ? "YES" : "NO"} runtimeSafe=${info.runtimeSafe ? "YES" : "NO"} action=${info.action}`);
+          }
+          const stateSig = `${info.idleUsesStatic}|${info.moveUsesWalk}|${info.fallbackWhenUnsafe}`;
+          if (JEONG2_RUNTIME_TRACE.stateSig !== stateSig) {
+            JEONG2_RUNTIME_TRACE.stateSig = stateSig;
+            console.log(`[JEONG2_STATE_GATE] idleUsesStatic=${info.idleUsesStatic ? "YES" : "NO"} moveUsesWalk=${info.moveUsesWalk ? "YES" : "NO"} fallbackWhenUnsafe=${info.fallbackWhenUnsafe ? "YES" : "NO"}`);
+          }
+          const facingSig = `${info.facingSource}|${info.front}|${info.back}|${info.left}|${info.right}`;
+          if (JEONG2_RUNTIME_TRACE.facingSig !== facingSig) {
+            JEONG2_RUNTIME_TRACE.facingSig = facingSig;
+            console.log(`[JEONG2_FACING_GATE] source=${info.facingSource} front=${info.front} back=${info.back} left=${info.left} right=${info.right}`);
+          }
+          const frameSig = `${info.enabledWhen}|${info.idleLoop}|${info.moveLoop}`;
+          if (JEONG2_RUNTIME_TRACE.frameSig !== frameSig) {
+            JEONG2_RUNTIME_TRACE.frameSig = frameSig;
+            console.log(`[JEONG2_WALK_FRAME_GATE] enabledWhen=${info.enabledWhen} idleLoop=${info.idleLoop ? "YES" : "NO"} moveLoop=${info.moveLoop ? "YES" : "NO"}`);
+          }
+          const runtimeSig = `${info.idleRuntime}|${info.moveRuntime}|${info.runtimeReason}`;
+          if (JEONG2_RUNTIME_TRACE.runtimeSig !== runtimeSig) {
+            JEONG2_RUNTIME_TRACE.runtimeSig = runtimeSig;
+            console.log(`[JEONG2_WALK_RUNTIME] idle=${info.idleRuntime} move=${info.moveRuntime} reason=${info.runtimeReason}`);
+          }
+          const sanitySig = `${info.checkerboardVisible}|${info.fullframeDraw}|${info.alphaOK}`;
+          if (JEONG2_RUNTIME_TRACE.sanitySig !== sanitySig) {
+            JEONG2_RUNTIME_TRACE.sanitySig = sanitySig;
+            console.log(`[JEONG2_RENDER_SANITY] checkerboardVisible=${info.checkerboardVisible ? "YES" : "NO"} fullframeDraw=${info.fullframeDraw ? "YES" : "NO"} alphaOK=${info.alphaOK ? "YES" : "NO"}`);
+          }
+          const recoverySig = `${info.recoveryResult}|${info.recoveryReason}`;
+          if (JEONG2_RUNTIME_TRACE.recoverySig !== recoverySig) {
+            JEONG2_RUNTIME_TRACE.recoverySig = recoverySig;
+            console.log(`[JEONG2_RECOVERY] result=${info.recoveryResult} reason=${info.recoveryReason}`);
+          }
         }
 
         function jeong2DirSpec(dir) {
@@ -10317,6 +10450,10 @@
           unit.hitStopPy = Number.isFinite(unit.hitStopPy) ? unit.hitStopPy : null;
           unit.facing = (unit.facing === "B" || unit.facing === "L" || unit.facing === "R") ? unit.facing : "F";
           if (unit.id === "nyangsan") unit.facing = "F";
+          if (isJung2Unit(unit)) {
+            unit.lastFacing = clampDirLabel(unit.lastFacing || unit.facing || "F");
+            unit.moveFacing = unit.moveFacing ? clampDirLabel(unit.moveFacing) : null;
+          }
         }
 
         function getMapSpriteKey(u) {
@@ -10917,6 +11054,15 @@
             if (!path || path.length <= 1) {
               resolve();
               return;
+            }
+            const firstA = path[0];
+            const firstB = path[1];
+            if (unit && firstA && firstB) {
+              const firstDx = firstB.x - firstA.x;
+              const firstDy = firstB.y - firstA.y;
+              if (firstDx !== 0 || firstDy !== 0) {
+                unit.moveFacing = faceFromDelta(firstDx, firstDy);
+              }
             }
             activeMove = {
               unit,
