@@ -1019,8 +1019,14 @@
           cols: 4,
           framePx: "448x599~601",
           rowMap: { F: 1, B: 2, L: 3, R: 4 },
-          result: "PASS_CANDIDATE",
-          reason: "4dir_4col_sheet_detected_from_gemini_source"
+          deltas: {
+            F: { diff12: "9.33", diff23: "12.06", diff34: "16.89", footShiftPx: "-2.5,-22|63.6,21|9.4,1", bboxShift: "1,0,0,-22|44,1,1,21|-6,0,1,1", readability: "PASS", note: "front_row_has_clear_step_and_lift" },
+            B: { diff12: "7.67", diff23: "5.94", diff34: "9.18", footShiftPx: "14.5,15|-2.0,0|-7.3,-8", bboxShift: "1,0,3,15|2,0,2,0|1,0,0,-8", readability: "PASS", note: "back_row_delta_is_subtle_but_present" },
+            L: { diff12: "13.30", diff23: "16.03", diff34: "31.33", footShiftPx: "-14.9,1|-6.7,0|0.5,0", bboxShift: "9,-1,9,1|-11,1,-69,0|-10,0,50,0", readability: "PASS", note: "left_row_reads_as_walk_cycle" },
+            R: { diff12: "36.33", diff23: "18.76", diff34: "20.75", footShiftPx: "66.7,0|23.8,0|57.5,0", bboxShift: "-33,0,-76,0|27,-1,74,0|-36,1,-54,0", readability: "PASS", note: "right_row_has_strong_pose_delta" }
+          },
+          result: "PASS_BIND_READY",
+          reason: "frame_delta_is_readable_in_multiple_rows_without_runtime_binding"
         };
         // Jeong2 WALK_MOTION_SPEC_V1 is a spec-only lock for future real walk assets.
         // It declares slots, tolerances, and QA criteria without activating runtime walk behavior.
@@ -2035,6 +2041,8 @@
         let jeong2GeminiSourceLogged = false;
         let jeong2GeminiSortLogged = false;
         let jeong2WalkCandidateLogged = false;
+        const jeong2WalkDeltaLogged = new Set();
+        const jeong2WalkReadabilityLogged = new Set();
         let jeong2WalkCandidateResultLogged = false;
         let j2WalkSpecLockedLogged = false;
         const qaVerifyLines = [];
@@ -2125,6 +2133,8 @@
             || first.includes("JEONG2_GEMINI_SOURCE")
             || first.includes("JEONG2_GEMINI_SORT")
             || first.includes("JEONG2_WALK_CANDIDATE")
+            || first.includes("JEONG2_WALK_DELTA")
+            || first.includes("JEONG2_WALK_READABILITY")
             || first.includes("JEONG2_WALK_CANDIDATE_RESULT");
           if (!isVerify) return;
           const line = args.map(qaFormatValue).join(" ");
@@ -4032,6 +4042,7 @@
             cols: 4,
             framePx: JEONG2_GEMINI_CANDIDATE_SPEC.framePx,
             rowMap: JEONG2_GEMINI_CANDIDATE_SPEC.rowMap,
+            deltas: JEONG2_GEMINI_CANDIDATE_SPEC.deltas,
             result: JEONG2_GEMINI_CANDIDATE_SPEC.result,
             reason: JEONG2_GEMINI_CANDIDATE_SPEC.reason
           };
@@ -4059,6 +4070,17 @@
             jeong2WalkRowMapLogged = true;
             console.log(`[JEONG2_WALK_ROWMAP] F=${candidateInfo.rowMap.F} B=${candidateInfo.rowMap.B} L=${candidateInfo.rowMap.L} R=${candidateInfo.rowMap.R}`);
           }
+          for (const row of ["F", "B", "L", "R"]) {
+            const delta = candidateInfo.deltas[row];
+            if (delta && !jeong2WalkDeltaLogged.has(row)) {
+              jeong2WalkDeltaLogged.add(row);
+              console.log(`[JEONG2_WALK_DELTA] row=${row} diff12=${delta.diff12} diff23=${delta.diff23} diff34=${delta.diff34} footShiftPx=${delta.footShiftPx} bboxShift=${delta.bboxShift}`);
+            }
+            if (delta && !jeong2WalkReadabilityLogged.has(row)) {
+              jeong2WalkReadabilityLogged.add(row);
+              console.log(`[JEONG2_WALK_READABILITY] row=${row} result=${delta.readability} reason=${delta.note}`);
+            }
+          }
           if (!jeong2WalkCandidateResultLogged) {
             jeong2WalkCandidateResultLogged = true;
             console.log(`[JEONG2_WALK_CANDIDATE_RESULT] result=${candidateInfo.result} reason=${candidateInfo.reason}`);
@@ -4069,7 +4091,7 @@
           }
           if (!jeong2WalkRuntimeLogged) {
             jeong2WalkRuntimeLogged = true;
-            console.log("[JEONG2_WALK_RUNTIME] idle=static move=static reason=walk_unbound_pending_candidate");
+            console.log("[JEONG2_WALK_RUNTIME] idle=static move=static reason=pending_asset_qa");
           }
         }
 
