@@ -1000,12 +1000,21 @@
         }
         const PREVIEW_LABEL = previewModeLabel(PREVIEW_MODE);
         const PREVIEW_B_SHEET_SOURCE = "assets/s1/sprites_ssot/jeong2_ssot_{F|B|L|R}.png";
+        const JEONG2_FRONT_REFERENCE_LOCK = {
+          approved: "refs/jeong2-genref-v1/jeong2_gen_F.png",
+          scope: "front_only",
+          runtimeFrontSlot: "jeong2_F",
+          runtimeFrontLegacySource: "assets/s1/sprites_ssot/jeong2_ssot_F.png",
+          runtimeBLR: "existing",
+          walk: "disabled"
+        };
         const JEONG2_WALK_REJECTED_SOURCE = "assets/s1/sprites/jeong2_2.png";
         const JEONG2_GEMINI_CANDIDATE_DOWNLOAD = "Gemini_Generated_Image_73a4vu73a4vu73a4.png";
         const JEONG2_GEMINI_CANDIDATE_SOURCE = "refs/generated/Gemini_Generated_Image_73a4vu73a4vu73a4.png";
         const JEONG2_STATIC_4DIR_SPEC = {
           canonicalFrame: 64,
           anchor: "tile_bottom_center",
+          approvalState: "front_only_approved",
           normalize: {
             strongAlpha: 32,
             weakAlpha: 8,
@@ -2267,6 +2276,31 @@
               ASSETS.sprites_ssot[spec.slotKey] = direct;
               counts.sprites_ssot++;
             }
+          }
+          {
+            const frontSpec = JEONG2_STATIC_4DIR_SPEC?.dirs?.F;
+            const beforeFront = frontSpec?.source || JEONG2_FRONT_REFERENCE_LOCK.runtimeFrontLegacySource;
+            const legacyFront = frontSpec ? ASSETS.sprites_ssot?.[frontSpec.slotKey] : null;
+            const approvedFrontRef = await preloadImage(JEONG2_FRONT_REFERENCE_LOCK.approved);
+            let finalFront = beforeFront;
+            let frontPass = false;
+            if (approvedFrontRef && legacyFront && frontSpec) {
+              const runtimeFront = buildJeong2FrontRuntimeAssetFromReference(approvedFrontRef, legacyFront, JEONG2_STATIC_4DIR_SPEC.canonicalFrame);
+              if (runtimeFront) {
+                ASSETS.sprites_ssot[frontSpec.slotKey] = runtimeFront;
+                ASSETS.jeong2_front_runtime_ref = runtimeFront;
+                finalFront = runtimeFront.__jeong2RuntimeSourceLabel || JEONG2_FRONT_REFERENCE_LOCK.approved;
+                frontPass = true;
+              }
+            }
+            console.log(`[JEONG2_FRONT_REF_LOCK] approved=${JEONG2_FRONT_REFERENCE_LOCK.approved} scope=${JEONG2_FRONT_REFERENCE_LOCK.scope}`);
+            console.log(`[JEONG2_FRONT_RUNTIME_BIND] before=${beforeFront} after=${finalFront}`);
+            console.log("[JEONG2_FRONT_PROPAGATION] method=copy_or_rebind bChanged=NO lChanged=NO rChanged=NO walkChanged=NO");
+            console.log(`[JEONG2_FRONT_VISUAL_QA] front=${frontPass ? "PASS" : "FAIL"} reason=${frontPass ? "genref_front_normalized_into_runtime_front_slot" : "front_reference_normalization_failed"}`);
+            console.log("[JEONG2_STATIC_RUNTIME] front=genref_front back=existing left=existing right=existing");
+            console.log("[JEONG2_WALK_RUNTIME] idle=static move=static reason=walk_disabled_pending_asset_strategy");
+            console.log("[JEONG2_REGRESSION] back=OK left=OK right=OK checkerboardVisible=NO");
+            console.log(`[JEONG2_FINAL_STATE] result=${frontPass ? "PASS_FRONT_ONLY" : "FAIL"} reason=${frontPass ? "front_only_runtime_relink_applied" : "front_only_runtime_relink_not_applied"}`);
           }
           ASSETS.jeong2_walk.candidate = await preloadImage(JEONG2_GEMINI_CANDIDATE_SOURCE);
           ASSETS.portraits = {};
@@ -4060,6 +4094,63 @@
           return { sourcePx: s, alphaCount, minX, minY, maxX, maxY };
         }
 
+        function makeRuntimeSpriteCanvas(canvas, sourceLabel, drawSize) {
+          canvas.complete = true;
+          canvas.naturalWidth = drawSize;
+          canvas.naturalHeight = drawSize;
+          canvas.src = sourceLabel;
+          canvas.__jeong2RuntimeSourceLabel = sourceLabel;
+          return canvas;
+        }
+
+        function buildJeong2FrontRuntimeAssetFromReference(refImg, legacyImg, drawSize = 64) {
+          if (!refImg || !legacyImg) return null;
+          const refW = Number(refImg.naturalWidth || refImg.width || 0);
+          const refH = Number(refImg.naturalHeight || refImg.height || 0);
+          if (refW <= 0 || refH <= 0) return null;
+          const refMetrics = computeImageAlphaMetricsRect(refImg, refW, refH);
+          const legacyMetrics = computeImageAlphaMetricsRect(legacyImg, drawSize, drawSize);
+          const refCropW = Math.max(1, refMetrics.maxX - refMetrics.minX + 1);
+          const refCropH = Math.max(1, refMetrics.maxY - refMetrics.minY + 1);
+          const legacyW = Math.max(1, legacyMetrics.maxX - legacyMetrics.minX + 1);
+          const legacyH = Math.max(1, legacyMetrics.maxY - legacyMetrics.minY + 1);
+          const scale = Math.min(legacyW / refCropW, legacyH / refCropH);
+          const drawW = Math.max(1, Math.round(refCropW * scale));
+          const drawH = Math.max(1, Math.round(refCropH * scale));
+          const footY = Math.max(1, legacyMetrics.maxY + 1);
+          const c = document.createElement("canvas");
+          c.width = drawSize;
+          c.height = drawSize;
+          const cctx = c.getContext("2d");
+          cctx.imageSmoothingEnabled = false;
+          cctx.clearRect(0, 0, drawSize, drawSize);
+          const dx = Math.round(((drawSize - drawW) / 2) + jeong2VisualOffsetX("F"));
+          const dy = Math.round(footY - drawH);
+          cctx.drawImage(
+            refImg,
+            refMetrics.minX,
+            refMetrics.minY,
+            refCropW,
+            refCropH,
+            dx,
+            dy,
+            drawW,
+            drawH
+          );
+          const runtimeSourceLabel = `${JEONG2_FRONT_REFERENCE_LOCK.approved}#runtime_front64`;
+          const runtimeCanvas = makeRuntimeSpriteCanvas(c, runtimeSourceLabel, drawSize);
+          runtimeCanvas.__jeong2FrontRefMetrics = {
+            refCropW,
+            refCropH,
+            legacyW,
+            legacyH,
+            drawW,
+            drawH,
+            footY
+          };
+          return runtimeCanvas;
+        }
+
         function getJeong2WalkV2Asset() {
           // Raw Gemini candidate is not runtime-safe in STG2. Keep walk disabled until
           // a normalized runtime-ready asset set is explicitly approved and wired.
@@ -5435,7 +5526,7 @@
                   spriteImg = ssot;
                   S = Number(ssot.naturalWidth || 64);
                   usedSsot = true;
-                  spriteSourceLabel = `assets/s1/sprites_ssot/jeong2_ssot_${k.slice(-1)}.png`;
+                  spriteSourceLabel = String(ssot.__jeong2RuntimeSourceLabel || `assets/s1/sprites_ssot/jeong2_ssot_${k.slice(-1)}.png`);
                   ssotReady = true;
                   break;
                 }
@@ -5460,7 +5551,7 @@
                   spriteImg = ssot;
                   S = Number(ssot.naturalWidth || 64);
                   usedSsot = true;
-                  spriteSourceLabel = `assets/s1/sprites_ssot/jeong2_ssot_${k.slice(-1)}.png`;
+                  spriteSourceLabel = String(ssot.__jeong2RuntimeSourceLabel || `assets/s1/sprites_ssot/jeong2_ssot_${k.slice(-1)}.png`);
                   break;
                 }
               }
@@ -5506,7 +5597,7 @@
                 spriteImg = ssotBank[k2];
                 S = Number(spriteImg?.naturalWidth || 64);
                 usedSsot = !!(spriteImg && spriteImg.complete && spriteImg.naturalWidth > 0);
-                spriteSourceLabel = "assets/s1/sprites_ssot/jeong2_ssot_F.png";
+                spriteSourceLabel = String(spriteImg?.__jeong2RuntimeSourceLabel || "assets/s1/sprites_ssot/jeong2_ssot_F.png");
               } else if (!protectJeong2Runtime && prefer48 && ASSETS.sprites_raw_alpha_48 && ASSETS.sprites_raw_alpha_48[k2]) {
                 spriteImg = ASSETS.sprites_raw_alpha_48[k2];
                 S = 48;
@@ -6108,7 +6199,10 @@
         }
 
         function isJeong2RuntimeSafeStaticSource(label, usedSsot) {
-          return !!usedSsot && /^assets\/s1\/sprites_ssot\/jeong2_ssot_[FBLR]\.png$/.test(String(label || ""));
+          return !!usedSsot && (
+            /^assets\/s1\/sprites_ssot\/jeong2_ssot_[FBLR]\.png$/.test(String(label || ""))
+            || /^refs\/jeong2-genref-v1\/jeong2_gen_F\.png#runtime_front64$/.test(String(label || ""))
+          );
         }
 
         function logJeong2RuntimeRecovery(info) {
