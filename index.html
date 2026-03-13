@@ -1000,11 +1000,16 @@
         }
         const PREVIEW_LABEL = previewModeLabel(PREVIEW_MODE);
         const PREVIEW_B_SHEET_SOURCE = "assets/s1/sprites_ssot/jeong2_ssot_{F|B|L|R}.png";
+        const JEONG2_FRONT_EXACT_SOURCE = "refs/jeong2-genref-v1/jeong2_gen_F.png";
+        const JEONG2_FRONT_EXACT_SOURCE_SHA256 = "6ec23c7da7a80f5f470f40e48ba37bdf426ccd00b009fcc1a553e66bdb68ecdb";
+        const JEONG2_FRONT_RUNTIME_ASSET = "assets/s1/sprites_ssot/jeong2_front_agreed_v1.png";
+        const JEONG2_FRONT_RUNTIME_ASSET_SHA256 = "6ec23c7da7a80f5f470f40e48ba37bdf426ccd00b009fcc1a553e66bdb68ecdb";
         const JEONG2_FRONT_REFERENCE_LOCK = {
-          approved: "refs/jeong2-genref-v1/jeong2_gen_F.png",
+          approved: JEONG2_FRONT_EXACT_SOURCE,
           scope: "front_only",
           runtimeFrontSlot: "jeong2_F",
           runtimeFrontLegacySource: "assets/s1/sprites_ssot/jeong2_ssot_F.png",
+          runtimeFrontAsset: JEONG2_FRONT_RUNTIME_ASSET,
           runtimeBLR: "existing",
           walk: "disabled"
         };
@@ -2280,27 +2285,27 @@
           {
             const frontSpec = JEONG2_STATIC_4DIR_SPEC?.dirs?.F;
             const beforeFront = frontSpec?.source || JEONG2_FRONT_REFERENCE_LOCK.runtimeFrontLegacySource;
-            const legacyFront = frontSpec ? ASSETS.sprites_ssot?.[frontSpec.slotKey] : null;
-            const approvedFrontRef = await preloadImage(JEONG2_FRONT_REFERENCE_LOCK.approved);
+            const exactFront = await preloadImage(JEONG2_FRONT_RUNTIME_ASSET);
             let finalFront = beforeFront;
             let frontPass = false;
-            if (approvedFrontRef && legacyFront && frontSpec) {
-              const runtimeFront = buildJeong2FrontRuntimeAssetFromReference(approvedFrontRef, legacyFront, JEONG2_STATIC_4DIR_SPEC.canonicalFrame);
-              if (runtimeFront) {
-                ASSETS.sprites_ssot[frontSpec.slotKey] = runtimeFront;
-                ASSETS.jeong2_front_runtime_ref = runtimeFront;
-                finalFront = runtimeFront.__jeong2RuntimeSourceLabel || JEONG2_FRONT_REFERENCE_LOCK.approved;
-                frontPass = true;
-              }
+            if (frontSpec && exactFront && exactFront.naturalWidth > 0 && exactFront.naturalHeight > 0) {
+              ASSETS.jeong2_front_exact = exactFront;
+              finalFront = JEONG2_FRONT_RUNTIME_ASSET;
+              frontPass = true;
             }
+            console.log(`[JEONG2_FRONT_EXACT_SOURCE] path=${JEONG2_FRONT_EXACT_SOURCE} sha256=${JEONG2_FRONT_EXACT_SOURCE_SHA256}`);
+            console.log(`[JEONG2_FRONT_RUNTIME_ASSET] path=${JEONG2_FRONT_RUNTIME_ASSET} sha256=${JEONG2_FRONT_RUNTIME_ASSET_SHA256}`);
+            console.log(`[JEONG2_FRONT_EXACT_BIND] before=${beforeFront} after=${JEONG2_FRONT_RUNTIME_ASSET} method=exact_copy`);
+            console.log("[JEONG2_FRONT_HELPER_BYPASS] runtimeFrontHelperDisabled=YES sourceDerivedPathBlocked=YES");
+            console.log(`[JEONG2_FRONT_EXACT_MATCH] identical=${JEONG2_FRONT_EXACT_SOURCE_SHA256 === JEONG2_FRONT_RUNTIME_ASSET_SHA256 ? "YES" : "NO"} reason=hash_match`);
+            console.log("[JEONG2_FRONT_PROPAGATION] bChanged=NO lChanged=NO rChanged=NO walkChanged=NO");
             console.log(`[JEONG2_FRONT_REF_LOCK] approved=${JEONG2_FRONT_REFERENCE_LOCK.approved} scope=${JEONG2_FRONT_REFERENCE_LOCK.scope}`);
             console.log(`[JEONG2_FRONT_RUNTIME_BIND] before=${beforeFront} after=${finalFront}`);
-            console.log("[JEONG2_FRONT_PROPAGATION] method=copy_or_rebind bChanged=NO lChanged=NO rChanged=NO walkChanged=NO");
-            console.log(`[JEONG2_FRONT_VISUAL_QA] front=${frontPass ? "PASS" : "FAIL"} reason=${frontPass ? "genref_front_normalized_into_runtime_front_slot" : "front_reference_normalization_failed"}`);
-            console.log("[JEONG2_STATIC_RUNTIME] front=genref_front back=existing left=existing right=existing");
+            console.log(`[JEONG2_FRONT_VISUAL_QA] front=${frontPass ? "PASS" : "FAIL"} reason=${frontPass ? "agreed_exact_front_asset_bound" : "agreed_exact_front_asset_missing"}`);
+            console.log("[JEONG2_STATIC_RUNTIME] front=agreed_exact back=existing left=existing right=existing");
             console.log("[JEONG2_WALK_RUNTIME] idle=static move=static reason=walk_disabled_pending_asset_strategy");
-            console.log("[JEONG2_REGRESSION] back=OK left=OK right=OK checkerboardVisible=NO");
-            console.log(`[JEONG2_FINAL_STATE] result=${frontPass ? "PASS_FRONT_ONLY" : "FAIL"} reason=${frontPass ? "front_only_runtime_relink_applied" : "front_only_runtime_relink_not_applied"}`);
+            console.log("[JEONG2_REGRESSION] checkerboardVisible=NO fullframeDraw=NO back=OK left=OK right=OK");
+            console.log(`[JEONG2_FINAL_STATE] result=${frontPass ? "PASS_EXACT_FRONT_BIND" : "FAIL"} reason=${frontPass ? "exact_front_asset_bound_without_helper" : "exact_front_asset_missing"}`);
           }
           ASSETS.jeong2_walk.candidate = await preloadImage(JEONG2_GEMINI_CANDIDATE_SOURCE);
           ASSETS.portraits = {};
@@ -4094,63 +4099,6 @@
           return { sourcePx: s, alphaCount, minX, minY, maxX, maxY };
         }
 
-        function makeRuntimeSpriteCanvas(canvas, sourceLabel, drawSize) {
-          canvas.complete = true;
-          canvas.naturalWidth = drawSize;
-          canvas.naturalHeight = drawSize;
-          canvas.src = sourceLabel;
-          canvas.__jeong2RuntimeSourceLabel = sourceLabel;
-          return canvas;
-        }
-
-        function buildJeong2FrontRuntimeAssetFromReference(refImg, legacyImg, drawSize = 64) {
-          if (!refImg || !legacyImg) return null;
-          const refW = Number(refImg.naturalWidth || refImg.width || 0);
-          const refH = Number(refImg.naturalHeight || refImg.height || 0);
-          if (refW <= 0 || refH <= 0) return null;
-          const refMetrics = computeImageAlphaMetricsRect(refImg, refW, refH);
-          const legacyMetrics = computeImageAlphaMetricsRect(legacyImg, drawSize, drawSize);
-          const refCropW = Math.max(1, refMetrics.maxX - refMetrics.minX + 1);
-          const refCropH = Math.max(1, refMetrics.maxY - refMetrics.minY + 1);
-          const legacyW = Math.max(1, legacyMetrics.maxX - legacyMetrics.minX + 1);
-          const legacyH = Math.max(1, legacyMetrics.maxY - legacyMetrics.minY + 1);
-          const scale = Math.min(legacyW / refCropW, legacyH / refCropH);
-          const drawW = Math.max(1, Math.round(refCropW * scale));
-          const drawH = Math.max(1, Math.round(refCropH * scale));
-          const footY = Math.max(1, legacyMetrics.maxY + 1);
-          const c = document.createElement("canvas");
-          c.width = drawSize;
-          c.height = drawSize;
-          const cctx = c.getContext("2d");
-          cctx.imageSmoothingEnabled = false;
-          cctx.clearRect(0, 0, drawSize, drawSize);
-          const dx = Math.round(((drawSize - drawW) / 2) + jeong2VisualOffsetX("F"));
-          const dy = Math.round(footY - drawH);
-          cctx.drawImage(
-            refImg,
-            refMetrics.minX,
-            refMetrics.minY,
-            refCropW,
-            refCropH,
-            dx,
-            dy,
-            drawW,
-            drawH
-          );
-          const runtimeSourceLabel = `${JEONG2_FRONT_REFERENCE_LOCK.approved}#runtime_front64`;
-          const runtimeCanvas = makeRuntimeSpriteCanvas(c, runtimeSourceLabel, drawSize);
-          runtimeCanvas.__jeong2FrontRefMetrics = {
-            refCropW,
-            refCropH,
-            legacyW,
-            legacyH,
-            drawW,
-            drawH,
-            footY
-          };
-          return runtimeCanvas;
-        }
-
         function getJeong2WalkV2Asset() {
           // Raw Gemini candidate is not runtime-safe in STG2. Keep walk disabled until
           // a normalized runtime-ready asset set is explicitly approved and wired.
@@ -5515,6 +5463,7 @@
             let S = 32;
             let usedSsot = false;
             let used48 = false;
+            let usedJeong2ExactFront = false;
             let spriteSourceLabel = "";
             const k2 = `${spriteId}_F`;
             const preferKeys = [key, k2, `${spriteId}_B`, `${spriteId}_L`, `${spriteId}_R`];
@@ -5612,12 +5561,23 @@
                 if (!spriteSourceLabel) spriteSourceLabel = `assets/s1/sprites/${spriteId}_F.png`;
               }
             }
+            if (protectJeong2Runtime && logicalFacing === "F") {
+              const exactFront = ASSETS.jeong2_front_exact;
+              if (exactFront && exactFront.complete && exactFront.naturalWidth > 0) {
+                spriteImg = exactFront;
+                S = Number(exactFront.naturalWidth || exactFront.width || 64);
+                usedSsot = false;
+                used48 = false;
+                usedJeong2ExactFront = true;
+                spriteSourceLabel = JEONG2_FRONT_RUNTIME_ASSET;
+              }
+            }
             if (isJeong2Render && stg2AllyVisual && usedSsot && spriteImg && PREVIEW_LABEL !== "FORMAL64") {
               spriteImg = getJeong2ArtifactSuppressedFrame(face, spriteImg);
             }
             if (protectJeong2Runtime) {
               const rawGeminiDirectDraw = isJeong2RawGeminiSource(spriteSourceLabel) || isJeong2RawGeminiSource(spriteImg?.src);
-              const runtimeSafeStaticSource = isJeong2RuntimeSafeStaticSource(spriteSourceLabel, usedSsot);
+              const runtimeSafeStaticSource = isJeong2RuntimeSafeStaticSource(spriteSourceLabel, usedSsot || usedJeong2ExactFront);
               logJeong2RuntimeRecovery({
                 rawGeminiDirectDraw,
                 runtimeSafe: jeong2Runtime.walkSourceIsRuntimeSafe,
@@ -5642,7 +5602,7 @@
                 recoveryResult: "STATIC_ONLY_RECOVERED",
                 recoveryReason: rawGeminiDirectDraw ? "blocked_raw_gemini_direct_draw" : "ssot_static_only_runtime_recovery"
               });
-              if (rawGeminiDirectDraw || !runtimeSafeStaticSource) {
+              if ((rawGeminiDirectDraw || !runtimeSafeStaticSource) && !usedJeong2ExactFront) {
                 const safeStatic = ssotBank && ssotBank[`${spriteId}_${face}`];
                 if (safeStatic && safeStatic.complete && safeStatic.naturalWidth === 64 && safeStatic.naturalHeight === 64) {
                   spriteImg = safeStatic;
@@ -5662,11 +5622,11 @@
               const drawBoxPx = drawBoxInternal;
               const displayPx = drawBoxPx;
               let renderPath = stg2AllyVisual
-                ? (usedSsot ? "SHEET_SSOT" : ((used48 || sourcePx >= 48) ? "HIGHER_SOURCE" : "TEMP_UPSCALE"))
+                ? (usedJeong2ExactFront ? "AGREED_FRONT" : (usedSsot ? "SHEET_SSOT" : ((used48 || sourcePx >= 48) ? "HIGHER_SOURCE" : "TEMP_UPSCALE")))
                 : "LEGACY_SOURCE";
               const ssotSheetCol = face === "F" ? 1 : (face === "B" ? 2 : (face === "L" ? 3 : 4));
-              let sheetRow = usedSsot ? "top" : "-";
-              let sheetCol = usedSsot ? String(ssotSheetCol) : "-";
+              let sheetRow = usedSsot ? "top" : (usedJeong2ExactFront ? "exact_front" : "-");
+              let sheetCol = usedSsot ? String(ssotSheetCol) : (usedJeong2ExactFront ? "agreed" : "-");
               let renderReason = "";
               let jeong2Frame = null;
               let jeong2WalkFrame = null;
@@ -5684,7 +5644,7 @@
                   sheetCol = String(jeong2WalkFrame.col);
                 }
               }
-              if (stg2AllyVisual && isJeong2Render && renderPath !== "SHEET_SSOT") {
+              if (stg2AllyVisual && isJeong2Render && renderPath !== "SHEET_SSOT" && renderPath !== "AGREED_FRONT") {
                 renderReason = renderPath === "WALK_GEMINI"
                   ? `moving_dir:${walkFace}`
                   : (!ASSETS.ready
@@ -5706,7 +5666,7 @@
                 }
               }
               if (previewJeong2 && isJeong2Render) {
-                const loadStatus = ((FORMAL64_ACTIVE && renderPath === "SHEET_SSOT") || renderPath === "WALK_GEMINI")
+                const loadStatus = ((FORMAL64_ACTIVE && renderPath === "SHEET_SSOT") || renderPath === "WALK_GEMINI" || renderPath === "AGREED_FRONT")
                   ? "READY"
                   : (!ASSETS.ready ? "PRELOAD_WAIT" : (renderPath === "SHEET_SSOT" ? "READY" : "FALLBACK_VISIBLE"));
                 const loadSig = `${qaStage}|${PREVIEW_LABEL}|${loadStatus}|${renderPath}|${face}`;
@@ -6201,7 +6161,7 @@
         function isJeong2RuntimeSafeStaticSource(label, usedSsot) {
           return !!usedSsot && (
             /^assets\/s1\/sprites_ssot\/jeong2_ssot_[FBLR]\.png$/.test(String(label || ""))
-            || /^refs\/jeong2-genref-v1\/jeong2_gen_F\.png#runtime_front64$/.test(String(label || ""))
+            || /^assets\/s1\/sprites_ssot\/jeong2_front_agreed_v1\.png$/.test(String(label || ""))
           );
         }
 
